@@ -46,7 +46,7 @@ const HomePage = () => {
 
           <div id="upload">
               <button id="upload-btn" onClick={handleUploadClick}>Upload Your First Dataset</button>
-              <input type="file" id="file-input" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} multiple/>
+              <input type="file" id="file-input" accept="image/*" onChange={handleFileChange} multiple/>
           </div>
       </div>
 
