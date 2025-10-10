@@ -4,14 +4,16 @@ import './styles/index.css'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage.tsx';
 import DisplayImagesPage from './pages/DisplayImagesPage.tsx';
+import NavBar from './components/NavBar.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Router>
+    {/* <Router>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/display-images" element={<DisplayImagesPage />} />
       </Routes>
-    </Router>
+    </Router> */}
+    <NavBar></NavBar>
   </StrictMode>,
 )

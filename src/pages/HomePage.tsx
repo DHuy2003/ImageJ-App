@@ -12,8 +12,7 @@ const HomePage = () => {
       const fileArray = Array.from(files);
       // In a real application, you would process these files, e.g., upload them to a server
       // For now, we'll just navigate to a new page and pass the file URLs/data if needed.
-      const imageUrls = fileArray.map(file => URL.createObjectURL(file));
-      navigate('/display-images', { state: { imageUrls } });
+      navigate('/display-images', { state: { fileArray } });
     }
   };
 
