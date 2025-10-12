@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage.tsx';
 import DisplayImagesPage from './pages/DisplayImagesPage.tsx';
 import NavBar from './components/NavBar.tsx';
+import ToolBar from './components/ToolBar';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -15,5 +16,6 @@ createRoot(document.getElementById('root')!).render(
       </Routes>
     </Router> */}
     <NavBar></NavBar>
+    <ToolBar></ToolBar>
   </StrictMode>,
 )

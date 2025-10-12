@@ -1,4 +1,3 @@
-/* Reset css */
 * {
     padding: 0;
     margin: 0;
@@ -31,7 +30,6 @@ html {
     box-shadow: 0 0 20px rgba(0,0,0,0.1);
     padding: 20px;
     box-sizing: border-box; 
-    /* overflow-y: auto; */
 }
 
 #logo img {
