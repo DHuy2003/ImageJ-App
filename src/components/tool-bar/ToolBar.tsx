@@ -1,5 +1,5 @@
 import { MousePointer, ZoomIn, Minus, Hand, Pentagon, Circle, Square, ArrowRight, Pipette, PaintBucket, Type, Crosshair} from 'lucide-react';
-import '../styles/ToolBar.css';
+import './ToolBar.css';
 
 const ToolBar = () => {
     return (

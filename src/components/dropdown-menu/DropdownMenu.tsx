@@ -1,3 +1,5 @@
+import './DropdownMenu.css';
+
 type DropdownMenuProps = {
     label: string;           
     items?: string[];         
