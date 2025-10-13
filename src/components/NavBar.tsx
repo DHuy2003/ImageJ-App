@@ -1,4 +1,5 @@
 import {BarChart3, Microscope, Search } from "lucide-react";
+import DropdownMenu from "./DropdownMenu";
 import "../styles/NavBar.css";
 
 const NavBar = () => {
@@ -12,72 +13,29 @@ const NavBar = () => {
             <div className="divider"></div>
 
             <ul id="navbar-menu">
-                <li>
-                    <a href="#">File</a>
-                    <ul className="dropdown-menu">
-                        <li><a href="">New</a></li>
-                        <li><a href="">Open</a></li>
-                        <li><a href="">Open Next</a></li>
-                        <li><a href="">Open Recent</a></li>
-                        <li><a href="">Open Folder</a></li>
-                        <li><a href="">Close</a></li>
-                        <li><a href="">Close All</a></li>
-                        <li><a href="">Save</a></li>
-                        <li><a href="">Revert</a></li>
-                        <li><a href="">Page Setup</a></li>
-                        <li><a href="">Quit</a></li>
-                    </ul>
-                </li>
+                <DropdownMenu 
+                    label="File" 
+                    items={["New", "Open", "Open Next", "Open Recent", "Open Folder", "Close", "Close All", "Save", "Revert", "Page Setup", "Quit"]}
+                />
 
-                <li>
-                    <a href="#">Edit</a>
-                    <ul className="dropdown-menu">
-                        <li><a href="">Undo</a></li>
-                        <li><a href="">Cut</a></li>
-                        <li><a href="">Clear</a></li>
-                        <li><a href="">Clear Outside</a></li>
-                        <li><a href="">Fill</a></li>
-                        <li><a href="">Draw</a></li>
-                        <li><a href="">Invert</a></li>
-                        <li><a href="">Selection</a></li>
-                    </ul>
-                </li>
+                <DropdownMenu 
+                    label="Edit" 
+                    items={["Undo", "Cut", "Clear", "Clear Outside", "Fill", "Draw", "Invert", "Selection"]}
+                />
 
-                <li>
-                    <a href="#">Image</a>
-                    <ul className="dropdown-menu">
-                        <li><a href="">Color</a></li>
-                        <li><a href="">Type</a></li>
-                        <li><a href="">Zoom</a></li>
-                        <li><a href="">Show Info...</a></li>
-                        <li><a href="">Duplicate...</a></li>
-                        <li><a href="">Rename</a></li>
-                        <li><a href="">Tranform</a></li>
-                        <li><a href="">Adjust</a></li>
-                    </ul>
-                </li>
-                <li>
-                    <a href="#">Analyze</a>
-                    <ul className="dropdown-menu">
-                        <li><a href="">Measure</a></li>
-                        <li><a href="">Lable</a></li>
-                        <li><a href="">Clear Results</a></li>
-                        <li><a href="">Set Measurements...</a></li>
-                        <li><a href="">Set Scale...</a></li>
-                    </ul>
-                </li>
+                <DropdownMenu 
+                    label="Image" 
+                    items={["Color", "Type", "Zoom", "Show Info...", "Duplicate...", "Rename", "Tranform", "Adjust"]}
+                />
+                <DropdownMenu 
+                    label="Analyze" 
+                    items={["Measure", "Lable", "Clear Results", "Set Measurements...", "Set Scale..."]}
+                />
 
-                <li>
-                    <a href="#">Process</a>
-                    <ul className="dropdown-menu">
-                        <li><a href="">Smooth</a></li>
-                        <li><a href="">Sharpen</a></li>
-                        <li><a href="">Enhance Contrast...</a></li>
-                        <li><a href="">Subtract Background...</a></li>
-                        <li><a href="">Filters</a></li>
-                        <li><a href="">Binary</a></li>
-                    </ul>
-                </li>
+                <DropdownMenu 
+                    label="Process" 
+                    items={["Smooth", "Sharpen", "Enhance Contrast...", "Subtract Background...", "Filters", "Binary"]}
+                />
             </ul>
 
             <div className="divider"></div>
