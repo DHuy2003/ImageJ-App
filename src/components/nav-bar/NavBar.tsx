@@ -1,6 +1,6 @@
 import {BarChart3, Microscope, Search } from "lucide-react";
-import DropdownMenu from "./DropdownMenu";
-import "../styles/NavBar.css";
+import DropdownMenu from "../dropdown-menu/DropdownMenu";
+import "./NavBar.css";
 
 const NavBar = () => {
     return(
