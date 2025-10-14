@@ -15,18 +15,50 @@ const NavBar = () => {
             <ul id="navbar-menu">
                 <DropdownMenu 
                     label="File" 
-                    items={["New", "Open", "Open Next", "Open Recent", "Open Folder", "Close", "Close All", "Save", "Revert", "Page Setup", "Quit"]}
+                    items={["New", "Open", "Open Next", "Open Recent", "Open Folder", "Close", 
+                        "Close All", "Save", "Revert", "Page Setup", "Quit"
+                    ]}
                 />
 
                 <DropdownMenu 
                     label="Edit" 
-                    items={["Undo", "Cut", "Clear", "Clear Outside", "Fill", "Draw", "Invert", "Selection"]}
+                    items={["Undo", "Cut", "Clear", "Clear Outside", "Fill", "Draw", "Invert",
+                        {label: "Selection", subItems: [
+                            {label: "Select All"},
+                            {label: "Select None"},
+                            {label: "Restore Selection"},
+                            {label: "Fit Circle"},
+                            {label: "Fit Rectangle"},
+                            {label: "Properties..."},
+                            {label: "Scale..."},
+                            {label: "Rotate..."},
+                            {label: "Translate..."}
+                        ]}
+                    ]}
                 />
 
                 <DropdownMenu 
                     label="Image" 
-                    items={["Color", "Type", "Zoom", "Show Info...", "Duplicate...", "Rename", "Tranform", "Adjust"]}
+                    items={["Type", "Color", "Show Info...", "Duplicate...", "Rename", 
+                        {label: "Zoom", subItems: [
+                            {label: "In (+)"},
+                            {label: "Out (-)"},
+                            {label: "To Selection"},
+                            {label: "Scale to Fit"}
+                        ]},
+                        {label: "Transform", subItems: [
+                            {label: "Flip"},
+                            {label: "Rotate"}
+                        ]}, 
+                        {label: "Adjust", subItems: [
+                            {label: "Size"},
+                            {label: "Brightness/Contrast..."},
+                            {label: "Color Balance..."},
+                            {label: "Threshold..."}
+                        ]}
+                    ]}
                 />
+
                 <DropdownMenu 
                     label="Analyze" 
                     items={["Measure", "Lable", "Clear Results", "Set Measurements...", "Set Scale..."]}
@@ -34,7 +66,14 @@ const NavBar = () => {
 
                 <DropdownMenu 
                     label="Process" 
-                    items={["Smooth", "Sharpen", "Enhance Contrast...", "Subtract Background...", "Filters", "Binary"]}
+                    items={["Smooth", "Sharpen", "Enhance Contrast...", "Subtract Background...", "Filters", 
+                        {label: "Binary", subItems: [
+                            {label: "Make Binary"},
+                            {label: "Erode"},
+                            {label: "Dilate"},
+                            {label: "Watershed"}
+                        ]}
+                    ]}
                 />
             </ul>
 

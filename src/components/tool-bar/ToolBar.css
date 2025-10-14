@@ -16,16 +16,28 @@ html {
 }
 
 #selection {
-   list-style: none;
+    list-style: none;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    gap: 10px;
 }
 
 #selection li {
-    display: inline-block;
     padding: 0 10px;
-    margin-right: 16px;
 }
+
 .selection-item {
     height: 20px;
     vertical-align: middle;
+}
+
+#selection li:hover {
+    background-color: #e0ddd7;
+    border-radius: 5px;
+    cursor: pointer;
+    padding: 10px 10px;
 }
 

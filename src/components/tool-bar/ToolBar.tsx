@@ -5,7 +5,7 @@ const ToolBar = () => {
     return (
         <div id="toolbar">
             <ul id="selection">
-                <li><MousePointer className="selection-item" ></MousePointer></li>
+                <li><MousePointer className="selection-item"></MousePointer></li>
                 <li><Square className="selection-item"></Square></li>
                 <li><Circle className="selection-item"></Circle></li>
                 <li><Pentagon className="selection-item"></Pentagon></li>
