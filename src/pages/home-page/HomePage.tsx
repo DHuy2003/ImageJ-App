@@ -1,6 +1,6 @@
 
 import './HomePage.css';
-import Logo from '../../assets/logo.png';
+import Logo from '../../assets/images/logo.png';
 import { useNavigate } from 'react-router-dom';
 
 const HomePage = () => {
@@ -10,8 +10,6 @@ const HomePage = () => {
     const files = event.target.files;
     if (files) {
       const fileArray = Array.from(files);
-      // In a real application, you would process these files, e.g., upload them to a server
-      // For now, we'll just navigate to a new page and pass the file URLs/data if needed.
       navigate('/display-images', { state: { fileArray } });
     }
   };

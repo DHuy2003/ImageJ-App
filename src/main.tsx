@@ -6,6 +6,7 @@ import HomePage from './pages/home-page/HomePage.tsx';
 import DisplayImagesPage from './pages/display-image-page/DisplayImagesPage.tsx';
 import NavBar from './components/nav-bar/NavBar.tsx';
 import ToolBar from './components/tool-bar/ToolBar.tsx';
+import ImageView from './components/image-view/ImageView';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -17,5 +18,6 @@ createRoot(document.getElementById('root')!).render(
     </Router> */}
     <NavBar></NavBar>
     <ToolBar></ToolBar>
+    <ImageView></ImageView>
   </StrictMode>,
 )
