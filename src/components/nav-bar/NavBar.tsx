@@ -15,14 +15,31 @@ const NavBar = () => {
             <ul id="navbar-menu">
                 <DropdownMenu 
                     label="File" 
-                    items={["New", "Open", "Open Next", "Open Recent", "Open Folder", "Close", 
-                        "Close All", "Save", "Revert", "Page Setup", "Quit"
+                    items={[
+                        {label: "New", onClick: () => {console.log("New Clicked")}},
+                        {label: "Open", onClick: () => {console.log("Open Clicked")}},
+                        {label: "Open Next", onClick: () => {console.log("Open Next Clicked")}},
+                        {label: "Open Recent", onClick: () => {console.log("Open Recent Clicked")}},
+                        {label: "Open Folder", onClick: () => {console.log("Open Folder Clicked")}},
+                        {label: "Close", onClick: () => {console.log("Close Clicked")}},
+                        {label: "Close All", onClick: () => {console.log("Close All Clicked")}},
+                        {label: "Save", onClick: () => {console.log("Save Clicked")}},
+                        {label: "Revert", onClick: () => {console.log("Revert Clicked")}},
+                        {label: "Page Setup", onClick: () => {console.log("Page Setup Clicked")}},
+                        {label: "Quit", onClick: () => {console.log("Quit Clicked")}}
                     ]}
                 />
 
                 <DropdownMenu 
                     label="Edit" 
-                    items={["Undo", "Cut", "Clear", "Clear Outside", "Fill", "Draw", "Invert",
+                    items={[
+                        {label: "Undo"},
+                        {label: "Cut"},
+                        {label: "Clear"},
+                        {label: "Clear Outside"},
+                        {label: "Fill"},
+                        {label: "Draw"},
+                        {label: "Invert"},
                         {label: "Selection", subItems: [
                             {label: "Select All"},
                             {label: "Select None"},
@@ -39,7 +56,12 @@ const NavBar = () => {
 
                 <DropdownMenu 
                     label="Image" 
-                    items={["Type", "Color", "Show Info...", "Duplicate...", "Rename", 
+                    items={[
+                        {label: "Type"},
+                        {label: "Color"},
+                        {label: "Show Info..."},
+                        {label: "Duplicate..."},
+                        {label: "Rename"}, 
                         {label: "Zoom", subItems: [
                             {label: "In (+)"},
                             {label: "Out (-)"},
@@ -61,12 +83,22 @@ const NavBar = () => {
 
                 <DropdownMenu 
                     label="Analyze" 
-                    items={["Measure", "Lable", "Clear Results", "Set Measurements...", "Set Scale..."]}
+                    items={[
+                        {label: "Measurements..."},
+                        {label: "Label"},
+                        {label: "Clear Results"},
+                        {label: "Set Measurements..."},
+                        {label: "Set Scale..."},
+                    ]}
                 />
 
                 <DropdownMenu 
                     label="Process" 
-                    items={["Smooth", "Sharpen", "Enhance Contrast...", "Subtract Background...", "Filters", 
+                    items={[{label: "Smooth"},
+                        {label: "Sharpen"},
+                        {label: "Enhance Contrast..."},
+                        {label: "Subtract Background..."},
+                        {label: "Filters"}, 
                         {label: "Binary", subItems: [
                             {label: "Make Binary"},
                             {label: "Erode"},
