@@ -9,8 +9,8 @@ html {
 }
 
 #image-view{
-    height: 100vh;
-    /* background-color: #f5f2ee; */
+    height: calc(100vh - 120px);
+    width: 100%;
     padding: 20px;
     display: flex;
     flex-direction: row;
@@ -28,6 +28,7 @@ html {
     border-radius: 8px;
     padding: 10px 15px;
     gap: 20px;
+    height: auto;
 }
 
 #image-gallery h2,
@@ -48,19 +49,64 @@ html {
 
 #image-container {
     flex: 4;
-    height: 100%;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     background-color: #fff;
     border: 2px solid #2f2e2e;
     border-radius: 8px;
 }
 
+#image-container #image-controls{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+}
+
+.image-controls-icon {
+    color: black;
+    height: 20px;
+    vertical-align: middle;
+}
+
+.image-controls-btn {
+    margin-top: 10px;
+    background-color: #b36d3b;
+    border: black 2px solid;
+}
+
+.image-controls-btn:active {
+    background-color: #8b4513;
+}
+
+.image-controls-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 #image-container #image-display {
     border: #e3e0e0 dashed 2px;
     border-radius: 10px;
-    margin: 20px;
-    height: 100%;
+    margin: 10px 20px;
+    height: calc(100% - 100px);
+}
+
+#image-display img {
+    width: 500px;
+    height: 500px;
+    object-fit: contain;
+    border-radius: 10px;
+}
+
+#image-container p {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 500;
+    color: black;
+    margin-bottom: 20px;
 }
 
 #image-gallery {
@@ -72,4 +118,21 @@ html {
     border: 2px solid #2f2e2e;
     border-radius: 8px;
     padding: 15px;
+    overflow-y: auto;     
+    scrollbar-width: thin;  
+    scrollbar-color: #999 #f8f8f8;
+}
+
+#image-gallery img {
+    display: block; 
+    width: 100%;
+    margin: 10px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid wheat;
+}
+
+#image-gallery .img-active,
+#image-gallery img:hover {
+   border: 2px solid rgb(107, 171, 12);
 }
