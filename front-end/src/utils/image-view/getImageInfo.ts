@@ -3,7 +3,6 @@ import * as exifr from 'exifr';
 const getImageInfo = async (file: File) =>  {
   try {
     const exifImage = await exifr.parse(file);
-    console.log('EXIF data:', exifImage);
 
     return {
       width: exifImage.ImageWidth || exifImage.ExifImageWidth,

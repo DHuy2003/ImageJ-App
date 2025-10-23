@@ -2,15 +2,34 @@
 import './HomePage.css';
 import Logo from '../../assets/images/logo.png';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const HomePage = () => {
   const navigate = useNavigate();
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files) {
-      const fileArray = Array.from(files);
-      navigate('/display-images', { state: { fileArray } });
+    if (!files) return; 
+
+    const fileArray = Array.from(files);
+    const formData = new FormData();
+    fileArray.forEach((file) => {
+      formData.append('images', file);
+    });
+
+    try{
+    const respone = await axios.post('http://127.0.0.1:5000/api/images/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    const imageArray = respone.data.images;
+    navigate('/display-images', { state: { imageArray } });
+
+    } catch (error : any) {
+      console.error('Error uploading files:', error);
+      alert(error.response?.data?.message ||'Failed to upload files. Please try again.');
     }
   };
 

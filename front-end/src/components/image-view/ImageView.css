@@ -14,7 +14,6 @@ html {
     padding: 20px;
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
     justify-content: flex-start;
     gap: 10px;
 }
@@ -29,6 +28,7 @@ html {
     padding: 10px 15px;
     gap: 20px;
     height: auto;
+    align-self: flex-start; 
 }
 
 #image-gallery h2,
@@ -45,14 +45,16 @@ html {
     font-size: 16px;
     font-weight: 500;
     margin-bottom: 5px;
+    word-wrap: break-word;   
+    overflow-wrap: break-word; 
 }
 
 #image-container {
     flex: 4;
-    min-height: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    gap: 10px; 
     background-color: #fff;
     border: 2px solid #2f2e2e;
     border-radius: 8px;
@@ -88,16 +90,19 @@ html {
 }
 
 #image-container #image-display {
-    border: #e3e0e0 dashed 2px;
-    border-radius: 10px;
-    margin: 10px 20px;
-    height: calc(100% - 100px);
+    /* border: 2px solid #ccc; 
+    border-radius: 10px; */
+    margin: 0 20px;
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 #image-display img {
-    width: 500px;
-    height: 500px;
-    object-fit: contain;
+    max-width: 100%; 
+    max-height: 100%; 
+    object-fit: contain; 
     border-radius: 10px;
 }
 
@@ -129,10 +134,10 @@ html {
     margin: 10px 0;
     border-radius: 8px;
     cursor: pointer;
-    border: 2px solid wheat;
+    border: 4px solid wheat;
 }
 
 #image-gallery .img-active,
 #image-gallery img:hover {
-   border: 2px solid rgb(107, 171, 12);
+   border: 4px solid rgb(107, 171, 12);
 }

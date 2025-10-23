@@ -1,0 +1,4 @@
+flask
+pillow
+tifffile
+flask-cors
