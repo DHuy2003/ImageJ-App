@@ -24,7 +24,7 @@ const DropdownList = ({ items }: { items: MenuItem[] }) => {
                         }
                     }}>
                         {item.label}
-                        {item.subItems && item.subItems.length > 0 && <ChevronRight size={16} className="dropdown-arrow" />}
+                        {item.subItems && item.subItems.length > 0 && <ChevronRight className="dropdown-arrow" />}
                     </a>
 
                     {item.subItems && item.subItems.length > 0 && <DropdownList items={item.subItems} />}

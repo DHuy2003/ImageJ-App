@@ -33,11 +33,13 @@
 }
 
 .dropdown-arrow {
+    width: 16px;
+    height: 16px;
     position: absolute;
     right: 10px;
     top: 50%;
     transform: translateY(-50%);
-    color: #666;
+    color: #000;
 }
 
 .dropdown-menu .dropdown-menu {

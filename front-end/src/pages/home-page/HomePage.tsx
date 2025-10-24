@@ -18,14 +18,14 @@ const HomePage = () => {
     });
 
     try{
-    const respone = await axios.post('http://127.0.0.1:5000/api/images/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+      const respone = await axios.post('http://127.0.0.1:5000/api/images/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-    const imageArray = respone.data.images;
-    navigate('/display-images', { state: { imageArray } });
+      const imageArray = respone.data.images;
+      navigate('/display-images', { state: { imageArray } });
 
     } catch (error : any) {
       console.error('Error uploading files:', error);
