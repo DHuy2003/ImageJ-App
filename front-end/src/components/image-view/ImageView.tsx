@@ -18,13 +18,13 @@ type ImageViewProps = {
 }
 
 const ImageView = ({imageArray} : ImageViewProps) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentImageURL, setCurrentImageURL] = useState<string>("");
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [currentImageURL, setCurrentImageURL] = useState<string>();
   const currentFile = imageArray[currentIndex]; 
   const [currentImageInfo, setCurrentImageInfo] = useState<ImageInfo>();
   
   useEffect(() => {
-    if (currentFile && currentFile.url) {
+    if (currentFile && currentFile.url && currentFile.url !== currentImageURL) {
       setCurrentImageURL(currentFile.url);
     }
   }, [currentIndex, currentFile]);

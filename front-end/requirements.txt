@@ -1,0 +1,5 @@
+react-icons
+react-router-dom
+axios
+lucide-react
+exifr
