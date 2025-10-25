@@ -1,0 +1,30 @@
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+#no-image{
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#no-image-mess{
+    font-size: 3rem;
+    font-weight: lighter;
+    color: rgb(110, 119, 110);
+    font-style: italic;
+    margin-bottom: 1rem;
+    text-shadow: 5px 5px 8px rgba(11, 11, 11, 0.4);
+}
+#no-image-icon{
+    font-size: 6rem;
+    color: rgb(170, 179, 170);
+}

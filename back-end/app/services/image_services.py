@@ -17,7 +17,6 @@ def convert_tiff_to_png(images):
 
     for image in images:
         input_filename = image.filename
-        ext = os.path.splitext(input_filename)[1].lower()
         input_path = os.path.join(UPLOAD_FOLDER, input_filename)
         image.save(input_path)
 
@@ -47,18 +46,19 @@ def convert_tiff_to_png(images):
 
         if arr.dtype in [np.uint16, np.int32, np.float32, np.float64]:
             arr = arr.astype(np.float32)
-            min_val, max_val = np.percentile(arr, [1, 99]) 
+            min_val, max_val = np.percentile(arr, [1,99])
             arr = np.clip((arr - min_val) / (max_val - min_val), 0, 1)
-            arr = (arr * 255).astype(np.uint8)
+            arr = arr * 255
+            arr = arr.astype(np.uint8)
             img = Image.fromarray(arr)
 
         elif len(arr.shape) == 2 and np.unique(arr).size < 100:
             unique_vals = np.unique(arr)
-            lut = np.zeros((256, 3), dtype=np.uint8)
+            lut = np.zeros((256,3), dtype = np.uint8)
             np.random.seed(42)
             for val in unique_vals:
                 if val > 0:
-                    lut[val] = np.random.randint(0, 255, 3)
+                    lut[val] = np.random.randint(0,255,3)
             color_arr = lut[arr]
             img = Image.fromarray(color_arr, mode="RGB")
 
@@ -67,8 +67,7 @@ def convert_tiff_to_png(images):
 
         output_filename = os.path.splitext(input_filename)[0] + '.png'
         output_path = os.path.join(CONVERTED_FOLDER, output_filename)
-        img.save(output_path, "PNG")
-
+        img.save(output_path,"PNG")
         
         raw_npy_path = os.path.join(CONVERTED_FOLDER, os.path.splitext(input_filename)[0] + "_raw.npy")
         np.save(raw_npy_path, np.array(Image.open(input_path))) 

@@ -11,6 +11,7 @@ const HomePage = () => {
     const files = event.target.files;
     if (!files) return; 
 
+    localStorage.removeItem("imageArray");
     const fileArray = Array.from(files);
     const formData = new FormData();
     fileArray.forEach((file) => {
@@ -25,6 +26,7 @@ const HomePage = () => {
       });
 
       const imageArray = respone.data.images;
+      localStorage.setItem("imageArray", JSON.stringify(imageArray));
       navigate('/display-images', { state: { imageArray } });
 
     } catch (error : any) {
