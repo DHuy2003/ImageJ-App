@@ -1,12 +1,15 @@
 from flask import Flask
 from flask_cors import CORS
-from app.routes.image_routes import image_bp
+from app.extensions import db
+from app.routes.image_file_routes import image_file_bp
 
 def create_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'your_secret_key_here'
     CORS(app)
-    app.register_blueprint(image_bp, url_prefix='/api/images')
+    app.config.from_pyfile('config.py')
+    db.init_app(app)
+
+    app.register_blueprint(image_file_bp, url_prefix='/api/images')
 
     print("✅ Blueprint /api/images đã được đăng ký!")   
     return app

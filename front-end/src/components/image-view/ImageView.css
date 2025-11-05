@@ -83,20 +83,31 @@ html {
     background-color: #8b4513;
 }
 
-.image-controls-btn[disabled] {
+.image-controls-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    pointer-events: none;
 }
 
 #image-container #image-display {
-    /* border: 2px solid #ccc; 
-    border-radius: 10px; */
     margin: 0 20px;
     flex-grow: 1;
     display: flex;
     justify-content: center;
     align-items: center;
+    position: relative;
+}
+
+#image-display.show-mask-layout {
+    flex-direction: row; /* Arrange items horizontally */
+    gap: 10px; /* Space between images */
+}
+
+#image-display .small-image {
+    max-width: 50%; /* Each image takes up half the width */
+    max-height: 100%;
+    width: auto; /* Allow images to shrink */
+    height: auto;
+    object-fit: contain;
 }
 
 #image-display img {
@@ -139,5 +150,42 @@ html {
 
 #image-gallery .img-active,
 #image-gallery img:hover {
-   border: 4px solid rgb(107, 171, 12);
+    border: 4px solid #4a90e2;
+} 
+
+.gallery-item {
+    position: relative;
+    margin: 10px 0;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
+
+.gallery-item img {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.mask-button {
+    margin-top: 5px;
+    padding: 5px 10px;
+    background-color: #6a0dad; /* Màu tím */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.mask-button:hover {
+    background-color: #4b0082; /* Màu tím đậm hơn khi hover */
+} 
+
+
+
+  

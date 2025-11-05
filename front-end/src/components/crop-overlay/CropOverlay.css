@@ -1,0 +1,139 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.crop-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .crop-overlay {
+    position: absolute;
+    border: 2px solid #00bfff;
+    cursor: move;
+    background: rgba(0, 0, 0, 0.2);
+    touch-action: none;
+  }
+  
+  .grid-lines {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+  }
+  
+  .v-line, .h-line {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  .v-line { top: 0; bottom: 0; width: 1px; }
+  .h-line { left: 0; right: 0; height: 1px; }
+  
+  .resize-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #00bfff;
+    border-radius: 50%;
+  }
+  
+  .resize-handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
+  .resize-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
+  .resize-handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+  .resize-handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
+  
+  .crop-actions {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+  }
+  
+  .crop-actions button {
+    background: #00bfff;
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  
+  .crop-actions button:hover {
+    background: #008ecc;
+  }
+  
+  .confirm-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+  }
+  
+  .confirm-box {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px 30px;
+    text-align: center;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+  }
+  
+  .confirm-box p {
+    font-size: 16px;
+    margin-bottom: 15px;
+  }
+  
+  .confirm-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+  }
+  
+  .confirm-buttons button {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+  }
+  
+  .confirm-buttons .yes {
+    background-color: #00bfff;
+    color: white;
+  }
+  
+  .confirm-buttons .no {
+    background-color: #ccc;
+  }
+  
+  .confirm-buttons .yes:hover {
+    background-color: #008ecc;
+  }
+  
+  .confirm-buttons .no:hover {
+    background-color: #999;
+  }
+  
+  
+
+ 

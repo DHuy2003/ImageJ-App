@@ -2,3 +2,5 @@ flask
 pillow
 tifffile
 flask-cors
+Flask-SQLAlchemy
+python-dotenv

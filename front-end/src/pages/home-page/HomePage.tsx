@@ -1,38 +1,28 @@
 
 import './HomePage.css';
 import Logo from '../../assets/images/logo.png';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { uploadCellImages } from '../../utils/common/uploadImages';
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isNewWindow = searchParams.get("newWindow") === "true";
+
+  useEffect(() => {
+    if (isNewWindow) {
+      sessionStorage.removeItem("imageArray");
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('newWindow');
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [isNewWindow]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return; 
-
-    localStorage.removeItem("imageArray");
-    const fileArray = Array.from(files);
-    const formData = new FormData();
-    fileArray.forEach((file) => {
-      formData.append('images', file);
-    });
-
-    try{
-      const respone = await axios.post('http://127.0.0.1:5000/api/images/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      const imageArray = respone.data.images;
-      localStorage.setItem("imageArray", JSON.stringify(imageArray));
-      navigate('/display-images', { state: { imageArray } });
-
-    } catch (error : any) {
-      console.error('Error uploading files:', error);
-      alert(error.response?.data?.message ||'Failed to upload files. Please try again.');
-    }
+    await uploadCellImages(files, navigate, true);
   };
 
   const handleUploadClick = () => {
@@ -64,7 +54,7 @@ const HomePage = () => {
 
           <div id="upload">
               <button id="upload-btn" onClick={handleUploadClick}>Upload Your First Dataset</button>
-              <input type="file" id="file-input" onChange={handleFileChange} multiple/>
+              <input type="file" id="file-input" accept = "image/*" onChange={handleFileChange} multiple/>
           </div>
       </div>
 
