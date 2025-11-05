@@ -3,3 +3,4 @@ react-router-dom
 axios
 lucide-react
 exifr
+sweetalert2

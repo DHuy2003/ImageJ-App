@@ -1,40 +1,47 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation} from 'react-router-dom';
 import NavBar from '../../components/nav-bar/NavBar';
 import ToolBar from '../../components/tool-bar/ToolBar';
 import ImageView from '../../components/image-view/ImageView';
 import { FaFileCircleXmark } from "react-icons/fa6"
 import './DisplayImagesPage.css';
 import { useEffect, useState } from 'react';
-
-type ImageInfo = {
-  filename: string;
-  url: string;
-  width: number;
-  height: number;
-  bitDepth: string;
-  format: string;
-  size: number;
-}
+import type { ImageInfo } from '../../types/image';
 
 const DisplayImagesPage = () => {
   const location = useLocation();
   const [imageArray, setImageArray] = useState<ImageInfo[]>([]);
-
+  const isNewWindow = location.state?.isNewWindow === true;
+ 
   useEffect(() => {
     const stateImageArray = location.state?.imageArray;
-    const storedImageArray = localStorage.getItem("imageArray");
+    const storedImageArray = sessionStorage.getItem("imageArray");
+    
     if (stateImageArray) {
       setImageArray(stateImageArray);
-    } else if (storedImageArray) {
-      try {
-        const parsedArray = JSON.parse(storedImageArray);
-          setImageArray(parsedArray);
-      } catch (error) {
-        console.error("Error parsing stored image array:", error);
-      }
+      sessionStorage.setItem("imageArray", JSON.stringify(stateImageArray));
+      return;
     }
-  }, [location.state]);
+
+    if (isNewWindow) {
+      setImageArray([]);
+      sessionStorage.removeItem("imageArray");
+      return;
+    }
+
+    if (storedImageArray) {
+      const parsedArray = JSON.parse(storedImageArray);
+      setImageArray(parsedArray);
+      return;
+    } else setImageArray([]);
+
+  }, [location.state, isNewWindow]);
   
+  useEffect(() => {
+    if (!isNewWindow && imageArray.length > 0) {
+      sessionStorage.setItem("imageArray", JSON.stringify(imageArray));
+    }
+  }, [imageArray, isNewWindow]);
+
 
   if (!imageArray || imageArray.length === 0) {
     return (

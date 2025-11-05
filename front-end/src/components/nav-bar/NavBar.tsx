@@ -1,8 +1,23 @@
 import {BarChart3, Microscope, Search } from "lucide-react";
 import DropdownMenu from "../dropdown-menu/DropdownMenu";
+import { useNavigate } from "react-router-dom";
 import "./NavBar.css";
+import { 
+    handleNewWindow, 
+    handleOpen, 
+    handleOpenNext, 
+    handleOpenRecent, 
+    handleOpenFolder, 
+    handleClose, 
+    handleCloseAll, 
+    handleSave, 
+    handleOpenMaskFolder,  
+    handleQuit, 
+} from "../../utils/nav-bar/fileUtils";
+import { handleCut } from "../../utils/nav-bar/editUtils";
 
 const NavBar = () => {
+    const navigate = useNavigate();
     return(
         <div id="navbar">
             <div id="navbar-title">
@@ -16,17 +31,16 @@ const NavBar = () => {
                 <DropdownMenu 
                     label="File" 
                     items={[
-                        {label: "New", onClick: () => {console.log("New Clicked")}},
-                        {label: "Open", onClick: () => {console.log("Open Clicked")}},
-                        {label: "Open Next", onClick: () => {console.log("Open Next Clicked")}},
-                        {label: "Open Recent", onClick: () => {console.log("Open Recent Clicked")}},
-                        {label: "Open Folder", onClick: () => {console.log("Open Folder Clicked")}},
-                        {label: "Close", onClick: () => {console.log("Close Clicked")}},
-                        {label: "Close All", onClick: () => {console.log("Close All Clicked")}},
-                        {label: "Save", onClick: () => {console.log("Save Clicked")}},
-                        {label: "Revert", onClick: () => {console.log("Revert Clicked")}},
-                        {label: "Page Setup", onClick: () => {console.log("Page Setup Clicked")}},
-                        {label: "Quit", onClick: () => {console.log("Quit Clicked")}}
+                        {label: "New Window", onClick: () => handleNewWindow()},
+                        {label: "Open", onClick: () => handleOpen(navigate)},
+                        {label: "Open Next", onClick: () => handleOpenNext(navigate)},
+                        {label: "Open Recent", onClick: handleOpenRecent},
+                        {label: "Open Folder", onClick: () => handleOpenFolder(navigate)},
+                        {label: "Close", onClick: () => handleClose()},
+                        {label: "Close All", onClick: () => handleCloseAll(navigate)},
+                        {label: "Save", onClick: handleSave},
+                        {label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate)},
+                        {label: "Quit", onClick: () => handleQuit(navigate)}
                     ]}
                 />
 
@@ -34,7 +48,7 @@ const NavBar = () => {
                     label="Edit" 
                     items={[
                         {label: "Undo"},
-                        {label: "Cut"},
+                        {label: "Cut", onClick: () => handleCut()},
                         {label: "Clear"},
                         {label: "Clear Outside"},
                         {label: "Fill"},
