@@ -25,37 +25,47 @@ export const uploadCellImages = async (
       },
     });
 
-    const newImageArray: ImageInfo[] = response.data.images;
-    let combinedArray: ImageInfo[] = [];
-
-    const existingImageArrayString = sessionStorage.getItem("imageArray");
-    let existingImagesMap = new Map<string, ImageInfo>();
-
-    if (existingImageArrayString) {
-        const parsedExistingArray: ImageInfo[] = JSON.parse(existingImageArrayString);
-        parsedExistingArray.forEach(img => existingImagesMap.set(img.filename, img));
-    }
-
-    newImageArray.forEach(newImg => {
-        existingImagesMap.set(newImg.filename, newImg);
-    });
-
-    combinedArray = Array.from(existingImagesMap.values());
+    const newUploadedImages: ImageInfo[] = response.data.images;
+    let imagesToStore: ImageInfo[] = [];
 
     if (isNewWindow) {
       sessionStorage.removeItem("imageArray"); 
-      combinedArray = newImageArray; 
+      imagesToStore = newUploadedImages;
+    } else {
+      const allImagesResponse = await axios.get(`${API_BASE_URL}/`);
+      const updatedImageArray: ImageInfo[] = allImagesResponse.data.images;
+
+      const existingImagesMap = new Map<string, ImageInfo>();
+      const existingImageArrayString = sessionStorage.getItem("imageArray");
+      if (existingImageArrayString) {
+          const parsedExistingArray: ImageInfo[] = JSON.parse(existingImageArrayString);
+          parsedExistingArray.forEach(img => existingImagesMap.set(img.filename, img));
+      }
+      
+      updatedImageArray.forEach(img => existingImagesMap.set(img.filename, img)); 
+
+      imagesToStore = Array.from(existingImagesMap.values());
     }
     
-    sessionStorage.setItem("imageArray", JSON.stringify(combinedArray));
+    sessionStorage.setItem("imageArray", JSON.stringify(imagesToStore));
     sessionStorage.setItem("currentImageIndex", "0"); 
+
     navigate("/display-images", {
       state: {
-        imageArray: combinedArray,
+        imageArray: imagesToStore,
         isNewWindow: isNewWindow,
       },
       replace: !isNewWindow,
     });
+
+    Swal.fire({
+      title: 'Success',
+      text: `${newUploadedImages.length} cell images uploaded and processed. Linking with masks will be automatic.`,
+      icon: 'success',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+
   } catch (error: any) {
     console.error("Error uploading cell images:", error);
     Swal.fire({
@@ -84,24 +94,14 @@ export const uploadMasks = async (files: FileList | File[] | null, navigate: Nav
       },
     });
 
-    if (response.data.masks && response.data.masks.length > 0) {
-      Swal.fire({
-        title: 'Success',
-        text: `${response.data.masks.length} masks uploaded and linked.`,
-        icon: 'success',
-        confirmButtonText: 'OK',
-        confirmButtonColor: '#3085d6',
-      });
-    } else {
-      Swal.fire({
-        title: 'Notification',
-        text: 'No masks were uploaded or linked. Ensure filenames match cell images (e.g., mask_001.tif for t001.tif).',
-        icon: 'info',
-        confirmButtonText: 'OK',
-        confirmButtonColor: '#3085d6',
-      });
-    }
-
+    Swal.fire({
+      title: 'Success',
+      text: `Mask images uploaded and processed. Linking with cell images is automatic.`, 
+      icon: 'success',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+    
     const allImagesResponse = await axios.get(`${API_BASE_URL}/`);
     const updatedImageArray: ImageInfo[] = allImagesResponse.data.images;
 
@@ -111,7 +111,7 @@ export const uploadMasks = async (files: FileList | File[] | null, navigate: Nav
       replace: true,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error uploading masks:", error);
     Swal.fire({
       title: 'Error',

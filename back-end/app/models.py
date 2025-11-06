@@ -4,8 +4,8 @@ class Image(db.Model):
     __tablename__ = 'imageJ'
 
     id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(120), unique=True, nullable=False)
-    filepath = db.Column(db.String(255), nullable=False)
+    filename = db.Column(db.String(120), unique=True, nullable=True)
+    filepath = db.Column(db.String(255), nullable=True)
     mask_filename = db.Column(db.String(120), nullable=True)
     mask_filepath = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default='original', nullable=False)
