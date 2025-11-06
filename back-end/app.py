@@ -10,9 +10,9 @@ with app.app_context():
     inspector = inspect(db.engine)
     if not inspector.has_table("imageJ"):
         db.create_all()
-        print("Database và bảng imageJ đã được tạo!")
+        print("Database & imageJ table are created!")
     else:
-        print("Bảng imageJ đã tồn tại.")
+        print("imageJ table already existed.")
 
 atexit.register(cleanup_folders, app=app)
 

@@ -36,44 +36,35 @@ def process_and_save_image(image, destination_folder, save_to_db=True):
     bit_depth = determine_bit_depth(img, arr)
 
     if destination_folder == MASK_FOLDER:
-        # Đảm bảo ảnh mask được xử lý thành ảnh grayscale trước
         if img.mode != 'L':
             img = img.convert('L')
             arr = np.array(img)
         
-        # Chuẩn hóa giá trị về 0-255
         arr = arr.astype(np.float32)
         if arr.max() > 0:
             arr = (arr / arr.max()) * 255
         arr = arr.astype(np.uint8)
-        
-        # Tìm giá trị nền (giá trị pixel tối thiểu)
+
         min_pixel_value = arr.min()
-        
-        # Tạo một bảng tra cứu (LUT) để gán màu ngẫu nhiên cho các đối tượng
+
         unique_vals = np.unique(arr)
-        lut = np.zeros((256, 3), dtype=np.uint8) # LUT cho RGB
-        
-        # Đặt màu đen cho nền
-        if min_pixel_value < 256: # Đảm bảo giá trị hợp lệ cho index LUT
-            lut[min_pixel_value] = [0, 0, 0] # Nền là màu đen
-        
-        # Gán màu ngẫu nhiên cho các đối tượng (giá trị khác nền)
-        np.random.seed(42) # Giữ màu ngẫu nhiên nhất quán nếu muốn
+        lut = np.zeros((256, 3), dtype=np.uint8)
+
+        if min_pixel_value < 256: 
+            lut[min_pixel_value] = [0, 0, 0]
+
+        np.random.seed(42) 
         for val in unique_vals:
             if val != min_pixel_value:
-                # Tạo màu ngẫu nhiên khác màu đen
                 color = np.random.randint(0, 255, 3)
-                # Đảm bảo màu không quá tối (tránh gần với nền đen)
-                while np.all(color < 50): # Nếu tất cả kênh đều nhỏ hơn 50, tạo lại
+                while np.all(color < 50): 
                     color = np.random.randint(0, 255, 3)
                 lut[val] = color
-        
-        # Áp dụng LUT vào mảng ảnh để tạo ảnh màu
+
         color_arr = lut[arr]
         img = Image.fromarray(color_arr, mode="RGB")
 
-    else: # Xử lý cho ảnh cell (hoặc các ảnh không phải mask)
+    else: 
         if 'palette' in img.info:
             img = img.convert('RGB')
             arr = np.array(img)

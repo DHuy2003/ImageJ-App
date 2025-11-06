@@ -1,5 +1,5 @@
 import type { NavigateFunction } from "react-router-dom";
-import { uploadCellImages, uploadMasks } from '../common/uploadImages'; // Import new functions
+import { uploadCellImages, uploadMasks } from '../common/uploadImages'; 
 import Swal from 'sweetalert2';
 
 export const handleNewWindow = () => {

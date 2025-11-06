@@ -28,7 +28,6 @@ export const uploadCellImages = async (
     const newImageArray: ImageInfo[] = response.data.images;
     let combinedArray: ImageInfo[] = [];
 
-    // Get existing images from sessionStorage
     const existingImageArrayString = sessionStorage.getItem("imageArray");
     let existingImagesMap = new Map<string, ImageInfo>();
 
@@ -37,23 +36,19 @@ export const uploadCellImages = async (
         parsedExistingArray.forEach(img => existingImagesMap.set(img.filename, img));
     }
 
-    // Process new images: update existing or add new ones
     newImageArray.forEach(newImg => {
-        existingImagesMap.set(newImg.filename, newImg); // This will either update an existing or add a new entry
+        existingImagesMap.set(newImg.filename, newImg);
     });
 
-    // Convert map back to array
     combinedArray = Array.from(existingImagesMap.values());
 
-    // Handle isNewWindow scenario as a final override for combinedArray
     if (isNewWindow) {
-      sessionStorage.removeItem("imageArray"); // Ensure session storage is cleared for a true new window experience
-      combinedArray = newImageArray; // For a new window, only show the newly uploaded images
+      sessionStorage.removeItem("imageArray"); 
+      combinedArray = newImageArray; 
     }
     
     sessionStorage.setItem("imageArray", JSON.stringify(combinedArray));
-    sessionStorage.setItem("currentImageIndex", "0"); // Ensure index is reset for new uploads
-
+    sessionStorage.setItem("currentImageIndex", "0"); 
     navigate("/display-images", {
       state: {
         imageArray: combinedArray,
@@ -92,7 +87,7 @@ export const uploadMasks = async (files: FileList | File[] | null, navigate: Nav
     if (response.data.masks && response.data.masks.length > 0) {
       Swal.fire({
         title: 'Success',
-        text: `${response.data.masks.length} masks uploaded and linked.`, // Corrected to use response.data.masks
+        text: `${response.data.masks.length} masks uploaded and linked.`,
         icon: 'success',
         confirmButtonText: 'OK',
         confirmButtonColor: '#3085d6',
@@ -107,13 +102,10 @@ export const uploadMasks = async (files: FileList | File[] | null, navigate: Nav
       });
     }
 
-    // Refresh displayed images to show linked masks
     const allImagesResponse = await axios.get(`${API_BASE_URL}/`);
     const updatedImageArray: ImageInfo[] = allImagesResponse.data.images;
 
     sessionStorage.setItem("imageArray", JSON.stringify(updatedImageArray));
-    // No need to reset currentImageIndex here, as we want to stay on the current image if possible
-    
     navigate("/display-images", {
       state: { imageArray: updatedImageArray },
       replace: true,
