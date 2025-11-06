@@ -15,7 +15,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const currentFile = imageArray[currentIndex];
   const [isCropping, setIsCropping] = useState(false);
   const [showMask, setShowMask] = useState(false);
-  const [showProperties, setShowProperties] = useState(true); // New state for properties
+  const [showProperties, setShowProperties] = useState(true); 
   const imgRef = useRef<HTMLImageElement>(null);
 
   // Bật crop mode khi event được phát
@@ -25,15 +25,13 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     return () => window.removeEventListener('enableCropMode', listener);
   }, []);
 
-  // Cập nhật URL khi đổi ảnh
   useEffect(() => {
     if (currentFile?.url && currentFile.url !== currentImageURL) {
       setCurrentImageURL(currentFile.url);
     }
     console.log('Current File in ImageView:', currentFile);
     console.log('Current File Mask URL:', currentFile?.mask_url);
-  }, [currentFile, currentImageURL]); // Added currentImageURL to dependencies to avoid unnecessary logs
-
+  }, [currentFile, currentImageURL]);
   const handlePrev = () => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : prevIndex));
   };
@@ -44,12 +42,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
   const handleToggleMask = () => {
     setShowMask((prev) => !prev);
-    setShowProperties((prev) => !prev); // Toggle properties visibility as well
+    setShowProperties((prev) => !prev); 
   };
 
   return (
     <div id="image-view">
-      {currentFile && showProperties && ( // Conditionally render properties
+      {currentFile && showProperties && ( 
         <div id="image-properties">
           <h2>Properties</h2>
           <p>Name: {currentFile.filename}</p>
@@ -81,14 +79,13 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           </button>
         </div>
 
-        <div id="image-display" className={showMask ? 'show-mask-layout' : ''}> {/* Add class for conditional layout */}
+        <div id="image-display" className={showMask ? 'show-mask-layout' : ''}> 
           {currentImageURL && <img ref={imgRef} src={currentImageURL} alt={currentFile?.filename} className={showMask ? 'small-image' : ''}/>}
           {showMask && currentFile?.mask_url && (
             <img
               src={currentFile.mask_url}
               alt={`${currentFile?.filename} mask`}
-              className="mask-image small-image" // Add small-image class
-              style={{ }} // Remove opacity
+              className="mask-image small-image" 
             />
           )}
 
