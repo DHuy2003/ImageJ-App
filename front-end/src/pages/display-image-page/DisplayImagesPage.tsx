@@ -42,6 +42,20 @@ const DisplayImagesPage = () => {
     }
   }, [imageArray, isNewWindow]);
 
+  // Listen for image type changes
+  useEffect(() => {
+    const handleImageTypeChanged = (e: CustomEvent) => {
+      const { imageArray: updatedArray } = e.detail;
+      if (updatedArray) {
+        setImageArray(updatedArray);
+        sessionStorage.setItem("imageArray", JSON.stringify(updatedArray));
+      }
+    };
+
+    window.addEventListener('imageTypeChanged', handleImageTypeChanged as EventListener);
+    return () => window.removeEventListener('imageTypeChanged', handleImageTypeChanged as EventListener);
+  }, []);
+
 
   if (!imageArray || imageArray.length === 0) {
     return (
