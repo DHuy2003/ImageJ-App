@@ -1,16 +1,6 @@
 import './DropdownMenu.css';
 import { ChevronRight } from "lucide-react";
-
-type MenuItem = {
-    label: string;
-    subItems?: MenuItem[];
-    onClick?: () => void;
-};
-
-type DropdownMenuProps = {
-    label: string; 
-    items: MenuItem[];
-};
+import type { MenuItem, DropdownMenuProps } from '../../types/dropdown';
 
 const DropdownList = ({ items }: { items: MenuItem[] }) => {
     return (

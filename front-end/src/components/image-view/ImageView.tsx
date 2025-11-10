@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, ChevronLeft} from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 import './ImageView.css';
 import formatFileSize from '../../utils/common/formatFileSize';
-import type { ImageInfo } from '../../types/image';
+import type { ImageViewProps } from '../../types/image';
 import CropOverlay from '../crop-overlay/CropOverlay';
-
-type ImageViewProps = {
-  imageArray: ImageInfo[];
-};
+import type { CropOverlayHandle } from '../../types/crop';
+import { useNavigate } from 'react-router-dom';
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -15,8 +13,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const currentFile = imageArray[currentIndex];
   const [isCropping, setIsCropping] = useState(false);
   const [showMask, setShowMask] = useState(false);
-  const [showProperties, setShowProperties] = useState(true); 
+  const [showProperties, setShowProperties] = useState(true);
   const imgRef = useRef<HTMLImageElement>(null);
+  const cropRef = useRef<CropOverlayHandle | null>(null);
+  const [showConfirmCrop, setShowConfirmCrop] = useState(false);
+  const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
+  const navigate = useNavigate();
 
   // Bật crop mode khi event được phát
   useEffect(() => {
@@ -26,12 +28,101 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   }, []);
 
   useEffect(() => {
-    if (currentFile?.url && currentFile.url !== currentImageURL) {
-      setCurrentImageURL(currentFile.url);
+    if (currentFile) {
+      if (currentFile.cropped_url) {
+        setCurrentImageURL(currentFile.cropped_url);
+      } else if (currentFile.url) {
+        setCurrentImageURL(currentFile.url);
+      }
     }
-    console.log('Current File in ImageView:', currentFile);
-    console.log('Current File Mask URL:', currentFile?.mask_url);
-  }, [currentFile, currentImageURL]);
+  }, [currentFile, currentIndex]);
+
+  const handleCrop = (cropRect: DOMRect) => {
+    const img = imgRef.current;
+    if (!img) return;
+
+    // Tính scale giữa DOM và ảnh gốc
+    const imgRect = img.getBoundingClientRect();
+    const scaleX = img.naturalWidth / imgRect.width;
+    const scaleY = img.naturalHeight / imgRect.height;
+
+    // Tính toạ độ cắt theo pixel ảnh gốc
+    let cropX = (cropRect.left - imgRect.left) * scaleX;
+    let cropY = (cropRect.top - imgRect.top) * scaleY;
+    let cropW = cropRect.width * scaleX;
+    let cropH = cropRect.height * scaleY;
+
+    // Clamp đề phòng sai số làm vượt biên
+    cropX = Math.max(0, Math.min(cropX, img.naturalWidth));
+    cropY = Math.max(0, Math.min(cropY, img.naturalHeight));
+    cropW = Math.max(1, Math.min(cropW, img.naturalWidth - cropX));
+    cropH = Math.max(1, Math.min(cropH, img.naturalHeight - cropY));
+
+    // Canvas đích
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(cropW);
+    canvas.height = Math.round(cropH);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Tạo ảnh CORS‑safe để vẽ lên canvas
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer'; // tuỳ chọn, hạn chế gửi referrer
+    let src = img.currentSrc || img.src;
+
+    // Nếu là http(s) thì thêm cache-bust để ép tải mới theo CORS (tránh dùng lại bản no‑cors trong cache)
+    if (/^https?:\/\//i.test(src)) {
+      src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
+    }
+    image.src = src;
+
+    image.onload = () => {
+      // Vẽ và xuất data URL
+      ctx.drawImage(
+        image,
+        Math.round(cropX),
+        Math.round(cropY),
+        Math.round(cropW),
+        Math.round(cropH),
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      const newSrc = canvas.toDataURL('image/png');
+
+      const updatedArray = [...imageArray];
+      const now = new Date().toISOString();
+      updatedArray[currentIndex] = {
+        ...updatedArray[currentIndex],
+        cropped_url: newSrc,
+        cropped_on: now,
+      };
+
+      // data: URL KHÔNG cần gắn query
+      setCurrentImageURL(newSrc);
+      sessionStorage.setItem('imageArray', JSON.stringify(updatedArray));
+      navigate('.', { replace: true, state: {imageArray: updatedArray } });
+
+      setIsCropping(false);
+      setShowConfirmCrop(false);
+      setCropRectData(null);
+    };
+
+    image.onerror = (e) => {
+      console.error('❌ Image load (CORS) failed: ', e, src);
+      alert('Cannot export cropped image due to CORS. Please refresh after backend CORS fix.');
+    };
+  };
+
+  const handleCancelCrop = () => {
+    setIsCropping(false);
+    setShowConfirmCrop(false);
+    setCropRectData(null);
+  };
+
   const handlePrev = () => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : prevIndex));
   };
@@ -42,12 +133,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
   const handleToggleMask = () => {
     setShowMask((prev) => !prev);
-    setShowProperties((prev) => !prev); 
+    setShowProperties((prev) => !prev);
   };
 
   return (
     <div id="image-view">
-      {currentFile && showProperties && ( 
+      {currentFile && showProperties && (
         <div id="image-properties">
           <h2>Properties</h2>
           <p>Name: {currentFile.filename}</p>
@@ -64,13 +155,13 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             <ChevronLeft className="image-controls-icon" />
             Previous Frame
           </button>
-          
-          <button 
+
+          <button
             className="image-controls-btn"
             onClick={handleToggleMask}
-            disabled={!currentFile?.mask_url} // Disable if no mask_url
+            disabled={!currentFile?.mask_url}
           >
-            {showMask ? "Hide Mask" : "Show Mask"}
+            {showMask ? 'Hide Mask' : 'Show Mask'}
           </button>
 
           <button className="image-controls-btn" onClick={handleNext} disabled={currentIndex === imageArray.length - 1}>
@@ -79,71 +170,71 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           </button>
         </div>
 
-        <div id="image-display" className={showMask ? 'show-mask-layout' : ''}> 
-          {currentImageURL && <img ref={imgRef} src={currentImageURL} alt={currentFile?.filename} className={showMask ? 'small-image' : ''}/>}
+        <div id="image-display" className={showMask ? 'show-mask-layout' : ''}>
+          {currentImageURL && (
+            <img
+              ref={imgRef}
+              crossOrigin="anonymous"          // 👈 yêu cầu CORS sạch cho ảnh chính
+              referrerPolicy="no-referrer"
+              src={currentImageURL}
+              alt={currentFile?.filename}
+              className={showMask ? 'small-image' : ''}
+            />
+          )}
+
           {showMask && currentFile?.mask_url && (
             <img
+              crossOrigin="anonymous"          // (không bắt buộc cho canvas, nhưng đồng nhất)
+              referrerPolicy="no-referrer"
               src={currentFile.mask_url}
               alt={`${currentFile?.filename} mask`}
-              className="mask-image small-image" 
+              className="mask-image small-image"
             />
           )}
 
           {isCropping && (
             <CropOverlay
+              ref={cropRef}
               imgRef={imgRef}
               onCrop={(cropRect) => {
-                const img = imgRef.current;
-                if (!img) return;
-
-                const imgRect = img.getBoundingClientRect();
-                const scaleX = img.naturalWidth / imgRect.width;
-                const scaleY = img.naturalHeight / imgRect.height;
-
-                const cropX = (cropRect.left - imgRect.left) * scaleX;
-                const cropY = (cropRect.top - imgRect.top) * scaleY;
-                const cropW = cropRect.width * scaleX;
-                const cropH = cropRect.height * scaleY;
-
-                const canvas = document.createElement("canvas");
-                canvas.width = cropW;
-                canvas.height = cropH;
-                const ctx = canvas.getContext("2d");
-                if (!ctx) return;
-
-                const image = new Image();
-                console.log("image src", img.src);
-                image.src = img.src;
-                image.onload = () => {
-                  ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-                  const newSrc = canvas.toDataURL("image/png");
-
-                  const confirmReplace = window.confirm("Bạn có muốn thay thế ảnh gốc không?");
-                  if (confirmReplace) {
-                    const updatedArray = [...imageArray];
-                    updatedArray[currentIndex] = {
-                      ...updatedArray[currentIndex],
-                      url: newSrc,
-                    };
-
-                    // ✅ Cập nhật ảnh hiển thị ngay
-                    setCurrentImageURL(`${newSrc}?t=${Date.now()}`);
-
-                    // ✅ Lưu sessionStorage để sau còn tải về
-                    sessionStorage.setItem("imageArray", JSON.stringify(updatedArray));
-
-                    console.log("✅ Cập nhật thành công:", updatedArray[currentIndex]);
-                  }
-
-                  setIsCropping(false);
-                };
+                setCropRectData(cropRect);
+                setShowConfirmCrop(true);
               }}
-              onCancel={() => setIsCropping(false)}
+              onCancel={handleCancelCrop}
             />
           )}
         </div>
 
         <p>Frame {currentIndex + 1} of {imageArray.length}</p>
+
+        {isCropping && (
+          <div className="crop-controls">
+            <button
+              onClick={() => {
+                const rect = cropRef.current?.getRect();
+                if (rect) {
+                  setCropRectData(rect);
+                  setShowConfirmCrop(true);
+                }
+              }}
+            >
+              Crop
+            </button>
+            <button onClick={handleCancelCrop}>Cancel</button>
+          </div>
+        )}
+
+        {showConfirmCrop && cropRectData && (
+          <div className="confirm-popup">
+            <div className="confirm-box">
+              <p>Do you want to replace the original image?</p>
+              <div className="confirm-buttons">
+                <button className="yes" onClick={() => handleCrop(cropRectData)}>Yes</button>
+                <button className="no" onClick={() => setShowConfirmCrop(false)}>No</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div id="image-gallery">
@@ -153,7 +244,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           return (
             <div key={index} className="gallery-item">
               <img
-                src={image.url}
+                src={image.cropped_url || image.url}
                 alt={image.filename}
                 onClick={() => {
                   setCurrentIndex(index);
@@ -167,6 +258,5 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     </div>
   );
 };
-
 
 export default ImageView;

@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, send_from_directory
+from flask_cors import cross_origin
 from app.services.image_file_services import get_all_images, upload_cell_images, upload_mask_images
 import os
 
@@ -10,6 +11,7 @@ CONVERTED_FOLDER = os.path.join(BACKEND_DIR, 'converted')
 MASK_FOLDER = os.path.join(BACKEND_DIR, 'masks')
 
 @image_file_bp.route('/converted/<filename>')
+@cross_origin()  # đảm bảo header CORS trên file ảnh
 def get_converted_image(filename):
     try:
         return send_from_directory(CONVERTED_FOLDER, filename)
@@ -17,6 +19,7 @@ def get_converted_image(filename):
         return jsonify({"error": "File not found"}), 404
 
 @image_file_bp.route('/masks/<filename>')
+@cross_origin()  # đảm bảo header CORS trên file mask
 def get_mask_image(filename):
     try:
         return send_from_directory(MASK_FOLDER, filename)
@@ -53,5 +56,3 @@ def upload_masks():
         "message": "Mask images uploaded and processed successfully",
         "masks": uploaded_masks_info
     }), 200
-
-
