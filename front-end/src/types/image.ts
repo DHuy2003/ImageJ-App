@@ -1,7 +1,7 @@
 export interface ImageInfo {
     id: number;
     filename: string;
-    url: string;
+    url?: string;
     width: number;
     height: number;
     bitDepth: number;
@@ -11,5 +11,12 @@ export interface ImageInfo {
     mask_filepath: string | null;
     mask_url?: string | null;
     status: string;
-    last_edited_on: string | null;
-}
+    last_edited_on?: string | null;
+    cropped_url?: string | null;
+    cropped_on?: string | null;
+};
+
+export type ImageViewProps = {
+    imageArray: ImageInfo[];
+    // setImageArray: (next: ImageInfo[]) => void;
+};
