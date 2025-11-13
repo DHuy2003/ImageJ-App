@@ -23,7 +23,6 @@ def determine_bit_depth(img, arr):
     return dtype_to_bit.get(arr.dtype.type, 8)
 
 def extract_numeric_part(filename):
-    """Trích xuất phần số từ tên file."""
     match = re.search(r'\d+', os.path.splitext(filename)[0])
     if match:
         return match.group(0)
