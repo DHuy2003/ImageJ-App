@@ -4,3 +4,4 @@ tifffile
 flask-cors
 Flask-SQLAlchemy
 python-dotenv
+requests

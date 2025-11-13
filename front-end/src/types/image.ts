@@ -13,10 +13,8 @@ export interface ImageInfo {
     status: string;
     last_edited_on?: string | null;
     cropped_url?: string | null;
-    cropped_on?: string | null;
 };
 
 export type ImageViewProps = {
     imageArray: ImageInfo[];
-    // setImageArray: (next: ImageInfo[]) => void;
 };

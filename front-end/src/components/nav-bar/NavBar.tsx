@@ -36,10 +36,10 @@ const NavBar = () => {
                         {label: "Open Next", onClick: () => handleOpenNext(navigate)},
                         {label: "Open Recent", onClick: handleOpenRecent},
                         {label: "Open Folder", onClick: () => handleOpenFolder(navigate)},
-                        {label: "Close", onClick: () => handleClose()},
+                        {label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate)},
+                        {label: "Close", onClick: () => handleClose(navigate)},
                         {label: "Close All", onClick: () => handleCloseAll(navigate)},
                         {label: "Save", onClick: handleSave},
-                        {label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate)},
                         {label: "Quit", onClick: () => handleQuit(navigate)}
                     ]}
                 />

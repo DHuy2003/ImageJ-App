@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import './ImageView.css';
-import formatFileSize from '../../utils/common/formatFileSize';
+import { formatFileSize, base64ToBytes} from '../../utils/common/formatFileSize';
 import type { ImageViewProps } from '../../types/image';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import type { CropOverlayHandle } from '../../types/crop';
@@ -20,7 +20,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
   const navigate = useNavigate();
 
-  // Bật crop mode khi event được phát
   useEffect(() => {
     const listener = () => setIsCropping(true);
     window.addEventListener('enableCropMode', listener);
@@ -41,44 +40,37 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     const img = imgRef.current;
     if (!img) return;
 
-    // Tính scale giữa DOM và ảnh gốc
     const imgRect = img.getBoundingClientRect();
     const scaleX = img.naturalWidth / imgRect.width;
     const scaleY = img.naturalHeight / imgRect.height;
 
-    // Tính toạ độ cắt theo pixel ảnh gốc
     let cropX = (cropRect.left - imgRect.left) * scaleX;
     let cropY = (cropRect.top - imgRect.top) * scaleY;
     let cropW = cropRect.width * scaleX;
     let cropH = cropRect.height * scaleY;
 
-    // Clamp đề phòng sai số làm vượt biên
     cropX = Math.max(0, Math.min(cropX, img.naturalWidth));
     cropY = Math.max(0, Math.min(cropY, img.naturalHeight));
     cropW = Math.max(1, Math.min(cropW, img.naturalWidth - cropX));
     cropH = Math.max(1, Math.min(cropH, img.naturalHeight - cropY));
 
-    // Canvas đích
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(cropW);
     canvas.height = Math.round(cropH);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Tạo ảnh CORS‑safe để vẽ lên canvas
     const image = new Image();
     image.crossOrigin = 'anonymous';
-    image.referrerPolicy = 'no-referrer'; // tuỳ chọn, hạn chế gửi referrer
+    image.referrerPolicy = 'no-referrer';
     let src = img.currentSrc || img.src;
 
-    // Nếu là http(s) thì thêm cache-bust để ép tải mới theo CORS (tránh dùng lại bản no‑cors trong cache)
     if (/^https?:\/\//i.test(src)) {
       src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
     }
     image.src = src;
 
     image.onload = () => {
-      // Vẽ và xuất data URL
       ctx.drawImage(
         image,
         Math.round(cropX),
@@ -93,18 +85,25 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
       const newSrc = canvas.toDataURL('image/png');
 
-      const updatedArray = [...imageArray];
+      const base64 = newSrc.split(",")[1];
+      const newSize = base64ToBytes(base64);
+      const updatedImageArray = [...imageArray];
       const now = new Date().toISOString();
-      updatedArray[currentIndex] = {
-        ...updatedArray[currentIndex],
+      updatedImageArray[currentIndex] = {
+        ...updatedImageArray[currentIndex],
         cropped_url: newSrc,
-        cropped_on: now,
+        last_edited_on: now,
+        height: canvas.height,
+        width: canvas.width,
+        size: newSize,
       };
 
-      // data: URL KHÔNG cần gắn query
       setCurrentImageURL(newSrc);
-      sessionStorage.setItem('imageArray', JSON.stringify(updatedArray));
-      navigate('.', { replace: true, state: {imageArray: updatedArray } });
+      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
+      navigate("/display-images", {
+        state: { imageArray: updatedImageArray },
+        replace: true,
+      });
 
       setIsCropping(false);
       setShowConfirmCrop(false);
@@ -112,7 +111,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     };
 
     image.onerror = (e) => {
-      console.error('❌ Image load (CORS) failed: ', e, src);
+      console.error('Image load (CORS) failed: ', e, src);
       alert('Cannot export cropped image due to CORS. Please refresh after backend CORS fix.');
     };
   };
@@ -174,7 +173,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           {currentImageURL && (
             <img
               ref={imgRef}
-              crossOrigin="anonymous"          // 👈 yêu cầu CORS sạch cho ảnh chính
+              crossOrigin="anonymous"          
               referrerPolicy="no-referrer"
               src={currentImageURL}
               alt={currentFile?.filename}
@@ -184,7 +183,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
           {showMask && currentFile?.mask_url && (
             <img
-              crossOrigin="anonymous"          // (không bắt buộc cho canvas, nhưng đồng nhất)
+              crossOrigin="anonymous"          
               referrerPolicy="no-referrer"
               src={currentFile.mask_url}
               alt={`${currentFile?.filename} mask`}
