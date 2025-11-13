@@ -10,10 +10,8 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
   const [resizeDir, setResizeDir] = useState<string>("");
   const [startPos, setStartPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Tọa độ tương đối so với ảnh (0..1)
   const relBoxRef = useRef({ left: 0, top: 0, width: 1, height: 1 });
 
-  // Expose API cho parent
   useImperativeHandle(ref, () => ({
     getRect: () => overlayRef.current?.getBoundingClientRect() ?? null,
     getRelativeRect: () => {
@@ -30,7 +28,6 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
     },
   }), [imgRef]);
 
-  // Tính tỉ lệ từ DOM hiện tại -> lưu lại
   const computeRelativeFromDom = useCallback(() => {
     if (!overlayRef.current || !imgRef.current) return;
     const overlayRect = overlayRef.current.getBoundingClientRect();
@@ -45,7 +42,6 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
     };
   }, [imgRef]);
 
-  // Áp tỉ lệ -> set lại DOM
   const applyRelativeToDom = useCallback(() => {
     if (!overlayRef.current || !imgRef.current) return;
     const overlay = overlayRef.current;

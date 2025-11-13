@@ -25,30 +25,38 @@ export const uploadCellImages = async (
       },
     });
 
-    const newUploadedImages: ImageInfo[] = response.data.images;
+    const newUploadedImages: ImageInfo[] = response.data.images ?? [];
     let imagesToStore: ImageInfo[] = [];
 
     if (isNewWindow) {
-      sessionStorage.removeItem("imageArray"); 
+      sessionStorage.removeItem("imageArray");
       imagesToStore = newUploadedImages;
     } else {
-      const allImagesResponse = await axios.get(`${API_BASE_URL}/`);
-      const updatedImageArray: ImageInfo[] = allImagesResponse.data.images;
-
-      const existingImagesMap = new Map<string, ImageInfo>();
       const existingImageArrayString = sessionStorage.getItem("imageArray");
       if (existingImageArrayString) {
-          const parsedExistingArray: ImageInfo[] = JSON.parse(existingImageArrayString);
-          parsedExistingArray.forEach(img => existingImagesMap.set(img.filename, img));
+        imagesToStore = JSON.parse(existingImageArrayString) as ImageInfo[];
       }
-      
-      updatedImageArray.forEach(img => existingImagesMap.set(img.filename, img)); 
+      newUploadedImages.forEach((newImg) => {
+        const idx = imagesToStore.findIndex(
+          (img) => img.id === newImg.id || img.filename === newImg.filename
+        );
 
-      imagesToStore = Array.from(existingImagesMap.values());
+        if (idx >= 0) {
+          const oldImg = imagesToStore[idx];
+
+          imagesToStore[idx] = {
+            ...oldImg,
+            ...newImg,
+            cropped_url: oldImg.cropped_url ?? newImg.cropped_url,
+            last_edited_on: newImg.last_edited_on ?? oldImg.last_edited_on,
+          };
+        } else {
+          imagesToStore.push(newImg);
+        }
+      });
     }
-    
     sessionStorage.setItem("imageArray", JSON.stringify(imagesToStore));
-    sessionStorage.setItem("currentImageIndex", "0"); 
+    sessionStorage.setItem("currentImageIndex", "0");
 
     navigate("/display-images", {
       state: {
@@ -96,18 +104,46 @@ export const uploadMasks = async (files: FileList | File[] | null, navigate: Nav
 
     Swal.fire({
       title: 'Success',
-      text: `Mask images uploaded and processed. Linking with cell images is automatic.`, 
+      text: `Mask images uploaded and processed. Linking with cell images is automatic.`,
       icon: 'success',
       confirmButtonText: 'OK',
       confirmButtonColor: '#3085d6',
     });
-    
-    const allImagesResponse = await axios.get(`${API_BASE_URL}/`);
-    const updatedImageArray: ImageInfo[] = allImagesResponse.data.images;
 
-    sessionStorage.setItem("imageArray", JSON.stringify(updatedImageArray));
+    const allImagesResponse = await axios.get(`${API_BASE_URL}/`);
+    const updatedImageArray: ImageInfo[] = allImagesResponse.data.images ?? [];
+
+    const existingImageArrayString = sessionStorage.getItem("imageArray");
+    let imagesToStore: ImageInfo[];
+
+    if (!existingImageArrayString) {
+      imagesToStore = updatedImageArray;
+    } else {
+      const existingImages: ImageInfo[] = JSON.parse(existingImageArrayString) as ImageInfo[];
+
+      imagesToStore = existingImages.map((img) => {
+        const updated = updatedImageArray.find(
+          (u) => u.id === img.id || u.filename === img.filename
+        );
+
+        if (!updated) {
+          return img;
+        }
+
+        return {
+          ...img,
+          ...updated,
+          cropped_url: img.cropped_url ?? updated.cropped_url,
+          last_edited_on: updated.last_edited_on ?? img.last_edited_on,
+        };
+      });
+    }
+
+    sessionStorage.setItem("imageArray", JSON.stringify(imagesToStore));
+    sessionStorage.setItem("currentImageIndex", "0");
+
     navigate("/display-images", {
-      state: { imageArray: updatedImageArray },
+      state: { imageArray: imagesToStore },
       replace: true,
     });
 
@@ -122,3 +158,4 @@ export const uploadMasks = async (files: FileList | File[] | null, navigate: Nav
     });
   }
 };
+

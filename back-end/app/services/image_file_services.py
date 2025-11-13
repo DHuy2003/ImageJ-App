@@ -2,22 +2,18 @@ import os
 from PIL import Image
 import shutil
 import numpy as np
-from app import db
+from app import db, config
 from app.models import Image as ImageModel
 import re
 from flask import url_for
 from sqlalchemy import or_
+import base64
+import requests
+from io import BytesIO
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  
-BACKEND_DIR = os.path.dirname(os.path.dirname(BASE_DIR)) 
-
-UPLOAD_FOLDER = os.path.join(BACKEND_DIR, 'uploads')
-CONVERTED_FOLDER = os.path.join(BACKEND_DIR, 'converted')
-MASK_FOLDER = os.path.join(BACKEND_DIR, 'masks')
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(CONVERTED_FOLDER, exist_ok=True)
-os.makedirs(MASK_FOLDER, exist_ok=True)
+UPLOAD_FOLDER = config.UPLOAD_FOLDER
+CONVERTED_FOLDER = config.CONVERTED_FOLDER
+MASK_FOLDER = config.MASK_FOLDER
 
 def determine_bit_depth(img, arr):
     dtype_to_bit = {
@@ -225,28 +221,6 @@ def upload_mask_images(images):
             })
     return uploaded_masks_info
 
-def cleanup_folders(app):
-    print("Cleaning up upload and converted folders...")
-    for folder in [UPLOAD_FOLDER, CONVERTED_FOLDER, MASK_FOLDER]:
-        for filename in os.listdir(folder):
-            file_path = os.path.join(folder, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}. Reason: {e}")
-    print("Cleanup complete.")
-
-    with app.app_context():
-        try:
-            ImageModel.query.delete()
-            db.session.commit()
-            print("Already cleared all records from the imageJ table.")
-        except Exception as e:
-            print(f"Failed to clear imageJ table. Reason: {e}")
-
 def get_all_images():
     images = ImageModel.query.filter(ImageModel.filename.isnot(None)).all()
     image_list = []
@@ -318,5 +292,69 @@ def get_all_images():
             })
     return image_list
 
+def save_image(image_data=None, image_url=None, filename=None):
+    try:
+        img = None
+        
+        if image_data:
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            img = Image.open(BytesIO(image_bytes))
+        
+        elif image_url:
+            response = requests.get(image_url, timeout=30)
+            response.raise_for_status()
+            img = Image.open(BytesIO(response.content))
+        
+        else:
+            raise ValueError("Either image_data or image_url must be provided")
+        
+        if img.mode not in ['RGB', 'RGBA', 'L', 'LA', 'P']:
+            if img.mode == 'CMYK':
+                img = img.convert('RGB')
+            elif img.mode in ['1', 'I', 'F']:
+                img = img.convert('RGB')
+            else:
+                img = img.convert('RGB')
+
+        tiff_buffer = BytesIO()
+ 
+        img.save(tiff_buffer, format='TIFF', compression='tiff_lzw')
+        tiff_buffer.seek(0)
+        
+        return tiff_buffer
+    
+    except Exception as e:
+        print(f"Error converting image to TIFF: {str(e)}")
+        raise Exception(f"Failed to convert image to TIFF: {str(e)}")
+
+def cleanup_folders():
+    print("Cleaning up folders...")
+    for folder in [UPLOAD_FOLDER, CONVERTED_FOLDER, MASK_FOLDER]:
+        if not os.path.exists(folder):
+            continue
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"Failed to delete {file_path}. Reason: {e}")
+    print("File cleanup complete.")
+
+def cleanup_database(app):
+    print("Cleaning up DB")
+    with app.app_context():
+        try:
+            ImageModel.query.delete()
+            db.session.commit()
+            print("Already cleared all records from the imageJ table.")
+        except Exception as e:
+            print(f"Failed to clear imageJ table. Reason: {e}")
+    print("DB cleanup complete.")
 
 

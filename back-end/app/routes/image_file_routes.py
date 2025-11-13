@@ -1,17 +1,16 @@
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify, send_from_directory, Response
 from flask_cors import cross_origin
-from app.services.image_file_services import get_all_images, upload_cell_images, upload_mask_images
+from app.services.image_file_services import get_all_images, upload_cell_images, upload_mask_images, save_image
 import os
+from app import config
 
 image_file_bp = Blueprint('image_file_bp', __name__)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKEND_DIR = os.path.dirname(os.path.dirname(BASE_DIR))
-CONVERTED_FOLDER = os.path.join(BACKEND_DIR, 'converted')
-MASK_FOLDER = os.path.join(BACKEND_DIR, 'masks')
+CONVERTED_FOLDER = config.CONVERTED_FOLDER
+MASK_FOLDER = config.MASK_FOLDER
 
 @image_file_bp.route('/converted/<filename>')
-@cross_origin()  # đảm bảo header CORS trên file ảnh
+@cross_origin() 
 def get_converted_image(filename):
     try:
         return send_from_directory(CONVERTED_FOLDER, filename)
@@ -19,7 +18,7 @@ def get_converted_image(filename):
         return jsonify({"error": "File not found"}), 404
 
 @image_file_bp.route('/masks/<filename>')
-@cross_origin()  # đảm bảo header CORS trên file mask
+@cross_origin()  
 def get_mask_image(filename):
     try:
         return send_from_directory(MASK_FOLDER, filename)
@@ -56,3 +55,44 @@ def upload_masks():
         "message": "Mask images uploaded and processed successfully",
         "masks": uploaded_masks_info
     }), 200
+
+@image_file_bp.route('/save', methods=['POST'])
+@cross_origin()
+def save_images():
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        image_data = data.get('image_data')  
+        image_url = data.get('image_url')    
+        filename = data.get('filename')      
+        
+        if not image_data and not image_url:
+            return jsonify({"error": "Either image_data or image_url must be provided"}), 400
+        
+        tiff_buffer = save_image(
+            image_data=image_data,
+            image_url=image_url,
+            filename=filename
+        )
+        
+        if filename:
+            base_name = os.path.splitext(filename)[0]
+            output_filename = f"{base_name}.tif"
+        else:
+            output_filename = "image.tif"
+
+        return Response(
+            tiff_buffer.read(),
+            mimetype='image/tiff',
+            headers={
+                'Content-Disposition': f'attachment; filename="{output_filename}"',
+                'Content-Type': 'image/tiff'
+            }
+        )
+    
+    except Exception as e:
+        print(f"Error in save image: {str(e)}")
+        return jsonify({"error": str(e)}), 500
