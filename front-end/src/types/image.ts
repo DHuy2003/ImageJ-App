@@ -1,4 +1,4 @@
-export interface ImageInfo {
+export type ImageInfo = {
     id: number;
     filename: string;
     url?: string;
