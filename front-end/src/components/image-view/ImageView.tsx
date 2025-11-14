@@ -6,8 +6,11 @@ import type { ImageViewProps } from '../../types/image';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import type { CropOverlayHandle } from '../../types/crop';
 import { useNavigate } from 'react-router-dom';
-import type { ToolbarAction, ToolbarTool } from '../../types/toolbar';
+import type { ToolbarAction } from '../../types/toolbar';
 import { TOOLBAR_EVENT_NAME } from '../../utils/tool-bar/toolBarUtils';
+import RoiOverlay from '../roi-overlay/RoiOverlay';
+import type { RoiTool } from '../../types/roi';
+
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -20,7 +23,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const cropRef = useRef<CropOverlayHandle | null>(null);
   const [showConfirmCrop, setShowConfirmCrop] = useState(false);
   const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
-  const [activeTool, setActiveTool] = useState<ToolbarTool>('pointer');
+  const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,24 +35,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   useEffect(() => {
     const listener = (e: Event) => {
       const action = (e as CustomEvent<ToolbarAction>).detail;
-      switch (action.type) {
-        case 'SET_TOOL':
-          setActiveTool(action.tool);
-          // Tùy bạn: có thể chỉ dùng tool để đổi cursor / vẽ ROI đo đạc,
-          // không đụng gì tới isCropping (crop vẫn do nút Crop riêng bật).
-          break;
-
-        case 'ZOOM_IN':
-          // TODO: sau này bạn thêm state zoom và xử lý ở đây
-          break;
-
-        case 'ZOOM_OUT':
-          // TODO
-          break;
+  
+      if (action.type === 'SET_TOOL') {
+        setActiveTool(action.tool as RoiTool);
       }
     };
-
+  
     window.addEventListener(TOOLBAR_EVENT_NAME, listener as EventListener);
+  
     return () => {
       window.removeEventListener(TOOLBAR_EVENT_NAME, listener as EventListener);
     };
@@ -198,8 +191,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           </button>
         </div>
 
-        <div id="image-display" 
-        className={`${showMask ? 'show-mask-layout' : ''} tool-${activeTool}`}>
+        <div id="image-display" className={showMask ? 'show-mask-layout' : ''}>
           {currentImageURL && (
             <img
               ref={imgRef}
@@ -252,6 +244,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             <button onClick={handleCancelCrop}>Cancel</button>
           </div>
         )}
+
+        {/* <RoiOverlay tool={activeTool} disabled={isCropping} /> */}
 
         {showConfirmCrop && cropRectData && (
           <div className="confirm-popup">

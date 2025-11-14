@@ -1,0 +1,23 @@
+.roi-overlay {
+    position: absolute;
+    inset: 0; 
+}
+  
+.roi-overlay.tool-rect,
+.roi-overlay.tool-circle {
+    cursor: crosshair;
+}
+  
+.roi-overlay.tool-pointer {
+    cursor: default;
+}
+ 
+.roi-shape {
+    border: 2px solid red;  
+    box-sizing: border-box;
+    pointer-events: none;   
+}
+
+.roi-circle {
+    border-radius: 50%;
+}
