@@ -41,3 +41,10 @@ back-end/instance/
 # ENVIRONMENT VARIABLES
 .env
 *.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
