@@ -262,5 +262,12 @@ gap: 10px;
   background-color: #4b0082; /* Màu tím đậm hơn khi hover */
 } 
 
+#image-display.tool-rect,
+#image-display.tool-circle {
+  cursor: crosshair;
+}
 
+#image-display.tool-pointer {
+  cursor: default;
+}
 

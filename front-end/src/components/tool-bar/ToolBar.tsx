@@ -1,6 +1,6 @@
 import { MousePointer, ZoomIn, Hand, Circle, Square, Pipette, PaintBucket, Type, ZoomOut} from 'lucide-react';
 import './ToolBar.css';
-import {  handleCircleClick, handleHandClick, handleMousePointerClick, handlePaintBucketClick, handlePipetteClick, handleSquareClick, handleTypeClick, handleZoomInClick, handleZoomOutClick } from '../../utils/tool-bar/toolBarUtils';
+import { handleCircleClick, handleHandClick, handleMousePointerClick, handlePaintBucketClick, handlePipetteClick, handleSquareClick, handleTypeClick, handleZoomInClick, handleZoomOutClick } from '../../utils/tool-bar/toolBarUtils';
 
 const ToolBar = () => {
     return (
