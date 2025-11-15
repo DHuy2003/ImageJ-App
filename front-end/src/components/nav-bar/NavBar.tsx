@@ -14,7 +14,14 @@ import {
     handleOpenMaskFolder,  
     handleQuit, 
 } from "../../utils/nav-bar/fileUtils";
-import { handleCut } from "../../utils/nav-bar/editUtils";
+import { 
+    handleCut, 
+    handleClear,
+    handleClearOutside,
+    handleFill,
+    handleSelectionAll,
+    handleSelectionNone,
+} from "../../utils/nav-bar/editUtils";
 
 const NavBar = () => {
     const navigate = useNavigate();
@@ -49,14 +56,14 @@ const NavBar = () => {
                     items={[
                         {label: "Undo"},
                         {label: "Cut", onClick: () => handleCut()},
-                        {label: "Clear"},
-                        {label: "Clear Outside"},
-                        {label: "Fill"},
+                        {label: "Clear", onClick: () => handleClear()},
+                        {label: "Clear Outside", onClick: () => handleClearOutside()},
+                        {label: "Fill", onClick: () => handleFill()},
                         {label: "Draw"},
                         {label: "Invert"},
                         {label: "Selection", subItems: [
-                            {label: "Select All"},
-                            {label: "Select None"},
+                            {label: "Select All", onClick: () => handleSelectionAll()},
+                            {label: "Select None", onClick: () => handleSelectionNone()},
                             {label: "Restore Selection"},
                             {label: "Fit Circle"},
                             {label: "Fit Rectangle"},

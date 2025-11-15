@@ -1,23 +1,153 @@
 .roi-overlay {
     position: absolute;
-    inset: 0; 
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
 }
   
-.roi-overlay.tool-rect,
-.roi-overlay.tool-circle {
+.roi-overlay.roi-disabled {
+    pointer-events: none;
+}
+  
+.roi-overlay.roi-enabled {
+    pointer-events: auto;
+}
+  
+.roi-overlay.tool-rect.roi-enabled,
+.roi-overlay.tool-circle.roi-enabled {
     cursor: crosshair;
 }
   
-.roi-overlay.tool-pointer {
+.roi-overlay.tool-pointer.roi-enabled {
     cursor: default;
 }
- 
+
+.roi-overlay.roi-enabled .roi-shape {
+    cursor: default;
+}
+
 .roi-shape {
-    border: 2px solid red;  
+    position: absolute;
+    border: 2px solid red;
     box-sizing: border-box;
-    pointer-events: none;   
+    background: transparent;
+}
+  
+.roi-selected {
+    border-color: yellow;
 }
 
 .roi-circle {
     border-radius: 50%;
 }
+  
+.roi-handle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: yellow;
+    border: 1px solid black;
+    box-sizing: border-box;
+}
+  
+.handle-nw {
+    top: -3px;
+    left: -3px;
+    cursor: nwse-resize;
+}
+  
+.handle-n {
+    top: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: ns-resize;
+}
+  
+.handle-ne {
+    top: -3px;
+    right: -3px;
+    cursor: nesw-resize;
+}
+  
+.handle-e {
+    top: 50%;
+    right: -3px;
+    transform: translateY(-50%);
+    cursor: ew-resize;
+}
+  
+.handle-se {
+    bottom: -3px;
+    right: -3px;
+    cursor: nwse-resize;
+}
+  
+.handle-s {
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: ns-resize;
+}
+  
+.handle-sw {
+    bottom: -3px;
+    left: -3px;
+    cursor: nesw-resize;
+}
+  
+.handle-w {
+    top: 50%;
+    left: -3px;
+    transform: translateY(-50%);
+    cursor: ew-resize;
+}
+
+.roi-circle .handle-n {
+    top: 0%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+  
+.roi-circle .handle-s {
+    top: 100%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+  
+.roi-circle .handle-e {
+    top: 50%;
+    left: 100%;
+    transform: translate(-50%, -50%);
+}
+  
+.roi-circle .handle-w {
+    top: 50%;
+    left: 0%;
+    transform: translate(-50%, -50%);
+}
+  
+.roi-circle .handle-ne {
+    top: 15%;
+    left: 85%;
+    transform: translate(-50%, -50%);
+}
+  
+.roi-circle .handle-nw {
+    top: 15%;
+    left: 15%;
+    transform: translate(-50%, -50%);
+}
+  
+.roi-circle .handle-se {
+    top: 85%;
+    left: 85%;
+    transform: translate(-50%, -50%);
+}
+  
+.roi-circle .handle-sw {
+    top: 85%;
+    left: 15%;
+    transform: translate(-50%, -50%);
+}
+  
