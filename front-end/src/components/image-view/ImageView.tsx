@@ -9,8 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ToolbarAction } from '../../types/toolbar';
 import { TOOLBAR_EVENT_NAME } from '../../utils/tool-bar/toolBarUtils';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
-import type { RoiTool } from '../../types/roi';
-
+import type { RoiTool, SelectedRoiInfo } from '../../types/roi';
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -24,6 +23,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [showConfirmCrop, setShowConfirmCrop] = useState(false);
   const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
+  const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -47,6 +47,71 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener(TOOLBAR_EVENT_NAME, listener as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{
+        id: number;
+        type: 'rect' | 'circle';
+        imageRect: { x: number; y: number; width: number; height: number };
+      } | null>;
+  
+      if (!ce.detail) {
+        setSelectedRoi(null);
+        return;
+      }
+  
+      const { type, imageRect } = ce.detail;
+      setSelectedRoi({
+        type,
+        x: imageRect.x,
+        y: imageRect.y,
+        width: imageRect.width,
+        height: imageRect.height,
+      });
+    };
+  
+    window.addEventListener('roiSelection', handler as EventListener);
+    return () => window.removeEventListener('roiSelection', handler as EventListener);
+  }, []);  
+
+  useEffect(() => {
+    const onClear = () => {
+      if (!selectedRoi) {
+        alert('Please draw/select an ROI first.');
+        return;
+      }
+      applyRoiEdit('clear', selectedRoi);
+    };
+  
+    const onClearOutside = () => {
+      if (!selectedRoi) {
+        alert('Please draw/select an ROI first.');
+        return;
+      }
+      applyRoiEdit('clearOutside', selectedRoi);
+    };
+  
+    const onFill = (e: Event) => {
+      if (!selectedRoi) {
+        alert('Please draw/select an ROI first.');
+        return;
+      }
+      const ce = e as CustomEvent<{ color?: string }>;
+      const color = ce.detail?.color || '#000000';
+      applyRoiEdit('fill', selectedRoi, color);
+    };
+  
+    window.addEventListener('editClear', onClear);
+    window.addEventListener('editClearOutside', onClearOutside);
+    window.addEventListener('editFill', onFill as EventListener);
+  
+    return () => {
+      window.removeEventListener('editClear', onClear);
+      window.removeEventListener('editClearOutside', onClearOutside);
+      window.removeEventListener('editFill', onFill as EventListener);
+    };
+  }, [selectedRoi, currentIndex, imageArray, currentImageURL]);  
 
   useEffect(() => {
     if (currentFile) {
@@ -138,6 +203,118 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     };
   };
 
+  const applyRoiEdit = (
+    mode: 'clear' | 'clearOutside' | 'fill',
+    roi: SelectedRoiInfo,
+    color?: string
+  ) => {
+    if (!roi) return;
+    if (!imgRef.current || !currentFile) return;
+  
+    const img = imgRef.current;
+  
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
+  
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+  
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer';
+  
+    let src = currentImageURL || img.currentSrc || img.src;
+    if (/^https?:\/\//i.test(src)) {
+      src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
+    }
+    image.src = src;
+  
+    const drawRoiPath = () => {
+      const x = Math.round(roi.x);
+      const y = Math.round(roi.y);
+      const w = Math.round(roi.width);
+      const h = Math.round(roi.height);
+  
+      if (roi.type === 'circle') {
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const rx = w / 2;
+        const ry = h / 2;
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      } else {
+        ctx.rect(x, y, w, h);
+      }
+    };
+  
+    image.onload = () => {
+      ctx.drawImage(image, 0, 0, width, height);
+      if (mode === 'clear') {
+        ctx.save();
+        ctx.beginPath();
+        drawRoiPath();
+        ctx.clip();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      } else if (mode === 'clearOutside') {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tctx = tempCanvas.getContext('2d');
+        if (!tctx) return;
+        tctx.drawImage(image, 0, 0, width, height);
+  
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.beginPath();
+        drawRoiPath();
+        ctx.clip();
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.restore();
+      } else if (mode === 'fill') {
+        ctx.save();
+        ctx.beginPath();
+        drawRoiPath();
+        ctx.clip();
+        ctx.fillStyle = color || '#000000';
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+  
+      const newSrc = canvas.toDataURL('image/png');
+      const base64 = newSrc.split(',')[1];
+      const newSize = base64ToBytes(base64);
+  
+      const updatedImageArray = [...imageArray];
+      const now = new Date().toISOString();
+      updatedImageArray[currentIndex] = {
+        ...updatedImageArray[currentIndex],
+        cropped_url: newSrc,
+        last_edited_on: now,
+        height: canvas.height,
+        width: canvas.width,
+        size: newSize,
+      };
+  
+      setCurrentImageURL(newSrc);
+      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
+      navigate('/display-images', {
+        state: { imageArray: updatedImageArray },
+        replace: true,
+      });
+    };
+  
+    image.onerror = (e) => {
+      console.error('Image load (CORS) failed: ', e, src);
+      alert('Cannot edit image due to CORS. Please refresh after backend CORS fix.');
+    };
+  };  
+
   const handleCancelCrop = () => {
     setIsCropping(false);
     setShowConfirmCrop(false);
@@ -224,6 +401,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               onCancel={handleCancelCrop}
             />
           )}
+
+          <RoiOverlay tool={activeTool} disabled={isCropping} imgRef={imgRef} />
+          
         </div>
 
         <p>Frame {currentIndex + 1} of {imageArray.length}</p>
@@ -244,8 +424,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             <button onClick={handleCancelCrop}>Cancel</button>
           </div>
         )}
-
-        {/* <RoiOverlay tool={activeTool} disabled={isCropping} /> */}
 
         {showConfirmCrop && cropRectData && (
           <div className="confirm-popup">
