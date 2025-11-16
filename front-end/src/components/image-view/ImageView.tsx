@@ -258,19 +258,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const handleCrop = (cropRect: DOMRect) => {
     const img = imgRef.current;
     if (!img) return;
-
-    // --- LOGIC CROP GIỮ NGUYÊN ---
-    // (Lưu ý: Phép tính crop này dựa trên naturalWidth/Height,
-    // nó độc lập với scale và translation của view hiện tại, nên vẫn đúng)
+    
     const imgRect = img.getBoundingClientRect();
 
-    // Tính tọa độ crop dựa trên vị trí của cropRect so với imgRect (đã scale)
     let cropX = (cropRect.left - imgRect.left) * (img.naturalWidth / imgRect.width);
     let cropY = (cropRect.top - imgRect.top) * (img.naturalHeight / imgRect.height);
     let cropW = cropRect.width * (img.naturalWidth / imgRect.width);
     let cropH = cropRect.height * (img.naturalHeight / imgRect.height);
 
-    // Clamp giá trị (giữ nguyên)
     cropX = Math.max(0, Math.min(cropX, img.naturalWidth));
     cropY = Math.max(0, Math.min(cropY, img.naturalHeight));
     cropW = Math.max(1, Math.min(cropW, img.naturalWidth - cropX));

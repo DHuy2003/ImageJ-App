@@ -19,6 +19,8 @@ export const emitToolbarAction = (action: ToolbarAction) => {
 
 export const handleMousePointerClick = () => {
     emitToolbarAction({ type: 'SET_TOOL', tool: 'pointer' });
+    const clearSelectionEvent = new CustomEvent('editSelectNone');
+    window.dispatchEvent(clearSelectionEvent);
 };
   
 export const handleSquareClick = () => {
