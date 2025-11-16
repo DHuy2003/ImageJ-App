@@ -1,8 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import RoiOverlay from '../roi-overlay/RoiOverlay';
-import { showSelectionRequired, type RoiTool, type SelectedRoiInfo } from '../../types/roi';
 import type { CropOverlayHandle } from '../../types/crop';
 import type { ImageEventPayload, ImageViewProps, Translation } from '../../types/image';
 import type { ToolbarAction } from '../../types/toolbar';
@@ -10,7 +8,10 @@ import { base64ToBytes, formatFileSize } from '../../utils/common/formatFileSize
 import { IMAGE_EVENT_NAME } from '../../utils/nav-bar/imageUtils';
 import { TOOLBAR_EVENT_NAME } from '../../utils/tool-bar/toolBarUtils';
 import CropOverlay from '../crop-overlay/CropOverlay';
+import RoiOverlay from '../roi-overlay/RoiOverlay';
+import { showSelectionRequired, type RoiTool, type SelectedRoiInfo } from '../../types/roi';
 import './ImageView.css';
+
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -138,6 +139,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     window.addEventListener('editInvert', onInvert);
     window.addEventListener('editDraw', onDraw);
   
+    window.addEventListener('editClear', onClear);
+    window.addEventListener('editClearOutside', onClearOutside);
+    window.addEventListener('editFill', onFill as EventListener);
+
     return () => {
       window.removeEventListener('editClear', onClear);
       window.removeEventListener('editClearOutside', onClearOutside);
@@ -253,7 +258,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const handleCrop = (cropRect: DOMRect) => {
     const img = imgRef.current;
     if (!img) return;
-
+    
     const imgRect = img.getBoundingClientRect();
 
     let cropX = (cropRect.left - imgRect.left) * (img.naturalWidth / imgRect.width);
