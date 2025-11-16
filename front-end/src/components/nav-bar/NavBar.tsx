@@ -21,6 +21,9 @@ import {
     handleFill,
     handleSelectionAll,
     handleSelectionNone,
+    handleUndo,
+    handleInvert,
+    handleDraw,
 } from "../../utils/nav-bar/editUtils";
 
 import {
@@ -60,13 +63,13 @@ const NavBar = () => {
                 <DropdownMenu 
                     label="Edit" 
                     items={[
-                        {label: "Undo"},
+                        {label: "Undo", onClick: () => handleUndo()},
                         {label: "Cut", onClick: () => handleCut()},
                         {label: "Clear", onClick: () => handleClear()},
                         {label: "Clear Outside", onClick: () => handleClearOutside()},
                         {label: "Fill", onClick: () => handleFill()},
-                        {label: "Draw"},
-                        {label: "Invert"},
+                        {label: "Draw", onClick: () => handleDraw()},
+                        {label: "Invert", onClick: () => handleInvert()},
                         {label: "Selection", subItems: [
                             {label: "Select All", onClick: () => handleSelectionAll()},
                             {label: "Select None", onClick: () => handleSelectionNone()},

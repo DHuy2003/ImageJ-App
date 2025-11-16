@@ -3,14 +3,15 @@ import { useEffect, useRef, useState, type MouseEvent, type WheelEvent } from 'r
 import { useNavigate } from 'react-router-dom';
 import type { CropOverlayHandle } from '../../types/crop';
 import type { ImageEventPayload, ImageViewProps, Translation } from '../../types/image';
-import type { RoiTool, SelectedRoiInfo } from '../../types/roi';
 import type { ToolbarAction } from '../../types/toolbar';
 import { base64ToBytes, formatFileSize } from '../../utils/common/formatFileSize';
 import { IMAGE_EVENT_NAME } from '../../utils/nav-bar/imageUtils';
 import { TOOLBAR_EVENT_NAME } from '../../utils/tool-bar/toolBarUtils';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
+import { showSelectionRequired, type RoiTool, type SelectedRoiInfo } from '../../types/roi';
 import './ImageView.css';
+
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -25,6 +26,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
+  const [undoSnapshot, setUndoSnapshot] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // --- THÊM HẰNG SỐ GIỚI HẠN ZOOM ---
@@ -91,7 +93,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   useEffect(() => {
     const onClear = () => {
       if (!selectedRoi) {
-        alert('Please draw/select an ROI first.');
+        showSelectionRequired();
         return;
       }
       applyRoiEdit('clear', selectedRoi);
@@ -99,7 +101,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
     const onClearOutside = () => {
       if (!selectedRoi) {
-        alert('Please draw/select an ROI first.');
+        showSelectionRequired();      
         return;
       }
       applyRoiEdit('clearOutside', selectedRoi);
@@ -107,7 +109,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
     const onFill = (e: Event) => {
       if (!selectedRoi) {
-        alert('Please draw/select an ROI first.');
+        showSelectionRequired();
         return;
       }
       const ce = e as CustomEvent<{ color?: string }>;
@@ -115,6 +117,28 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       applyRoiEdit('fill', selectedRoi, color);
     };
 
+    const onInvert = () => {
+      if (!selectedRoi) {
+        showSelectionRequired();
+        return;
+      }
+      applyRoiEdit('invert', selectedRoi);
+    };
+
+    const onDraw = () => {
+      if (!selectedRoi) {
+        showSelectionRequired();
+        return;
+      }
+      applyRoiEdit('draw', selectedRoi);
+    };
+  
+    window.addEventListener('editClear', onClear);
+    window.addEventListener('editClearOutside', onClearOutside);
+    window.addEventListener('editFill', onFill as EventListener);
+    window.addEventListener('editInvert', onInvert);
+    window.addEventListener('editDraw', onDraw);
+  
     window.addEventListener('editClear', onClear);
     window.addEventListener('editClearOutside', onClearOutside);
     window.addEventListener('editFill', onFill as EventListener);
@@ -123,6 +147,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener('editClear', onClear);
       window.removeEventListener('editClearOutside', onClearOutside);
       window.removeEventListener('editFill', onFill as EventListener);
+      window.removeEventListener('editInvert', onInvert);     
+      window.removeEventListener('editDraw', onDraw);
     };
   }, [selectedRoi, currentIndex, imageArray, currentImageURL]);
 
@@ -312,14 +338,20 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     };
   };
 
+  const saveUndoSnapshot = () => {
+    if (!currentImageURL) return;
+    setUndoSnapshot(currentImageURL);
+  };
+
   const applyRoiEdit = (
-    mode: 'clear' | 'clearOutside' | 'fill',
+    mode: 'clear' | 'clearOutside' | 'fill' | 'invert' | 'draw',
     roi: SelectedRoiInfo,
     color?: string
   ) => {
     if (!roi) return;
     if (!imgRef.current || !currentFile) return;
 
+    saveUndoSnapshot();
     const img = imgRef.current;
 
     const width = img.naturalWidth;
@@ -393,6 +425,62 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         ctx.fillStyle = color || '#000000';
         ctx.fillRect(0, 0, width, height);
         ctx.restore();
+      } else if (mode === 'invert') {
+        const x = Math.round(roi.x);
+        const y = Math.round(roi.y);
+        const w = Math.round(roi.width);
+        const h = Math.round(roi.height);
+  
+        const imageData = ctx.getImageData(x, y, w, h);
+        const data = imageData.data;
+  
+        if (roi.type === 'circle') {
+          const cx = w / 2;
+          const cy = h / 2;
+          const rx = w / 2;
+          const ry = h / 2;
+          for (let j = 0; j < h; j++) {
+            for (let i = 0; i < w; i++) {
+              const dx = (i - cx) / rx;
+              const dy = (j - cy) / ry;
+              if (dx * dx + dy * dy <= 1) {
+                const idx = (j * w + i) * 4;
+                data[idx]     = 255 - data[idx];     // R
+                data[idx + 1] = 255 - data[idx + 1]; // G
+                data[idx + 2] = 255 - data[idx + 2]; // B
+              }
+            }
+          }
+        } else {
+          for (let i = 0; i < data.length; i += 4) {
+            data[i]     = 255 - data[i];
+            data[i + 1] = 255 - data[i + 1];
+            data[i + 2] = 255 - data[i + 2];
+          }
+        }
+        ctx.putImageData(imageData, x, y);
+  
+      } else if (mode === 'draw') {
+          const x = Math.round(roi.x);
+          const y = Math.round(roi.y);
+          const w = Math.round(roi.width);
+          const h = Math.round(roi.height);
+        
+          ctx.save();
+          ctx.beginPath();
+          if (roi.type === 'circle') {
+          const cx = x + w / 2;
+          const cy = y + h / 2;
+          const rx = w / 2;
+          const ry = h / 2;
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        } else {
+          ctx.rect(x, y, w, h);
+        }
+      ctx.strokeStyle = '#ffff00';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
       }
 
       const newSrc = canvas.toDataURL('image/png');
@@ -423,6 +511,40 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       alert('Cannot edit image due to CORS. Please refresh after backend CORS fix.');
     };
   };
+
+  useEffect(() => {
+    const onUndo = () => {
+      if (!undoSnapshot) {
+        return;
+      }
+
+      const restored = undoSnapshot;
+      setCurrentImageURL(restored);
+
+      const base64 = restored.split(',')[1];
+      const newSize = base64ToBytes(base64);
+      const updatedImageArray = [...imageArray];
+      const now = new Date().toISOString();
+
+      updatedImageArray[currentIndex] = {
+        ...updatedImageArray[currentIndex],
+        cropped_url: restored,
+        last_edited_on: now,
+        size: newSize,
+      };
+
+      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
+      navigate('/display-images', {
+        state: { imageArray: updatedImageArray },
+        replace: true,
+      });
+
+      setUndoSnapshot(null);
+    };
+
+    window.addEventListener('editUndo', onUndo);
+    return () => window.removeEventListener('editUndo', onUndo);
+  }, [undoSnapshot, currentIndex, imageArray, navigate]);
 
   const handleCancelCrop = () => {
     setIsCropping(false);
