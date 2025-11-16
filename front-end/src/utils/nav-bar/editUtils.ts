@@ -3,22 +3,19 @@ export const handleCut = () => {
     window.dispatchEvent(event);
 };
 
-// Xóa vùng bên trong ROI (thay bằng nền trắng)
 export const handleClear = () => {
     const event = new CustomEvent('editClear');
     window.dispatchEvent(event);
 };
 
-// Xóa mọi thứ *ngoài* ROI (ngoài = trắng)
 export const handleClearOutside = () => {
     const event = new CustomEvent('editClearOutside');
     window.dispatchEvent(event);
 };
 
-// Tô màu vùng ROI (tạm thời để màu đen, sau này có thể truyền màu)
 export const handleFill = () => {
     const event = new CustomEvent('editFill', {
-        detail: { color: '#000000' } // màu fill mặc định
+        detail: { color: '#000000' } 
     });
     window.dispatchEvent(event);
 };
@@ -28,8 +25,22 @@ export const handleSelectionAll = () => {
     window.dispatchEvent(event);
 };
 
-// Hủy ROI hiện tại, không còn selection
 export const handleSelectionNone = () => {
     const event = new CustomEvent('editSelectNone');
+    window.dispatchEvent(event);
+};
+
+export const handleUndo = () => {
+    const event = new CustomEvent('editUndo');
+    window.dispatchEvent(event);
+};
+
+export const handleInvert = () => {
+    const event = new CustomEvent('editInvert');
+    window.dispatchEvent(event);
+};
+
+export const handleDraw = () => {
+    const event = new CustomEvent('editDraw');
     window.dispatchEvent(event);
 };
