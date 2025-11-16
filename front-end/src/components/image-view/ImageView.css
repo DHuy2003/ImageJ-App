@@ -126,6 +126,12 @@ html {
   margin-top: 10px; 
 }
 
+/* CSS for cropping tool */
+#image-display {
+  overflow: hidden;
+}
+/* CSS for cropping tool */
+
 .crop-controls {
   display: flex;
   justify-content: center;

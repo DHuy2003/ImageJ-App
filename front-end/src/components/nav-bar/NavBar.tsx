@@ -23,6 +23,12 @@ import {
     handleSelectionNone,
 } from "../../utils/nav-bar/editUtils";
 
+import {
+    handleZoomIn,
+    handleZoomOut,
+    handleScaleToFit,
+    handleZoomToSelection,
+} from "../../utils/nav-bar/imageUtils";
 const NavBar = () => {
     const navigate = useNavigate();
     return(
@@ -84,10 +90,10 @@ const NavBar = () => {
                         {label: "Duplicate..."},
                         {label: "Rename"}, 
                         {label: "Zoom", subItems: [
-                            {label: "In (+)"},
-                            {label: "Out (-)"},
-                            {label: "To Selection"},
-                            {label: "Scale to Fit"}
+                            {label: "In (+)", onClick: handleZoomIn},
+                            {label: "Out (-)", onClick: handleZoomOut},
+                            {label: "To Selection", onClick: handleZoomToSelection},
+                            {label: "Scale to Fit", onClick: handleScaleToFit}
                         ]},
                         {label: "Transform", subItems: [
                             {label: "Flip"},
