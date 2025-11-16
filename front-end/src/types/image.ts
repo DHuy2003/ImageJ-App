@@ -18,3 +18,17 @@ export type ImageInfo = {
 export type ImageViewProps = {
     imageArray: ImageInfo[];
 };
+
+// --- CÁC TYPE MỚI ĐƯỢC THÊM ---
+export type ImageActionType = 'ZOOM_IN' | 'ZOOM_OUT' | 'SCALE_TO_FIT' | 'ZOOM_TO_SELECTION';
+
+export type ImageEventPayload = {
+    type: ImageActionType;
+};
+
+export type Translation = {
+    x: number;
+    y: number;
+};
+
+// --- KẾT THÚC PHẦN THÊM MỚI ---
