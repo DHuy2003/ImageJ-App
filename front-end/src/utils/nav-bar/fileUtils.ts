@@ -142,6 +142,107 @@ export const handleOpenMaskFolder = async (navigate: NavigateFunction) => {
     }
 };
 
+export const handleRevert = async (navigate: NavigateFunction) => {
+    try {
+      const imageArrayString = sessionStorage.getItem("imageArray");
+      const currentIndexString = sessionStorage.getItem("currentImageIndex");
+
+      if (!imageArrayString || !currentIndexString) {
+        await Swal.fire({
+          title: "Notice",
+          text: "No image available to revert.",
+          icon: "info",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#3085d6"
+        });
+        return;
+      }
+  
+      const imageArray: ImageInfo[] = JSON.parse(imageArrayString);
+      if (!imageArray.length) {
+        await Swal.fire({
+          title: "Notice",
+          text: "No image available to revert.",
+          icon: "info",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#3085d6"
+        });
+        return;
+      }
+  
+      let currentIndex = parseInt(currentIndexString, 10);
+      if (isNaN(currentIndex) || currentIndex < 0 || currentIndex >= imageArray.length) {
+        currentIndex = 0;
+      }
+  
+      const currentImage = imageArray[currentIndex];
+
+      const hasChanges =
+        !!currentImage.cropped_url ||
+        (!!currentImage.last_edited_on &&
+          currentImage.last_edited_on !== currentImage.uploaded_on);
+  
+      if (!hasChanges) {
+        await Swal.fire({
+          title: "Notice",
+          text: "The current image has no changes to revert.",
+          icon: "info",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#3085d6"
+        });
+        return;
+      }
+
+      let originalImage: ImageInfo | undefined;
+      try {
+        const response = await axios.get(`${API_BASE_URL}/`);
+        const serverImages: ImageInfo[] = response.data.images ?? [];
+        originalImage = serverImages.find(
+          (img) => img.id === currentImage.id || img.filename === currentImage.filename
+        );
+      } catch (err) {
+        console.error("Error fetching original image list:", err);
+      }
+  
+      let reverted: ImageInfo;
+  
+      if (originalImage) {
+        reverted = {
+          ...currentImage,
+          ...originalImage,
+          cropped_url: undefined,
+          last_edited_on: originalImage.last_edited_on ?? originalImage.uploaded_on
+        };
+      } else {
+        reverted = {
+          ...currentImage,
+          cropped_url: undefined,
+          last_edited_on: currentImage.uploaded_on
+        };
+      }
+  
+      imageArray[currentIndex] = reverted;
+  
+      sessionStorage.setItem("imageArray", JSON.stringify(imageArray));
+      sessionStorage.setItem("currentImageIndex", currentIndex.toString());
+
+      navigate("/display-images", {
+        state: { imageArray, currentImageIndex: currentIndex },
+        replace: true
+      });
+  
+    } catch (err: any) {
+      console.error("Error reverting image:", err);
+      await Swal.fire({
+        title: "Revert Failed",
+        text: err?.message || "An error occurred while reverting the image.",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#3085d6"
+      });
+    }
+};    
+
 export const handleClose = async (navigate?: NavigateFunction) => {
     try {
         const imageArrayString = sessionStorage.getItem("imageArray");
