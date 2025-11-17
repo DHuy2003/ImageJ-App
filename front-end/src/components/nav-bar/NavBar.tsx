@@ -24,7 +24,13 @@ import {
     handleUndo,
     handleInvert,
     handleDraw,
+    handleRestoreSelection,
+    handleFitCircle,
+    handleFitRectangle,
+    handleScale,
+    handleRotate,
 } from "../../utils/nav-bar/editUtils";
+
 
 import {
     handleZoomIn,
@@ -73,12 +79,12 @@ const NavBar = () => {
                         {label: "Selection", subItems: [
                             {label: "Select All", onClick: () => handleSelectionAll()},
                             {label: "Select None", onClick: () => handleSelectionNone()},
-                            {label: "Restore Selection"},
-                            {label: "Fit Circle"},
-                            {label: "Fit Rectangle"},
+                            {label: "Restore Selection", onClick: () => handleRestoreSelection()},
+                            {label: "Fit Circle", onClick: () => handleFitCircle()},
+                            {label: "Fit Rectangle", onClick: () => handleFitRectangle()},
                             {label: "Properties..."},
-                            {label: "Scale..."},
-                            {label: "Rotate..."},
+                            {label: "Scale...", onClick: () => handleScale()},
+                            {label: "Rotate...", onClick: () => handleRotate()},
                             {label: "Translate..."}
                         ]}
                     ]}

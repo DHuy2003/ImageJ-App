@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import type { ResizeHandle, RoiOverlayProps, RoiShape } from '../../types/roi';
+import { showSelectionRequired, type ResizeHandle, type RoiOverlayProps, type RoiShape } from '../../types/roi';
 import './RoiOverlay.css';
 
 
@@ -32,6 +32,8 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
     height: number;
   } | null>(null);
   const moveStartMouseRef = useRef<{ x: number; y: number } | null>(null);
+
+  const lastRoiRef = useRef<RoiShape | null>(null);
 
   const canDraw = !disabled && tool !== 'pointer';
   const canInteract = !disabled;
@@ -136,6 +138,9 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
     const onSelectAll = () => {
       const bounds = getBounds();
       if (!bounds) return;
+      if (rois.length > 0) {
+        lastRoiRef.current = rois[0];
+      }
 
       const id = Date.now();
       const newRoi: RoiShape = {
@@ -165,6 +170,10 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
     };
 
     const onSelectNone = () => {
+      if (rois.length > 0) {
+        lastRoiRef.current = rois[0];
+      }
+
       activeRoiIdRef.current = null;
       drawStartRef.current = null;
       resizeHandleRef.current = null;
@@ -244,10 +253,140 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
     window.dispatchEvent(evt);
   }, [rois, selectedId, imgRef]);  
 
+  useEffect(() => {
+    const getCurrentRoi = (): RoiShape | null => {
+      if (rois.length === 0) return null;
+      const bySelected = selectedId != null ? rois.find(r => r.id === selectedId) : null;
+      return bySelected || rois[0] || null;
+    };
+
+    const onRestoreSelection = () => {
+      if (disabled) return;
+      const last = lastRoiRef.current;
+      if (!last) return;
+
+      const clamped = clampRectToBounds({
+        x: last.x,
+        y: last.y,
+        width: last.width,
+        height: last.height,
+      });
+
+      const id = Date.now();
+      const restored: RoiShape = { ...last, ...clamped, id };
+
+      activeRoiIdRef.current = id;
+      setSelectedId(id);
+      setRois([restored]);
+    };
+
+    const onFitCircle = () => {
+      if (disabled) return;
+      const roi = getCurrentRoi();
+      if (!roi) {
+        showSelectionRequired();
+        return;
+      }
+
+      lastRoiRef.current = roi;
+
+      const centerX = roi.x + roi.width / 2;
+      const centerY = roi.y + roi.height / 2;
+      const size = Math.min(roi.width, roi.height);
+      let x = centerX - size / 2;
+      let y = centerY - size / 2;
+
+      const clamped = clampRectToBounds({
+        x,
+        y,
+        width: size,
+        height: size,
+      });
+
+      const updated: RoiShape = { ...roi, ...clamped, type: 'circle' };
+      setSelectedId(updated.id);
+      setRois([updated]);
+    };
+
+    const onFitRectangle = () => {
+      if (disabled) return;
+      const roi = getCurrentRoi();
+      if (!roi) {
+        showSelectionRequired();
+        return;
+      }
+
+      lastRoiRef.current = roi;
+
+      const updated: RoiShape = { ...roi, type: 'rect' };
+      const clamped = clampRectToBounds({
+        x: updated.x,
+        y: updated.y,
+        width: updated.width,
+        height: updated.height,
+      });
+
+      setSelectedId(updated.id);
+      setRois([{ ...updated, ...clamped }]);
+    };
+
+    const onScale = (e: Event) => {
+      if (disabled) return;
+      const ce = e as CustomEvent<{ sx: number; sy: number }>;
+      const sx = ce.detail?.sx ?? 1;
+      const sy = ce.detail?.sy ?? 1;
+    
+      if (sx <= 0 || sy <= 0) return;
+    
+      const roi = getCurrentRoi();
+      if (!roi) {
+        showSelectionRequired();
+        return;
+      }
+      lastRoiRef.current = roi;
+    
+      const centerX = roi.x + roi.width / 2;
+      const centerY = roi.y + roi.height / 2;
+    
+      const newW = roi.width * sx;
+      const newH = roi.height * sy;
+    
+      const x = centerX - newW / 2;
+      const y = centerY - newH / 2;
+    
+      const clamped = clampRectToBounds({
+        x,
+        y,
+        width: newW,
+        height: newH,
+      });
+    
+      const updated: RoiShape = { ...roi, ...clamped };
+      setSelectedId(updated.id);
+      setRois([updated]);
+    };
+    
+
+    window.addEventListener('editRestoreSelection', onRestoreSelection);
+    window.addEventListener('editFitCircle', onFitCircle);
+    window.addEventListener('editFitRectangle', onFitRectangle);
+    window.addEventListener('editScale', onScale as EventListener);
+
+    return () => {
+      window.removeEventListener('editRestoreSelection', onRestoreSelection);
+      window.removeEventListener('editFitCircle', onFitCircle);
+      window.removeEventListener('editFitRectangle', onFitRectangle);
+      window.removeEventListener('editScale', onScale as EventListener);
+    };
+  }, [disabled, rois, selectedId]);
+
   const handleMouseDownContainer = (e: MouseEvent<HTMLDivElement>) => {
     if (!canDraw) return;
     if (!containerRef.current) return;
     if (isMoving || isResizing) return;
+    if (rois.length > 0) {
+      lastRoiRef.current = rois[0];
+    }
 
     const { x, y } = toLocalClamped(e);
 
@@ -419,6 +558,7 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
     const roi = rois.find((r) => r.id === roiId);
     if (!roi) return;
 
+    lastRoiRef.current = roi;
     setSelectedId(roiId);
     setIsResizing(true);
     setIsDrawing(false);
@@ -440,6 +580,8 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
   
     const roi = rois.find((r) => r.id === roiId);
     if (!roi) return;
+
+    lastRoiRef.current = roi;
   
     if (tool !== 'pointer') {
       const bounds = getBounds();

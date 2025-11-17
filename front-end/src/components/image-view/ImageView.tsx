@@ -40,7 +40,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [panStart, setPanStart] = useState<Translation>({ x: 0, y: 0 });
   const displayRef = useRef<HTMLDivElement>(null); // Ref cho container #image-display
 
-
   useEffect(() => {
     const listener = () => setIsCropping(true);
     window.addEventListener('enableCropMode', listener);
@@ -118,11 +117,11 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     };
 
     const onInvert = () => {
-      if (!selectedRoi) {
-        showSelectionRequired();
-        return;
+      if (selectedRoi) {
+        applyRoiEdit('invert', selectedRoi);
+      } else {
+        invertWholeImage();
       }
-      applyRoiEdit('invert', selectedRoi);
     };
 
     const onDraw = () => {
@@ -132,16 +131,23 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       }
       applyRoiEdit('draw', selectedRoi);
     };
+
+    const onRotate = (e: Event) => {
+      if (!selectedRoi) {
+        showSelectionRequired();
+        return;
+      }
+      const ce = e as CustomEvent<{ angleDeg?: number }>;
+      const angleDeg = ce.detail?.angleDeg ?? 0;
+      applyRoiEdit('rotate', selectedRoi, undefined, angleDeg);
+    };
   
     window.addEventListener('editClear', onClear);
     window.addEventListener('editClearOutside', onClearOutside);
     window.addEventListener('editFill', onFill as EventListener);
     window.addEventListener('editInvert', onInvert);
     window.addEventListener('editDraw', onDraw);
-  
-    window.addEventListener('editClear', onClear);
-    window.addEventListener('editClearOutside', onClearOutside);
-    window.addEventListener('editFill', onFill as EventListener);
+    window.addEventListener('editRotate', onRotate);
 
     return () => {
       window.removeEventListener('editClear', onClear);
@@ -149,6 +155,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener('editFill', onFill as EventListener);
       window.removeEventListener('editInvert', onInvert);     
       window.removeEventListener('editDraw', onDraw);
+      window.removeEventListener('editRotate', onRotate);
     };
   }, [selectedRoi, currentIndex, imageArray, currentImageURL]);
 
@@ -339,9 +346,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   };
 
   const applyRoiEdit = (
-    mode: 'clear' | 'clearOutside' | 'fill' | 'invert' | 'draw',
+    mode: 'clear' | 'clearOutside' | 'fill' | 'invert' | 'draw' | 'rotate',
     roi: SelectedRoiInfo,
-    color?: string
+    color?: string,
+    angleDeg?: number
   ) => {
     if (!roi) return;
     if (!imgRef.current || !currentFile) return;
@@ -440,9 +448,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               const dy = (j - cy) / ry;
               if (dx * dx + dy * dy <= 1) {
                 const idx = (j * w + i) * 4;
-                data[idx]     = 255 - data[idx];     // R
-                data[idx + 1] = 255 - data[idx + 1]; // G
-                data[idx + 2] = 255 - data[idx + 2]; // B
+                data[idx]     = 255 - data[idx];     
+                data[idx + 1] = 255 - data[idx + 1]; 
+                data[idx + 2] = 255 - data[idx + 2];
               }
             }
           }
@@ -476,6 +484,35 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
+      } else if (mode === 'rotate') {
+        const angleRad = ((angleDeg ?? 0) * Math.PI) / 180;
+      
+        const x = Math.round(roi.x);
+        const y = Math.round(roi.y);
+        const w = Math.round(roi.width);
+        const h = Math.round(roi.height);
+
+        const temp = document.createElement('canvas');
+        temp.width = w;
+        temp.height = h;
+        const tctx = temp.getContext('2d');
+        if (!tctx) return;
+      
+        tctx.drawImage(image, x, y, w, h, 0, 0, w, h);
+      
+        ctx.save();
+        ctx.beginPath();
+        drawRoiPath();
+        ctx.clip();
+      
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+      
+        ctx.translate(cx, cy);
+        ctx.rotate(angleRad);
+        ctx.drawImage(temp, -w / 2, -h / 2);
+      
+        ctx.restore();
       }
 
       const newSrc = canvas.toDataURL('image/png');
@@ -506,6 +543,75 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       alert('Cannot edit image due to CORS. Please refresh after backend CORS fix.');
     };
   };
+
+  const invertWholeImage = () => {
+    if (!imgRef.current || !currentFile) return;
+
+    saveUndoSnapshot();
+  
+    const img = imgRef.current;
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
+  
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+  
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer';
+  
+    let src = currentImageURL || img.currentSrc || img.src;
+    if (/^https?:\/\//i.test(src)) {
+      src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
+    }
+    image.src = src;
+  
+    image.onload = () => {
+      ctx.drawImage(image, 0, 0, width, height);
+  
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+  
+      for (let i = 0; i < data.length; i += 4) {
+        data[i]     = 255 - data[i];     
+        data[i + 1] = 255 - data[i + 1]; 
+        data[i + 2] = 255 - data[i + 2]; 
+      }
+  
+      ctx.putImageData(imageData, 0, 0);
+  
+      const newSrc = canvas.toDataURL('image/png');
+      const base64 = newSrc.split(',')[1];
+      const newSize = base64ToBytes(base64);
+  
+      const updatedImageArray = [...imageArray];
+      const now = new Date().toISOString();
+      updatedImageArray[currentIndex] = {
+        ...updatedImageArray[currentIndex],
+        cropped_url: newSrc,
+        last_edited_on: now,
+        height: canvas.height,
+        width: canvas.width,
+        size: newSize,
+      };
+  
+      setCurrentImageURL(newSrc);
+      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
+      navigate('/display-images', {
+        state: { imageArray: updatedImageArray },
+        replace: true,
+      });
+    };
+  
+    image.onerror = (e) => {
+      console.error('Image load (CORS) failed: ', e, src);
+      alert('Cannot edit image due to CORS. Please refresh after backend CORS fix.');
+    };
+  };
+  
 
   useEffect(() => {
     const onUndo = () => {
