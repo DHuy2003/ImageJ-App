@@ -1,14 +1,34 @@
-from flask import Blueprint, request, jsonify, send_from_directory, Response
+from flask import Blueprint, request, jsonify, send_from_directory, Response, current_app
 from flask_cors import cross_origin
-from app.services.image_file_services import get_all_images, upload_cell_images, upload_mask_images, save_image
-import os
+from app.services.image_file_services import (
+    get_all_images,
+    upload_cell_images,
+    upload_mask_images,
+    save_image,
+    update_edited_image,
+    revert_image,
+    delete_image,
+    cleanup_folders,
+    cleanup_database  
+)
 from app import config
+import os
 
 image_file_bp = Blueprint('image_file_bp', __name__)
 
+UPLOAD_FOLDER = config.UPLOAD_FOLDER
 CONVERTED_FOLDER = config.CONVERTED_FOLDER
 MASK_FOLDER = config.MASK_FOLDER
+EDITED_FOLDER = config.EDITED_FOLDER
 
+@image_file_bp.route('/uploads/<filename>')
+@cross_origin() 
+def get_origin_image(filename):
+    try:
+        return send_from_directory(UPLOAD_FOLDER, filename)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
+    
 @image_file_bp.route('/converted/<filename>')
 @cross_origin() 
 def get_converted_image(filename):
@@ -22,6 +42,14 @@ def get_converted_image(filename):
 def get_mask_image(filename):
     try:
         return send_from_directory(MASK_FOLDER, filename)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
+    
+@image_file_bp.route('/edited/<filename>')
+@cross_origin()
+def get_edited_image(filename):
+    try:
+        return send_from_directory(EDITED_FOLDER, filename)
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
 
@@ -60,8 +88,7 @@ def upload_masks():
 @cross_origin()
 def save_images():
     try:
-        data = request.get_json()
-        
+        data = request.get_json()     
         if not data:
             return jsonify({"error": "No data provided"}), 400
         
@@ -95,4 +122,63 @@ def save_images():
     
     except Exception as e:
         print(f"Error in save image: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@image_file_bp.route('/update/<int:image_id>', methods=['POST'])
+@cross_origin()
+def upload_edited_image(image_id):
+    if "edited" not in request.files:
+        return jsonify({"error": "No edited image uploaded"}), 400
+
+    edited_image = request.files["edited"]
+    try:
+        info = update_edited_image(edited_image, image_id)
+        return jsonify({
+            "message": "Edited image saved successfully",
+            "image": info
+        }), 200
+    except Exception as e:
+        print(f"Error saving edited image: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
+@image_file_bp.route('/revert/<int:image_id>', methods=['POST'])
+@cross_origin()
+def revert_single_image(image_id):
+    try:
+        info = revert_image(image_id)
+        return jsonify({
+            "message": "Image reverted successfully",
+            "image": info,
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        print(f"Error reverting image {image_id}: {e}")
+        return jsonify({"error": "Failed to revert image"}), 500
+    
+@image_file_bp.route('/delete/<int:image_id>', methods=['DELETE'])
+@cross_origin()
+def remove_image(image_id):
+    try:
+        info = delete_image(image_id)
+        return jsonify({
+            "message": "Image deleted successfully",
+            "image": info,
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        print(f"Error deleting image {image_id}: {e}")
+        return jsonify({"error": "Failed to delete image"}), 500
+
+
+@image_file_bp.route('/reset', methods=['POST'])
+@cross_origin()
+def reset_dataset():
+    try:
+        cleanup_folders()
+        cleanup_database(current_app)
+        return jsonify({"message": "Dataset reset successfully"}), 200
+    except Exception as e:
+        print(f"Error resetting dataset: {e}")
         return jsonify({"error": str(e)}), 500

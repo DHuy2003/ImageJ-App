@@ -41,6 +41,8 @@ back-end/instance/
 # ENVIRONMENT VARIABLES
 .env
 *.env
+front-end/.env.*
+!front-end/.env.example
 
 # Python
 __pycache__/

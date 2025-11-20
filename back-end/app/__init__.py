@@ -8,7 +8,7 @@ def create_app():
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     app.config.from_pyfile('config.py')
-    for key in ['UPLOAD_FOLDER', 'CONVERTED_FOLDER', 'MASK_FOLDER']:
+    for key in ['UPLOAD_FOLDER', 'CONVERTED_FOLDER', 'MASK_FOLDER', 'EDITED_FOLDER']:
         os.makedirs(app.config[key], exist_ok=True)
 
     db.init_app(app)

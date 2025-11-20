@@ -1,6 +1,9 @@
-import type { ToolbarAction, ToolbarTool} from '../../types/toolbar';
-
 export const TOOLBAR_EVENT_NAME = 'toolbar-action';
+export type ToolbarTool = 'pointer' | 'rect' | 'circle' | 'brush';
+
+export type ToolbarAction =
+  | { type: 'SET_TOOL'; tool: ToolbarTool }
+  | { type: 'PAN_MODE'; enabled: boolean };
 
 let currentTool: ToolbarTool = 'pointer';
 export const getCurrentToolbarTool = () => currentTool;
@@ -31,44 +34,12 @@ export const handleCircleClick = () => {
     emitToolbarAction({ type: 'SET_TOOL', tool: 'circle' });
 };  
 
-export const handlePentagonClick = () => {
-    console.log('Pentagon Clicked');
-};
-
-export const handleMinusClick = () => {
-    console.log('Minus Clicked');
-};
-
-export const handleArrowRightClick = () => {
-    console.log('Arrow Right Clicked');
-};
-
-export const handleTypeClick = () => {
-    console.log('Type Clicked');
-};
-
-export const handlePaintBucketClick = () => {
-    console.log('Paint Bucket Clicked');
-};
-
-export const handlePipetteClick = () => {
-    console.log('Pipette Clicked');
-};
-
-export const handleZoomInClick = () => {
-    emitToolbarAction({ type: 'ZOOM_IN' });
-};  
-
-export const handleZoomOutClick = () => {
-    emitToolbarAction({ type: 'ZOOM_OUT' });
-};
-
 let isPanMode = false;
 export const handleHandClick = () => {
     isPanMode = !isPanMode;
     emitToolbarAction({ type: 'PAN_MODE', enabled: isPanMode });
 };
 
-export const handleCrosshairClick = () => {
-    console.log('Crosshair Clicked');
+export const handleBrushClick = () => {
+    emitToolbarAction({ type: 'SET_TOOL', tool: 'brush' });
 };

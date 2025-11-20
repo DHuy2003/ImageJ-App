@@ -1,7 +1,9 @@
 export type ImageInfo = {
     id: number;
     filename: string;
-    url?: string;
+    url?: string;                
+    original_url?: string | null;    
+    edited_url?: string | null;      
     width: number;
     height: number;
     bitDepth: number;
@@ -14,6 +16,7 @@ export type ImageInfo = {
     last_edited_on?: string | null;
     cropped_url?: string | null;
 };
+
 
 export type ImageViewProps = {
     imageArray: ImageInfo[];

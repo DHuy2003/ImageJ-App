@@ -1,8 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { CropOverlayHandle } from '../../types/crop';
-import type { ImageEventPayload, ImageViewProps, Translation } from '../../types/image';
+import type { ImageEventPayload, ImageInfo, ImageViewProps, Translation } from '../../types/image';
 import { base64ToBytes, formatFileSize } from '../../utils/common/formatFileSize';
 import { IMAGE_EVENT_NAME } from '../../utils/nav-bar/imageUtils';
 import CropOverlay from '../crop-overlay/CropOverlay';
@@ -11,12 +10,15 @@ import { type RoiTool, type SelectedRoiInfo } from '../../types/roi';
 import './ImageView.css';
 import useEditEvents from './hooks/useEditEvents';
 import { useToolbarToolSelection } from './hooks/useToolbarToolSelection';
+import useFileEvents from './hooks/useFileEvents';
+import BrushOverlay from '../brush-overlay/BrushOverlay';
 
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
+  const [visibleImages, setVisibleImages] = useState<ImageInfo[]>(imageArray);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentImageURL, setCurrentImageURL] = useState<string | null>(null);
-  const currentFile = imageArray[currentIndex];
+  const currentFile = visibleImages[currentIndex];
   const [isCropping, setIsCropping] = useState(false);
   const [showMask, setShowMask] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
@@ -27,7 +29,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   // --- THÊM HẰNG SỐ GIỚI HẠN ZOOM ---
   const MAX_SCALE = 30; // Giới hạn zoom in tối đa (ví dụ: 3000%)
@@ -38,7 +39,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [translation, setTranslation] = useState<Translation>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Translation>({ x: 0, y: 0 });
-  const displayRef = useRef<HTMLDivElement>(null); // Ref cho container #image-display
+  const displayRef = useRef<HTMLDivElement>(null);
 
   useEditEvents({
     imgRef,
@@ -50,11 +51,26 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     currentIndex,
     undoSnapshot,
     setUndoSnapshot,
-    navigate,
     setIsCropping,
   });
 
+  useFileEvents({
+    imageArray: visibleImages,
+    setImageArray: setVisibleImages,
+    currentIndex,
+    setCurrentIndex,
+    currentFile: currentFile ?? null,
+    currentImageURL,
+    setCurrentImageURL,
+  });
+
   useToolbarToolSelection(setActiveTool);
+
+  useEffect(() => {
+    setVisibleImages(imageArray);
+    setCurrentIndex(0);
+    setCurrentImageURL(null);
+  }, [imageArray]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -219,6 +235,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     image.src = src;
 
     image.onload = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+    
       ctx.drawImage(
         image,
         Math.round(cropX),
@@ -230,33 +249,32 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         canvas.width,
         canvas.height
       );
-
+    
       const newSrc = canvas.toDataURL('image/png');
-
-      const base64 = newSrc.split(",")[1];
+      const base64 = newSrc.split(',')[1];
       const newSize = base64ToBytes(base64);
-      const updatedImageArray = [...imageArray];
-      const now = new Date().toISOString();
-      updatedImageArray[currentIndex] = {
-        ...updatedImageArray[currentIndex],
-        cropped_url: newSrc,
-        last_edited_on: now,
-        height: canvas.height,
-        width: canvas.width,
-        size: newSize,
-      };
 
       setCurrentImageURL(newSrc);
-      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
-      navigate("/display-images", {
-        state: { imageArray: updatedImageArray },
-        replace: true,
-      });
 
+      setVisibleImages(prev => {
+        const copy = [...prev];
+        if (copy[currentIndex]) {
+          copy[currentIndex] = {
+            ...copy[currentIndex],
+            cropped_url: newSrc as any,
+            width: canvas.width,
+            height: canvas.height,
+            size: newSize,
+            bitDepth: 8, 
+          } as any;
+        }
+        return copy;
+      });
+    
       setIsCropping(false);
       setShowConfirmCrop(false);
       setCropRectData(null);
-    };
+    };    
 
     image.onerror = (e) => {
       console.error('Image load (CORS) failed: ', e, src);
@@ -275,7 +293,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   };
 
   const handleNext = () => {
-    setCurrentIndex((prevIndex) => (prevIndex < imageArray.length - 1 ? prevIndex + 1 : prevIndex));
+    setCurrentIndex((prevIndex) => (prevIndex < visibleImages.length - 1 ? prevIndex + 1 : prevIndex));
   };
 
   const handleToggleMask = () => {
@@ -343,7 +361,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
       <div id="image-container">
         <div id="image-controls">
-          <button className="image-controls-btn" onClick={handlePrev} disabled={currentIndex === 0 || imageArray.length <= 1}>
+          <button className="image-controls-btn" onClick={handlePrev} disabled={currentIndex === 0 || visibleImages.length <= 1}>
             <ChevronLeft className="image-controls-icon" />
             Previous Frame
           </button>
@@ -356,14 +374,13 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             {showMask ? 'Hide Mask' : 'Show Mask'}
           </button>
 
-          <button className="image-controls-btn" onClick={handleNext} disabled={currentIndex === imageArray.length - 1}>
+          <button className="image-controls-btn" onClick={handleNext} disabled={currentIndex === visibleImages.length - 1}>
             Next Frame
             <ChevronRight className="image-controls-icon" />
           </button>
         </div>
 
         <div id="image-display" className={`${showMask ? 'show-mask-layout' : ''} ${isPanning ? 'is-panning' : ''}`}
-          // --- THÊM REF VÀ CÁC TRÌNH XỬ LÝ CHUỘT ---
           ref={displayRef}
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}
@@ -418,10 +435,11 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           )}
 
           <RoiOverlay tool={activeTool} disabled={isCropping} imgRef={imgRef} />
+          <BrushOverlay tool={activeTool} disabled={isCropping} imgRef={imgRef} />
 
         </div>
 
-        <p>Frame {currentIndex + 1} of {imageArray.length}</p>
+        <p>Frame {currentIndex + 1} of {visibleImages.length}</p>
 
         {isCropping && (
           <div className="crop-controls">
@@ -455,7 +473,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
       <div id="image-gallery">
         <h2>Gallery</h2>
-        {imageArray.map((image, index) => {
+        {visibleImages.map((image, index) => {
           const isActive = index === currentIndex;
           return (
             <div key={index} className="gallery-item">

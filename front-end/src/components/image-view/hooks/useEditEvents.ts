@@ -1,10 +1,9 @@
 import { useEffect } from 'react';
-import type { NavigateFunction } from 'react-router-dom';
 import { base64ToBytes } from '../../../utils/common/formatFileSize';
 import { showSelectionRequired, type SelectedRoiInfo } from '../../../types/roi';
 import type { ImageInfo, ImageViewProps } from '../../../types/image';
 
-interface UseEditEventsParams {
+type UseEditEventsParams = {
   imgRef: React.RefObject<HTMLImageElement | null>;
   selectedRoi: SelectedRoiInfo | null;
   currentFile: ImageInfo | null;
@@ -14,7 +13,6 @@ interface UseEditEventsParams {
   currentIndex: number;
   undoSnapshot: string | null;
   setUndoSnapshot: (value: string | null) => void;
-  navigate: NavigateFunction;
   setIsCropping: (value: boolean) => void;
 }
 
@@ -35,7 +33,6 @@ const useEditEvents = ({
   currentIndex,
   undoSnapshot,
   setUndoSnapshot,
-  navigate,
   setIsCropping,
 }: UseEditEventsParams) => {
   const saveUndoSnapshot = () => {
@@ -217,23 +214,7 @@ const useEditEvents = ({
       const base64 = newSrc.split(',')[1];
       const newSize = base64ToBytes(base64);
 
-      const updatedImageArray = [...imageArray];
-      const now = new Date().toISOString();
-      updatedImageArray[currentIndex] = {
-        ...updatedImageArray[currentIndex],
-        cropped_url: newSrc,
-        last_edited_on: now,
-        height: canvas.height,
-        width: canvas.width,
-        size: newSize,
-      };
-
       setCurrentImageURL(newSrc);
-      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
-      navigate('/display-images', {
-        state: { imageArray: updatedImageArray },
-        replace: true,
-      });
     };
 
     image.onerror = (e) => {
@@ -284,24 +265,8 @@ const useEditEvents = ({
       const newSrc = canvas.toDataURL('image/png');
       const base64 = newSrc.split(',')[1];
       const newSize = base64ToBytes(base64);
-  
-      const updatedImageArray = [...imageArray];
-      const now = new Date().toISOString();
-      updatedImageArray[currentIndex] = {
-        ...updatedImageArray[currentIndex],
-        cropped_url: newSrc,
-        last_edited_on: now,
-        height: canvas.height,
-        width: canvas.width,
-        size: newSize,
-      };
-  
+
       setCurrentImageURL(newSrc);
-      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
-      navigate('/display-images', {
-        state: { imageArray: updatedImageArray },
-        replace: true,
-      });
     };
   
     image.onerror = (e) => {
@@ -395,34 +360,17 @@ const useEditEvents = ({
   useEffect(() => {
     const onUndo = () => {
       if (!undoSnapshot) return;
-
+  
       const restored = undoSnapshot;
       setCurrentImageURL(restored);
 
-      const base64 = restored.split(',')[1];
-      const newSize = base64ToBytes(base64);
-      const updatedImageArray = [...imageArray];
-      const now = new Date().toISOString();
-
-      updatedImageArray[currentIndex] = {
-        ...updatedImageArray[currentIndex],
-        cropped_url: restored,
-        last_edited_on: now,
-        size: newSize,
-      };
-
-      sessionStorage.setItem('imageArray', JSON.stringify(updatedImageArray));
-      navigate('/display-images', {
-        state: { imageArray: updatedImageArray },
-        replace: true,
-      });
-
       setUndoSnapshot(null);
     };
-
+  
     window.addEventListener('editUndo', onUndo);
     return () => window.removeEventListener('editUndo', onUndo);
-  }, [undoSnapshot, currentIndex, imageArray, navigate, setCurrentImageURL, setUndoSnapshot]);
+  }, [undoSnapshot, setCurrentImageURL, setUndoSnapshot]);
+  
 };
 
 export default useEditEvents;

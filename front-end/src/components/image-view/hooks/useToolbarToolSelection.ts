@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { ToolbarAction } from '../../../types/toolbar';
+import type { ToolbarAction } from '../../../utils/tool-bar/toolBarUtils';
 import type { RoiTool } from '../../../types/roi';
 import { TOOLBAR_EVENT_NAME } from '../../../utils/tool-bar/toolBarUtils';
 
@@ -7,8 +7,10 @@ import { TOOLBAR_EVENT_NAME } from '../../../utils/tool-bar/toolBarUtils';
  * Lắng nghe các action từ ToolBar (SET_TOOL) và
  * cập nhật activeTool trong ImageView.
  */
+
 export const useToolbarToolSelection = (
   setActiveTool: (tool: RoiTool) => void,
+  setPanMode?: (enabled: boolean) => void,  
 ) => {
   useEffect(() => {
     const listener = (e: Event) => {
@@ -17,6 +19,10 @@ export const useToolbarToolSelection = (
       if (action.type === 'SET_TOOL') {
         setActiveTool(action.tool as RoiTool);
       }
+
+      if (action.type === 'PAN_MODE' && setPanMode) {
+        setPanMode(action.enabled);
+      }
     };
 
     window.addEventListener(TOOLBAR_EVENT_NAME, listener as EventListener);
@@ -24,5 +30,6 @@ export const useToolbarToolSelection = (
     return () => {
       window.removeEventListener(TOOLBAR_EVENT_NAME, listener as EventListener);
     };
-  }, [setActiveTool]);
+  }, [setActiveTool, setPanMode]);
 };
+
