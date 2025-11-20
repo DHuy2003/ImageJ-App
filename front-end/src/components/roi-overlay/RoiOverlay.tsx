@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { showSelectionRequired, type ResizeHandle, type RoiOverlayProps, type RoiShape } from '../../types/roi';
 import './RoiOverlay.css';
 
-
 const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
   const [rois, setRois] = useState<RoiShape[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -35,7 +34,7 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
 
   const lastRoiRef = useRef<RoiShape | null>(null);
 
-  const canDraw = !disabled && tool !== 'pointer';
+  const canDraw = !disabled && tool !== 'pointer' && tool !== 'brush';
   const canInteract = !disabled;
 
   const getBounds = () => {

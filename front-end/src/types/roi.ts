@@ -1,6 +1,6 @@
 import Swal from "sweetalert2";
 
-export type RoiTool = 'pointer' | 'rect' | 'circle';
+export type RoiTool = 'pointer' | 'rect' | 'circle' | 'brush';
 
 export type RoiShape = {
   id: number;

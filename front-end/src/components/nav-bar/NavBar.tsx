@@ -5,15 +5,14 @@ import "./NavBar.css";
 import { 
     handleNewWindow, 
     handleOpen, 
-    handleOpenNext, 
-    handleOpenRecent, 
     handleOpenFolder, 
+    handleOpenMaskFolder,
     handleRevert,
     handleClose, 
     handleCloseAll, 
     handleSave, 
-    handleOpenMaskFolder,  
-    handleQuit, 
+    handleSaveAll,
+    handleQuit,
 } from "../../utils/nav-bar/fileUtils";
 import { 
     handleCut, 
@@ -30,15 +29,15 @@ import {
     handleFitRectangle,
     handleScale,
     handleRotate,
+    handleProperties,
 } from "../../utils/nav-bar/editUtils";
-
-
 import {
     handleZoomIn,
     handleZoomOut,
     handleScaleToFit,
     handleZoomToSelection,
 } from "../../utils/nav-bar/imageUtils";
+
 const NavBar = () => {
     const navigate = useNavigate();
     return(
@@ -56,14 +55,13 @@ const NavBar = () => {
                     items={[
                         {label: "New Window", onClick: () => handleNewWindow()},
                         {label: "Open", onClick: () => handleOpen(navigate)},
-                        {label: "Open Next", onClick: () => handleOpenNext(navigate)},
-                        {label: "Open Recent", onClick: handleOpenRecent},
                         {label: "Open Folder", onClick: () => handleOpenFolder(navigate)},
                         {label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate)},
                         {label: "Revert", onClick: () => handleRevert(navigate)},
                         {label: "Close", onClick: () => handleClose(navigate)},
                         {label: "Close All", onClick: () => handleCloseAll(navigate)},
                         {label: "Save", onClick: handleSave},
+                        {label: "Save All", onClick: handleSaveAll},
                         {label: "Quit", onClick: () => handleQuit(navigate)}
                     ]}
                 />
@@ -84,7 +82,7 @@ const NavBar = () => {
                             {label: "Restore Selection", onClick: () => handleRestoreSelection()},
                             {label: "Fit Circle", onClick: () => handleFitCircle()},
                             {label: "Fit Rectangle", onClick: () => handleFitRectangle()},
-                            {label: "Properties..."},
+                            {label: "Properties...", onClick: () => handleProperties()},
                             {label: "Scale...", onClick: () => handleScale()},
                             {label: "Rotate...", onClick: () => handleRotate()},
                             {label: "Translate..."}

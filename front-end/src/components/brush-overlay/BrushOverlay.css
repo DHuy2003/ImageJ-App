@@ -1,0 +1,11 @@
+.brush-overlay-container {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+  
+.brush-canvas {
+    position: absolute;
+    pointer-events: auto;
+}
+  

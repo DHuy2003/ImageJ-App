@@ -10,10 +10,13 @@ from sqlalchemy import or_
 import base64
 import requests
 from io import BytesIO
+from pathlib import Path
+from PIL import Image as PILImage
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 CONVERTED_FOLDER = config.CONVERTED_FOLDER
 MASK_FOLDER = config.MASK_FOLDER
+EDITED_FOLDER = config.EDITED_FOLDER
 
 def determine_bit_depth(img, arr):
     dtype_to_bit = {
@@ -220,47 +223,99 @@ def upload_mask_images(images):
             })
     return uploaded_masks_info
 
+def update_edited_image(image_file, image_id):
+    img_record = ImageModel.query.get(image_id)
+    if not img_record:
+        raise ValueError(f"Image with id {image_id} not found")
+
+    stem = Path(img_record.filename).stem if img_record.filename else f"image_{image_id}"
+    edited_filename = f"{stem}_edited.png"
+    output_path = os.path.join(EDITED_FOLDER, edited_filename)
+
+    img = PILImage.open(image_file)
+    if img.mode not in ["RGB", "RGBA", "L"]:
+        img = img.convert("RGB")
+    img.save(output_path, "PNG")
+
+    img_record.edited_filename = edited_filename
+    img_record.edited_filepath = output_path
+    img_record.status = "edited"
+    db.session.commit()
+
+    edited_url = url_for(
+        'image_file_bp.get_edited_image',
+        filename=edited_filename,
+        _external=True
+    )
+
+    return {
+        "id": img_record.id,
+        "edited_filepath": img_record.edited_filepath,
+        "edited_url": edited_url,
+    }
+
 def get_all_images():
     images = ImageModel.query.filter(ImageModel.filename.isnot(None)).all()
     image_list = []
-    for img_db in images:
-        image_url = None
-        converted_filename = None
-        if img_db.filename:
-            converted_filename = os.path.splitext(img_db.filename)[0] + '.png'
-            image_url = url_for(
-                'image_file_bp.get_converted_image',
-                filename=converted_filename,
-                _external=True
-            )
-        
-        mask_url = None
-        if img_db.mask_filename:
-            mask_url = url_for(
-                'image_file_bp.get_mask_image',
-                filename=img_db.mask_filename,
-                _external=True
-            )
 
-        width, height, file_size, bit_depth = None, None, None, None
+    for img_db in images:
         try:
-            if converted_filename and os.path.exists(os.path.join(CONVERTED_FOLDER, converted_filename)):
-                with Image.open(os.path.join(CONVERTED_FOLDER, converted_filename)) as img_pil:
-                    width, height = img_pil.size
-                    file_size = os.path.getsize(os.path.join(CONVERTED_FOLDER, converted_filename))
-                    arr = np.array(img_pil)
-                    bit_depth = determine_bit_depth(img_pil, arr)
+            converted_filename = None
+            original_url = None
+            edited_url = None
+            mask_url = None
+
+            if img_db.filename:
+                converted_filename = os.path.splitext(img_db.filename)[0] + '.png'
+                original_url = url_for(
+                    'image_file_bp.get_converted_image',
+                    filename=converted_filename,
+                    _external=True
+                )
+
+            if img_db.edited_filepath:
+                edited_filename = os.path.basename(img_db.edited_filepath)
+                if os.path.exists(img_db.edited_filepath):
+                    edited_url = url_for(
+                        'image_file_bp.get_edited_image',
+                        filename=edited_filename,
+                        _external=True
+                    )
+
+            if img_db.mask_filename:
+                mask_url = url_for(
+                    'image_file_bp.get_mask_image',
+                    filename=img_db.mask_filename,
+                    _external=True
+                )
+
+            path_for_info = None
+            final_url = None
+
+            if img_db.edited_filepath and os.path.exists(img_db.edited_filepath):
+                path_for_info = img_db.edited_filepath
+                final_url = edited_url
+            elif converted_filename and os.path.exists(os.path.join(CONVERTED_FOLDER, converted_filename)):
+                path_for_info = os.path.join(CONVERTED_FOLDER, converted_filename)
+                final_url = original_url
             elif img_db.mask_filename and os.path.exists(os.path.join(MASK_FOLDER, img_db.mask_filename)):
-                with Image.open(os.path.join(MASK_FOLDER, img_db.mask_filename)) as img_pil:
+                path_for_info = os.path.join(MASK_FOLDER, img_db.mask_filename)
+                final_url = mask_url
+
+            width = height = file_size = bit_depth = None
+            if path_for_info and os.path.exists(path_for_info):
+                with Image.open(path_for_info) as img_pil:
                     width, height = img_pil.size
-                    file_size = os.path.getsize(os.path.join(MASK_FOLDER, img_db.mask_filename))
+                    file_size = os.path.getsize(path_for_info)
                     arr = np.array(img_pil)
                     bit_depth = determine_bit_depth(img_pil, arr)
 
             image_list.append({
                 "id": img_db.id,
                 "filename": img_db.filename,
-                "url": image_url,
+                "url": final_url,        
+                "original_url": original_url,
+                "edited_url": edited_url,
                 "mask_filename": img_db.mask_filename,
                 "mask_filepath": img_db.mask_filepath,
                 "mask_url": mask_url,
@@ -273,14 +328,13 @@ def get_all_images():
                 "last_edited_on": img_db.last_edited_on.isoformat() if img_db.last_edited_on else None
             })
         except Exception as e:
-            print(f"Error processing image {img_db.filename if img_db.filename else img_db.mask_filename}: {e}")
             image_list.append({
                 "id": img_db.id,
                 "filename": img_db.filename,
-                "url": image_url,
+                "url": None,
                 "mask_filename": img_db.mask_filename,
                 "mask_filepath": img_db.mask_filepath,
-                "mask_url": mask_url,
+                "mask_url": None,
                 "width": None,
                 "height": None,
                 "bitDepth": None,
@@ -289,6 +343,7 @@ def get_all_images():
                 "status": img_db.status,
                 "last_edited_on": img_db.last_edited_on.isoformat() if img_db.last_edited_on else None
             })
+
     return image_list
 
 def save_image(image_data=None, image_url=None, filename=None):
@@ -328,10 +383,108 @@ def save_image(image_data=None, image_url=None, filename=None):
     except Exception as e:
         print(f"Error converting image to TIFF: {str(e)}")
         raise Exception(f"Failed to convert image to TIFF: {str(e)}")
+    
+def revert_image(image_id):
+    img_db = ImageModel.query.get(image_id)
+    if not img_db:
+        raise ValueError(f"Image with id {image_id} not found")
+
+    if getattr(img_db, "edited_filepath", None) and os.path.exists(img_db.edited_filepath):
+        try:
+            os.remove(img_db.edited_filepath)
+        except OSError as e:
+            print(f"Failed to remove edited file {img_db.edited_filepath}: {e}")
+
+    if hasattr(img_db, "edited_filename"):
+        img_db.edited_filename = None
+    if hasattr(img_db, "edited_filepath"):
+        img_db.edited_filepath = None
+
+    if img_db.filename:
+        img_db.status = "original"
+    elif img_db.mask_filename:
+        img_db.status = "mask_only"
+
+    img_db.last_edited_on = None
+    db.session.commit()
+
+    converted_filename = None
+    original_url = None
+    edited_url = None
+    mask_url = None
+
+    if img_db.filename:
+        converted_filename = os.path.splitext(img_db.filename)[0] + '.png'
+        original_url = url_for(
+            'image_file_bp.get_converted_image',
+            filename=converted_filename,
+            _external=True
+        )
+
+    if img_db.mask_filename:
+        mask_url = url_for(
+            'image_file_bp.get_mask_image',
+            filename=img_db.mask_filename,
+            _external=True
+        )
+
+    path_for_info = None
+    final_url = None
+
+    if converted_filename and os.path.exists(os.path.join(CONVERTED_FOLDER, converted_filename)):
+        path_for_info = os.path.join(CONVERTED_FOLDER, converted_filename)
+        final_url = original_url
+    elif img_db.mask_filename and os.path.exists(os.path.join(MASK_FOLDER, img_db.mask_filename)):
+        path_for_info = os.path.join(MASK_FOLDER, img_db.mask_filename)
+        final_url = mask_url
+
+    width = height = file_size = bit_depth = None
+    if path_for_info and os.path.exists(path_for_info):
+        with Image.open(path_for_info) as img_pil:
+            width, height = img_pil.size
+            file_size = os.path.getsize(path_for_info)
+            arr = np.array(img_pil)
+            bit_depth = determine_bit_depth(img_pil, arr)
+
+    return {
+        "id": img_db.id,
+        "filename": img_db.filename,
+        "url": final_url,
+        "original_url": original_url,
+        "edited_url": edited_url,  
+        "mask_filename": img_db.mask_filename,
+        "mask_filepath": img_db.mask_filepath,
+        "mask_url": mask_url,
+        "width": width,
+        "height": height,
+        "bitDepth": bit_depth,
+        "size": file_size,
+        "uploaded_on": img_db.uploaded_on.isoformat(),
+        "status": img_db.status,
+        "last_edited_on": img_db.last_edited_on.isoformat() if img_db.last_edited_on else None,
+    }
+
+    
+def delete_image(image_id):
+    img = ImageModel.query.get(image_id)
+    if not img:
+        raise ValueError(f"Image with id {image_id} not found")
+
+    for path in [img.filepath, img.mask_filepath, img.edited_filepath]:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError as e:
+                print(f"Failed to remove file {path}: {e}")
+
+    db.session.delete(img)
+    db.session.commit()
+
+    return {"id": image_id}
 
 def cleanup_folders():
     print("Cleaning up folders...")
-    for folder in [UPLOAD_FOLDER, CONVERTED_FOLDER, MASK_FOLDER]:
+    for folder in [UPLOAD_FOLDER, CONVERTED_FOLDER, MASK_FOLDER, EDITED_FOLDER]:
         if not os.path.exists(folder):
             continue
         for filename in os.listdir(folder):

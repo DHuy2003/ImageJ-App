@@ -4,15 +4,17 @@ import Logo from '../../assets/images/logo.png';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect } from 'react';
 import { uploadCellImages } from '../../utils/common/uploadImages';
+import axios from 'axios';
+
+const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
 const HomePage = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const isNewWindow = searchParams.get("newWindow") === "true";
 
   useEffect(() => {
     if (isNewWindow) {
-      sessionStorage.removeItem("imageArray");
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('newWindow');
       window.history.replaceState({}, '', newUrl);
@@ -22,7 +24,13 @@ const HomePage = () => {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return; 
-    await uploadCellImages(files, navigate, true);
+    try {
+      await axios.post(`${API_BASE_URL}/reset`);
+  
+      await uploadCellImages(files, navigate, true);
+    } catch (error) {
+      console.error("Error resetting + uploading dataset", error);
+    }
   };
 
   const handleUploadClick = () => {
