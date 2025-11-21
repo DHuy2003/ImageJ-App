@@ -1,9 +1,8 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CropOverlayHandle } from '../../types/crop';
-import type { ImageEventPayload, ImageInfo, ImageViewProps, Translation } from '../../types/image';
+import type { ImageInfo, ImageViewProps } from '../../types/image';
 import { base64ToBytes, formatFileSize } from '../../utils/common/formatFileSize';
-import { IMAGE_EVENT_NAME } from '../../utils/nav-bar/imageUtils';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
 import { type RoiTool, type SelectedRoiInfo } from '../../types/roi';
@@ -29,17 +28,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<string | null>(null);
-
-  // --- THÊM HẰNG SỐ GIỚI HẠN ZOOM ---
-  const MAX_SCALE = 30; // Giới hạn zoom in tối đa (ví dụ: 3000%)
-  const MIN_SCALE = 0.1;  // Giới hạn zoom out (1 = 100%, khớp với SCALE_TO_FIT)
-
-  // --- STATE MỚI CHO ZOOM VÀ PAN ---
-  const [scale, setScale] = useState(1);
-  const [translation, setTranslation] = useState<Translation>({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState<Translation>({ x: 0, y: 0 });
-  const displayRef = useRef<HTMLDivElement>(null);
 
   useEditEvents({
     imgRef,
@@ -99,96 +87,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     return () => window.removeEventListener('roiSelection', handler as EventListener);
   }, []);
 
-  // --- EFFECT MỚI ĐỂ LẮNG NGHE SỰ KIỆN ZOOM TỪ NAVBAR ---
-  useEffect(() => {
-    const handleImageEvent = (e: Event) => {
-      const action = (e as CustomEvent<ImageEventPayload>).detail;
-      const displayRect = displayRef.current?.getBoundingClientRect();
-      if (!displayRect) return;
-
-      switch (action.type) {
-        // --- LOGIC ZOOM_IN ĐÃ SỬA ---
-        case 'ZOOM_IN':
-          setScale(prevScale => {
-            // Kiểm tra giới hạn TỐI ĐA
-            if (prevScale >= MAX_SCALE) return MAX_SCALE;
-
-            let newScale = prevScale * 1.2;
-            if (newScale > MAX_SCALE) newScale = MAX_SCALE; // Chốt ở MAX_SCALE
-            return newScale;
-          });
-          break;
-        // --- LOGIC ZOOM_OUT ĐÃ SỬA ---
-        case 'ZOOM_OUT':
-          setScale(prevScale => {
-            // Kiểm tra giới hạn TỐI THIỂU
-            if (prevScale <= MIN_SCALE) return MIN_SCALE;
-
-            let newScale = prevScale / 1.2;
-
-            // Nếu vượt quá giới hạn MIN, reset về MIN
-            if (newScale < MIN_SCALE) {
-              newScale = MIN_SCALE;
-            }
-            return newScale;
-          });
-          break;
-        case 'SCALE_TO_FIT':
-          setScale(1); // Dùng MIN_SCALE
-          setTranslation({ x: 0, y: 0 });
-          break;
-
-        // --- LOGIC ZOOM_TO_SELECTION (Giữ nguyên) ---
-        case 'ZOOM_TO_SELECTION':
-          // (Logic này giữ nguyên)
-          if (selectedRoi && displayRect) {
-            const { x, y, width, height } = selectedRoi;
-            if (width > 0 && height > 0) {
-              let newScale = Math.min(
-                displayRect.width / width,
-                displayRect.height / height
-              ) * 0.95;
-              // Đảm bảo không zoom in quá MAX_SCALE
-              if (newScale > MAX_SCALE) newScale = MAX_SCALE;
-              if (newScale < MIN_SCALE) newScale = MIN_SCALE;
-
-              const newX = -(x * newScale) + (displayRect.width - width * newScale) / 2;
-              const newY = -(y * newScale) + (displayRect.height - height * newScale) / 2;
-              setScale(newScale);
-              setTranslation({ x: newX, y: newY });
-              break;
-            }
-          }
-
-          if (isCropping && cropRef.current) {
-            const selectionRect = cropRef.current.getRect();
-            if (selectionRect && displayRect && selectionRect.width > 0 && selectionRect.height > 0) {
-              let newScale = Math.min(
-                displayRect.width / selectionRect.width,
-                displayRect.height / selectionRect.height
-              ) * 0.95;
-              if (newScale > MAX_SCALE) newScale = MAX_SCALE;
-              if (newScale < MIN_SCALE) newScale = MIN_SCALE;
-
-              const selRelX = selectionRect.left - displayRect.left;
-              const selRelY = selectionRect.top - displayRect.top;
-
-              const newX = -selRelX * newScale + (displayRect.width - selectionRect.width * newScale) / 2;
-              const newY = -selRelY * newScale + (displayRect.height - selectionRect.height * newScale) / 2;
-              setScale(newScale);
-              setTranslation({ x: newX, y: newY });
-            }
-          }
-          break;
-      }
-    };
-
-    window.addEventListener(IMAGE_EVENT_NAME, handleImageEvent as EventListener);
-    return () => {
-      window.removeEventListener(IMAGE_EVENT_NAME, handleImageEvent as EventListener);
-    };
-  }, [isCropping, selectedRoi, translation.x, translation.y]);
-
   useEffect(() => {
     if (currentFile) {
       if (currentFile.cropped_url) {
@@ -196,11 +94,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       } else if (currentFile.url) {
         setCurrentImageURL(currentFile.url);
       }
-      // Reset zoom/pan khi đổi ảnh
-      setScale(1);
     }
   }, [currentFile, currentIndex]);
-
 
   const handleCrop = (cropRect: DOMRect) => {
     const img = imgRef.current;
@@ -301,51 +196,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setShowProperties((prev) => !prev);
   };
 
-  // --- CÁC HÀM XỬ LÝ CHUỘT MỚI CHO ZOOM/PAN ---
-
-  const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
-    if (isCropping) return; // Không zoom khi đang crop
-    e.preventDefault();
-
-    const delta = e.deltaY < 0 ? 1.2 : 1 / 1.2; // Zoom in hoặc out
-
-    setScale(prevScale => {
-      let newScale = prevScale * delta;
-      // Áp dụng giới hạn
-      if (newScale > MAX_SCALE) return MAX_SCALE;
-      if (newScale < MIN_SCALE) return MIN_SCALE;
-      return newScale;
-    });
-  };
-
-  const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    // Chỉ pan khi dùng tool 'pointer' và không đang crop
-    if (activeTool !== 'pointer' || isCropping) return;
-
-    e.preventDefault();
-    setIsPanning(true);
-    setPanStart({
-      x: e.clientX - translation.x,
-      y: e.clientY - translation.y,
-    });
-  };
-
-  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!isPanning || activeTool !== 'pointer' || isCropping) return;
-
-    e.preventDefault();
-    setTranslation({
-      x: e.clientX - panStart.x,
-      y: e.clientY - panStart.y,
-    });
-  };
-
-  const handleMouseUpOrLeave = (e: MouseEvent<HTMLDivElement>) => {
-    if (isPanning) {
-      e.preventDefault();
-      setIsPanning(false);
-    }
-  };
   return (
     <div id="image-view">
       {currentFile && showProperties && (
@@ -380,13 +230,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           </button>
         </div>
 
-        <div id="image-display" className={`${showMask ? 'show-mask-layout' : ''} ${isPanning ? 'is-panning' : ''}`}
-          ref={displayRef}
-          onWheel={handleWheel}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUpOrLeave}
-          onMouseLeave={handleMouseUpOrLeave}
+        <div 
+          id="image-display" 
+          className={showMask ? 'show-mask-layout' : ''}
         >
           {currentImageURL && (
             <img
@@ -395,14 +241,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               referrerPolicy="no-referrer"
               src={currentImageURL}
               alt={currentFile?.filename}
-              // --- THÊM STYLE CHO ZOOM VÀ PAN ---
-              style={{
-                transform: `scale(${scale}) translate(${translation.x}px, ${translation.y}px)`,
-                transformOrigin: 'top left', // Đặt gốc transform ở góc trên bên trái
-                cursor: (activeTool === 'pointer' && !isCropping) ? (isPanning ? 'grabbing' : 'grab') : 'default'
-              }}
               className={showMask ? 'small-image' : ''}
-              onDragStart={(e) => e.preventDefault()} // Ngăn hành vi kéo ảnh mặc định
             />
           )}
 
@@ -413,12 +252,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               src={currentFile.mask_url}
               alt={`${currentFile?.filename} mask`}
               className="mask-image small-image"
-              // --- ÁP DỤNG CÙNG TRANSFORM CHO MASK ---
-              style={{
-                transform: `scale(${scale})`,
-                transformOrigin: 'center'
-              }}
-              onDragStart={(e) => e.preventDefault()}
             />
           )}
 
