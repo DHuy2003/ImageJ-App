@@ -7,5 +7,6 @@
 .brush-canvas {
     position: absolute;
     pointer-events: auto;
+    cursor: url('/images/pencil.png') 4 20,crosshair;
 }
   

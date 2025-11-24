@@ -25,6 +25,7 @@ export type RoiOverlayProps = {
   tool: RoiTool;
   disabled?: boolean;
   imgRef?: React.RefObject<HTMLImageElement | null>;
+  frameIndex: number;
 }
 
 export type SelectedRoiInfo = {

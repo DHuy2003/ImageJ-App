@@ -27,7 +27,20 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
-  const [undoSnapshot, setUndoSnapshot] = useState<string | null>(null);
+  const [undoStack, setUndoStack] = useState<string[][]>(() =>
+    imageArray.map(() => []),
+  );
+  
+  const pushUndo = () => {
+    if (!currentImageURL) return;
+  
+    setUndoStack(prev => {
+      const copy = [...prev];
+      if (!copy[currentIndex]) copy[currentIndex] = [];
+      copy[currentIndex] = [...copy[currentIndex], currentImageURL];
+      return copy;
+    });
+  };  
 
   useEditEvents({
     imgRef,
@@ -35,11 +48,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     currentFile: currentFile ?? null,
     currentImageURL,
     setCurrentImageURL,
-    imageArray,
     currentIndex,
-    undoSnapshot,
-    setUndoSnapshot,
+    pushUndo,
     setIsCropping,
+    setVisibleImages
   });
 
   useFileEvents({
@@ -59,6 +71,16 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setCurrentIndex(0);
     setCurrentImageURL(null);
   }, [imageArray]);
+
+  useEffect(() => {
+    setUndoStack(prev => {
+      if (prev.length === visibleImages.length) return prev;
+      const next = [...prev];
+      while (next.length < visibleImages.length) next.push([]);
+      while (next.length > visibleImages.length) next.pop();
+      return next;
+    });
+  }, [visibleImages.length]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -149,8 +171,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       const base64 = newSrc.split(',')[1];
       const newSize = base64ToBytes(base64);
 
+      pushUndo();
       setCurrentImageURL(newSrc);
-
       setVisibleImages(prev => {
         const copy = [...prev];
         if (copy[currentIndex]) {
@@ -183,6 +205,81 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setCropRectData(null);
   };
 
+  const handleBrushCommit = (brushCanvas: HTMLCanvasElement) => {
+    const img = imgRef.current;
+    if (!img || !currentFile) return;
+
+    pushUndo();
+
+    const naturalW = img.naturalWidth;
+    const naturalH = img.naturalHeight;
+
+    if (naturalW === 0 || naturalH === 0) {
+      return;
+    }
+
+    const baseCanvas = document.createElement('canvas');
+    baseCanvas.width = naturalW;
+    baseCanvas.height = naturalH;
+    const ctx = baseCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer';
+
+    let src = currentImageURL || img.currentSrc || img.src;
+    if (/^https?:\/\//i.test(src)) {
+      src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
+    }
+    image.src = src;
+
+    image.onload = () => {
+      ctx.drawImage(image, 0, 0, naturalW, naturalH);
+
+      ctx.drawImage(
+        brushCanvas,
+        0,
+        0,
+        brushCanvas.width,
+        brushCanvas.height,
+        0,
+        0,
+        naturalW,
+        naturalH,
+      );
+
+      const newSrc = baseCanvas.toDataURL('image/png');
+      const base64 = newSrc.split(',')[1];
+      const newSize = base64ToBytes(base64);
+
+      setCurrentImageURL(newSrc);
+
+      setVisibleImages(prev => {
+        const copy = [...prev];
+        if (copy[currentIndex]) {
+          copy[currentIndex] = {
+            ...copy[currentIndex],
+            cropped_url: newSrc as any,
+            width: currentFile.width,
+            height: currentFile.height,
+            size: newSize,
+            bitDepth: currentFile.bitDepth ?? 8,
+          } as any;
+        }
+        return copy;
+      });
+
+      const overlayCtx = brushCanvas.getContext('2d');
+      overlayCtx?.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+    };
+
+    image.onerror = (e) => {
+      console.error('Brush commit failed (CORS?): ', e, src);
+      alert('Cannot apply brush strokes due to CORS/image load error.');
+    };
+  };
+
   const handlePrev = () => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : prevIndex));
   };
@@ -196,6 +293,51 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setShowProperties((prev) => !prev);
   };
 
+  useEffect(() => {
+    const onUndo = () => {
+      setUndoStack(prev => {
+        const copy = [...prev];
+        const stack = copy[currentIndex] ?? [];
+        if (!stack.length) return prev;
+  
+        const newStack = stack.slice(0, -1);
+        const restored = stack[stack.length - 1];
+  
+        copy[currentIndex] = newStack;
+  
+        setCurrentImageURL(restored);
+  
+        setVisibleImages(prevImgs => {
+          const imgsCopy = [...prevImgs];
+          const file = imgsCopy[currentIndex];
+          if (file) {
+            let size = file.size;
+        
+            if (restored.startsWith("data:image")) {
+              const base64 = restored.split(',')[1];
+              size = base64ToBytes(base64);
+            }
+        
+            imgsCopy[currentIndex] = {
+              ...file,
+              cropped_url: restored as any,
+              width: file.width,
+              height: file.height,
+              size,
+              bitDepth: file.bitDepth ?? 8,
+            } as any;
+          }
+          return imgsCopy;
+        });
+  
+        return copy;
+      });
+    };
+  
+    window.addEventListener('editUndo', onUndo);
+    return () => window.removeEventListener('editUndo', onUndo);
+  }, [currentIndex, setCurrentImageURL, setVisibleImages]);  
+  
   return (
     <div id="image-view">
       {currentFile && showProperties && (
@@ -267,8 +409,19 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             />
           )}
 
-          <RoiOverlay tool={activeTool} disabled={isCropping} imgRef={imgRef} />
-          <BrushOverlay tool={activeTool} disabled={isCropping} imgRef={imgRef} />
+          <RoiOverlay
+            tool={activeTool}
+            disabled={isCropping}
+            imgRef={imgRef}
+            frameIndex={currentIndex}
+          />
+
+          <BrushOverlay
+            tool={activeTool}
+            disabled={isCropping}
+            imgRef={imgRef}
+            onCommit={handleBrushCommit}
+          />
 
         </div>
 
