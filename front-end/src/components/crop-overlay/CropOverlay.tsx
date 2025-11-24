@@ -60,7 +60,6 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
     overlay.style.height = `${newHeight}px`;
   }, [imgRef]);
 
-  // Khi mở crop lần đầu: phủ toàn ảnh & set tỉ lệ = full image + theo dõi thay đổi layout
   useLayoutEffect(() => {
     if (!overlayRef.current || !imgRef.current) return;
     const overlay = overlayRef.current;
@@ -78,7 +77,7 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
     roImg.observe(imgRef.current);
 
     const roParent = new ResizeObserver(() => applyRelativeToDom());
-    roParent.observe(overlay.parentElement!); // .crop-container / #image-display
+    roParent.observe(overlay.parentElement!);
 
     const onResizeOrScroll = () => applyRelativeToDom();
     window.addEventListener("resize", onResizeOrScroll);
@@ -98,7 +97,6 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
     };
   }, [imgRef, applyRelativeToDom]);
 
-  // Move / Resize giữ trong khung ảnh — sau mỗi thay đổi, cập nhật lại tỉ lệ
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!overlayRef.current || !imgRef.current) return;

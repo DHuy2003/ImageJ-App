@@ -1,6 +1,4 @@
-
 import './HomePage.css';
-import Logo from '../../assets/images/logo.png';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect } from 'react';
 import { uploadCellImages } from '../../utils/common/uploadImages';
@@ -42,7 +40,7 @@ const HomePage = () => {
 
       <div id="content">
           <div id="logo">
-              <img src={Logo} alt="ImageJ Logo"/>
+              <img src={'./images/logo.png'} alt="ImageJ Logo"/>
           </div>
 
           <div id="title">

@@ -2,19 +2,15 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { showSelectionRequired, type ResizeHandle, type RoiOverlayProps, type RoiShape } from '../../types/roi';
 import './RoiOverlay.css';
 
-const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
+const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
   const [rois, setRois] = useState<RoiShape[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-
   const [isDrawing, setIsDrawing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
-
   const containerRef = useRef<HTMLDivElement | null>(null);
-
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
   const activeRoiIdRef = useRef<number | null>(null);
-
   const resizeHandleRef = useRef<ResizeHandle | null>(null);
   const resizeStartRectRef = useRef<{
     x: number;
@@ -23,7 +19,6 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
     height: number;
   } | null>(null);
   const resizeStartMouseRef = useRef<{ x: number; y: number } | null>(null);
-
   const moveStartRectRef = useRef<{
     x: number;
     y: number;
@@ -31,12 +26,9 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
     height: number;
   } | null>(null);
   const moveStartMouseRef = useRef<{ x: number; y: number } | null>(null);
-
   const lastRoiRef = useRef<RoiShape | null>(null);
-
   const canDraw = !disabled && tool !== 'pointer' && tool !== 'brush';
   const canInteract = !disabled;
-
   const getBounds = () => {
     const container = containerRef.current;
     if (!container) return null;
@@ -132,6 +124,26 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
   
     return { x, y, width, height };
   };
+
+  useEffect(() => {
+    setRois([]);
+    setSelectedId(null);
+
+    setIsDrawing(false);
+    setIsResizing(false);
+    setIsMoving(false);
+
+    activeRoiIdRef.current = null;
+    drawStartRef.current = null;
+    resizeHandleRef.current = null;
+    resizeStartMouseRef.current = null;
+    resizeStartRectRef.current = null;
+    moveStartMouseRef.current = null;
+    moveStartRectRef.current = null;
+
+    const evt = new CustomEvent('roiSelection', { detail: null });
+    window.dispatchEvent(evt);
+  }, [frameIndex]);
 
   useEffect(() => {
     const onSelectAll = () => {
@@ -618,8 +630,18 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
       width: roi.width,
       height: roi.height,
     };
-  };  
+  }; 
 
+useEffect(() => {
+    if (tool === 'brush') {
+      setRois([]);
+      setSelectedId(null);
+      setIsDrawing(false);
+      setIsResizing(false);
+      setIsMoving(false);
+    }
+  }, [tool]);
+  
   const containerClass = [
     'roi-overlay',
     `tool-${tool}`,
@@ -636,60 +658,60 @@ const RoiOverlay = ({ tool, disabled, imgRef }: RoiOverlayProps) =>{
       onMouseMove={handleMouseMoveContainer}
       onMouseUp={handleMouseUpContainer}
     >
-      {rois.map((roi) => {
-        const isSelected = roi.id === selectedId;
-        return (
-          <div
-            key={roi.id}
-            className={`roi-shape roi-${roi.type} ${
-              isSelected ? 'roi-selected' : ''
-            }`}
-            style={{
-              left: roi.x,
-              top: roi.y,
-              width: roi.width,
-              height: roi.height,
-            }}
-            onMouseDown={(e) => startMove(e, roi.id)}
-          >
-            {/* 8 handle resize */}
+      {tool !== 'brush' &&
+        rois.map((roi) => {
+          const isSelected = roi.id === selectedId;
+          return (
             <div
-              className="roi-handle handle-nw"
-              onMouseDown={(e) => startResize(e, roi.id, 'nw')}
-            />
-            <div
-              className="roi-handle handle-n"
-              onMouseDown={(e) => startResize(e, roi.id, 'n')}
-            />
-            <div
-              className="roi-handle handle-ne"
-              onMouseDown={(e) => startResize(e, roi.id, 'ne')}
-            />
-            <div
-              className="roi-handle handle-e"
-              onMouseDown={(e) => startResize(e, roi.id, 'e')}
-            />
-            <div
-              className="roi-handle handle-se"
-              onMouseDown={(e) => startResize(e, roi.id, 'se')}
-            />
-            <div
-              className="roi-handle handle-s"
-              onMouseDown={(e) => startResize(e, roi.id, 's')}
-            />
-            <div
-              className="roi-handle handle-sw"
-              onMouseDown={(e) => startResize(e, roi.id, 'sw')}
-            />
-            <div
-              className="roi-handle handle-w"
-              onMouseDown={(e) => startResize(e, roi.id, 'w')}
-            />
-          </div>
-        );
-      })}
+              key={roi.id}
+              className={`roi-shape roi-${roi.type} ${
+                isSelected ? 'roi-selected' : ''
+              }`}
+              style={{
+                left: roi.x,
+                top: roi.y,
+                width: roi.width,
+                height: roi.height,
+              }}
+              onMouseDown={(e) => startMove(e, roi.id)}
+            >
+              <div
+                className="roi-handle handle-nw"
+                onMouseDown={(e) => startResize(e, roi.id, 'nw')}
+              />
+              <div
+                className="roi-handle handle-n"
+                onMouseDown={(e) => startResize(e, roi.id, 'n')}
+              />
+              <div
+                className="roi-handle handle-ne"
+                onMouseDown={(e) => startResize(e, roi.id, 'ne')}
+              />
+              <div
+                className="roi-handle handle-e"
+                onMouseDown={(e) => startResize(e, roi.id, 'e')}
+              />
+              <div
+                className="roi-handle handle-se"
+                onMouseDown={(e) => startResize(e, roi.id, 'se')}
+              />
+              <div
+                className="roi-handle handle-s"
+                onMouseDown={(e) => startResize(e, roi.id, 's')}
+              />
+              <div
+                className="roi-handle handle-sw"
+                onMouseDown={(e) => startResize(e, roi.id, 'sw')}
+              />
+              <div
+                className="roi-handle handle-w"
+                onMouseDown={(e) => startResize(e, roi.id, 'w')}
+              />
+            </div>
+          );
+        })}
     </div>
-  );
+  );  
 }
 
 export default RoiOverlay;

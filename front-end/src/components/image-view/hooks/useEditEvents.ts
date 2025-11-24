@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { base64ToBytes } from '../../../utils/common/formatFileSize';
 import { showSelectionRequired, type SelectedRoiInfo } from '../../../types/roi';
-import type { ImageInfo, ImageViewProps } from '../../../types/image';
+import type { ImageInfo } from '../../../types/image';
 
 type UseEditEventsParams = {
   imgRef: React.RefObject<HTMLImageElement | null>;
@@ -9,37 +9,29 @@ type UseEditEventsParams = {
   currentFile: ImageInfo | null;
   currentImageURL: string | null;
   setCurrentImageURL: (url: string | null) => void;
-  imageArray: ImageViewProps['imageArray'];
   currentIndex: number;
-  undoSnapshot: string | null;
-  setUndoSnapshot: (value: string | null) => void;
+  pushUndo: () => void;
   setIsCropping: (value: boolean) => void;
+  setVisibleImages: React.Dispatch<React.SetStateAction<ImageInfo[]>>;
 }
-
 /**
  * Hook này ONLY xử lý:
  *  - enableCropMode  (Cut)
  *  - editClear / editClearOutside / editFill / editInvert / editDraw / editRotate
- *  - editUndo
  * Tất cả các event này đều được dispatch từ editUtils.ts
  */
+
 const useEditEvents = ({
   imgRef,
   selectedRoi,
   currentFile,
   currentImageURL,
   setCurrentImageURL,
-  imageArray,
   currentIndex,
-  undoSnapshot,
-  setUndoSnapshot,
+  pushUndo,
   setIsCropping,
+  setVisibleImages
 }: UseEditEventsParams) => {
-  const saveUndoSnapshot = () => {
-    if (!currentImageURL) return;
-    setUndoSnapshot(currentImageURL);
-  };
-
   const applyRoiEdit = (
     mode: 'clear' | 'clearOutside' | 'fill' | 'invert' | 'draw' | 'rotate',
     roi: SelectedRoiInfo,
@@ -47,11 +39,10 @@ const useEditEvents = ({
     angleDeg?: number
   ) => {
     if (!roi) return;
-    if (!imgRef.current || !currentFile) return;
+    if (!imgRef.current || !currentFile || !currentImageURL) return;
+    pushUndo();
 
-    saveUndoSnapshot();
     const img = imgRef.current;
-
     const width = img.naturalWidth;
     const height = img.naturalHeight;
 
@@ -215,6 +206,23 @@ const useEditEvents = ({
       const newSize = base64ToBytes(base64);
 
       setCurrentImageURL(newSrc);
+
+      if (currentFile) {
+        setVisibleImages(prev => {
+          const copy = [...prev];
+          if (copy[currentIndex]) {
+            copy[currentIndex] = {
+              ...copy[currentIndex],
+              cropped_url: newSrc as any,
+              width: currentFile.width,
+              height: currentFile.height,
+              size: newSize,
+              bitDepth: currentFile.bitDepth ?? 8,
+            } as any;
+          }
+          return copy;
+        });
+      }
     };
 
     image.onerror = (e) => {
@@ -224,9 +232,8 @@ const useEditEvents = ({
   };
 
   const invertWholeImage = () => {
-    if (!imgRef.current || !currentFile) return;
-
-    saveUndoSnapshot();
+    if (!imgRef.current || !currentFile || !currentImageURL) return;
+    pushUndo();
   
     const img = imgRef.current;
     const width = img.naturalWidth;
@@ -267,6 +274,23 @@ const useEditEvents = ({
       const newSize = base64ToBytes(base64);
 
       setCurrentImageURL(newSrc);
+
+      if (currentFile) {
+        setVisibleImages(prev => {
+          const copy = [...prev];
+          if (copy[currentIndex]) {
+            copy[currentIndex] = {
+              ...copy[currentIndex],
+              cropped_url: newSrc as any,
+              width: currentFile.width,
+              height: currentFile.height,
+              size: newSize,
+              bitDepth: currentFile.bitDepth ?? 8,
+            } as any;
+          }
+          return copy;
+        });
+      }
     };
   
     image.onerror = (e) => {
@@ -349,28 +373,7 @@ const useEditEvents = ({
       window.removeEventListener('editDraw', onDraw);
       window.removeEventListener('editRotate', onRotate);
     };
-  }, [
-    selectedRoi,
-    currentIndex,
-    imageArray,
-    currentImageURL,
-    currentFile,
-  ]);
-
-  useEffect(() => {
-    const onUndo = () => {
-      if (!undoSnapshot) return;
-  
-      const restored = undoSnapshot;
-      setCurrentImageURL(restored);
-
-      setUndoSnapshot(null);
-    };
-  
-    window.addEventListener('editUndo', onUndo);
-    return () => window.removeEventListener('editUndo', onUndo);
-  }, [undoSnapshot, setCurrentImageURL, setUndoSnapshot]);
-  
+  }, [selectedRoi, currentIndex, currentImageURL, currentFile, setVisibleImages, setCurrentImageURL, pushUndo]); 
 };
 
 export default useEditEvents;
