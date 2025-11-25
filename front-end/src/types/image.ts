@@ -17,7 +17,14 @@ export type ImageInfo = {
     cropped_url?: string | null;
 };
 
-
 export type ImageViewProps = {
     imageArray: ImageInfo[];
+};
+
+export type UndoEntry = {
+    url: string;
+    width: number;
+    height: number;
+    size: number;
+    bitDepth: number;
 };
