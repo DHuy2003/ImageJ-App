@@ -128,7 +128,6 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
   useEffect(() => {
     setRois([]);
     setSelectedId(null);
-
     setIsDrawing(false);
     setIsResizing(false);
     setIsMoving(false);
@@ -144,6 +143,27 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
     const evt = new CustomEvent('roiSelection', { detail: null });
     window.dispatchEvent(evt);
   }, [frameIndex]);
+
+  useEffect(() => {
+    if (!disabled) return;
+  
+    setRois([]);
+    setSelectedId(null);
+    setIsDrawing(false);
+    setIsResizing(false);
+    setIsMoving(false);
+  
+    activeRoiIdRef.current = null;
+    drawStartRef.current = null;
+    resizeHandleRef.current = null;
+    resizeStartMouseRef.current = null;
+    resizeStartRectRef.current = null;
+    moveStartMouseRef.current = null;
+    moveStartRectRef.current = null;
+  
+    const evt = new CustomEvent('roiSelection', { detail: null });
+    window.dispatchEvent(evt);
+  }, [disabled]);  
 
   useEffect(() => {
     const onSelectAll = () => {

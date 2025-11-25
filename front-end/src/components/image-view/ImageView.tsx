@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { CropOverlayHandle } from '../../types/crop';
-import type { ImageInfo, ImageViewProps } from '../../types/image';
+import type { ImageInfo, ImageViewProps, UndoEntry } from '../../types/image';
 import { base64ToBytes, formatFileSize } from '../../utils/common/formatFileSize';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
@@ -11,6 +11,7 @@ import useEditEvents from './hooks/useEditEvents';
 import { useToolbarToolSelection } from './hooks/useToolbarToolSelection';
 import useFileEvents from './hooks/useFileEvents';
 import BrushOverlay from '../brush-overlay/BrushOverlay';
+import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
 
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
@@ -27,20 +28,28 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
-  const [undoStack, setUndoStack] = useState<string[][]>(() =>
-    imageArray.map(() => []),
+  const [undoStack, setUndoStack] = useState<UndoEntry[][]>(() =>
+    imageArray.map(() => [] as UndoEntry[]),
   );
   
   const pushUndo = () => {
-    if (!currentImageURL) return;
+    if (!currentImageURL || !currentFile) return;
+  
+    const snapshot: UndoEntry = {
+      url: currentImageURL,
+      width: currentFile.width,
+      height: currentFile.height,
+      size: currentFile.size,
+      bitDepth: currentFile.bitDepth ?? 8,
+    };
   
     setUndoStack(prev => {
       const copy = [...prev];
       if (!copy[currentIndex]) copy[currentIndex] = [];
-      copy[currentIndex] = [...copy[currentIndex], currentImageURL];
+      copy[currentIndex] = [...copy[currentIndex], snapshot];
       return copy;
     });
-  };  
+  }; 
 
   useEditEvents({
     imgRef,
@@ -65,6 +74,20 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   });
 
   useToolbarToolSelection(setActiveTool);
+
+  useEffect(() => {
+    const onImagesAppended = (e: Event) => {
+      const ce = e as CustomEvent<ImageInfo[]>;
+      const newImages = ce.detail;
+      if (!newImages || newImages.length === 0) return;
+      setVisibleImages(prev => [...prev, ...newImages]);
+    };
+
+    window.addEventListener(IMAGES_APPENDED_EVENT, onImagesAppended as EventListener);
+    return () => {
+      window.removeEventListener(IMAGES_APPENDED_EVENT, onImagesAppended as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     setVisibleImages(imageArray);
@@ -304,27 +327,20 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         const restored = stack[stack.length - 1];
   
         copy[currentIndex] = newStack;
-  
-        setCurrentImageURL(restored);
-  
+
+        setCurrentImageURL(restored.url);
+
         setVisibleImages(prevImgs => {
           const imgsCopy = [...prevImgs];
           const file = imgsCopy[currentIndex];
           if (file) {
-            let size = file.size;
-        
-            if (restored.startsWith("data:image")) {
-              const base64 = restored.split(',')[1];
-              size = base64ToBytes(base64);
-            }
-        
             imgsCopy[currentIndex] = {
               ...file,
-              cropped_url: restored as any,
-              width: file.width,
-              height: file.height,
-              size,
-              bitDepth: file.bitDepth ?? 8,
+              cropped_url: restored.url as any,
+              width: restored.width,
+              height: restored.height,
+              size: restored.size,
+              bitDepth: restored.bitDepth,
             } as any;
           }
           return imgsCopy;

@@ -6,6 +6,7 @@ import axios from 'axios';
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
 export const FILE_MENU_EVENT_NAME = 'fileMenuAction';
+export const IMAGES_APPENDED_EVENT = 'imagesAppended';
 export type FileMenuActionType = 'REVERT' | 'CLOSE' | 'CLOSE_ALL' | 'SAVE' | 'SAVE_ALL';
 export type FileMenuActionPayload = {
   type: FileMenuActionType;
@@ -19,22 +20,12 @@ const dispatchFileMenuAction = (type: FileMenuActionType) => {
   );
 };
 
-export const handleNewWindow = () => {
-    const newWindow = window.open('about:blank', '_blank');
-    
-    if (newWindow) {
-      newWindow.location.href = 'http://localhost:5173/?newWindow=true';
-      newWindow.focus();
-    } else {
-      Swal.fire({
-        title: 'Notification',
-        text: 'Your browser is blocking pop-ups. Please allow pop-ups to open in new windows.',
-        icon: 'info',
-        confirmButtonText: 'OK',
-        confirmButtonColor: '#3085d6',
-      });
-    } 
-};
+let hasDataset = true;
+if (typeof window !== 'undefined') {
+  window.addEventListener('datasetCleared', () => {
+    hasDataset = false;
+  });
+}
 
 export const handleOpen = (navigate: NavigateFunction) => {
   const input = document.createElement("input");
@@ -45,7 +36,48 @@ export const handleOpen = (navigate: NavigateFunction) => {
   input.onchange = async (event: Event) => {
     const target = event.target as HTMLInputElement;
     const files = target.files;
-    await uploadCellImages(files, navigate, false);
+    if (!files || files.length === 0) return;
+
+    const formData = new FormData();
+    Array.from(files).forEach((file) => formData.append("images", file));
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/upload-cells`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const newUploadedImages =
+        response.data.images ?? response.data.uploaded ?? [];
+
+      await Swal.fire({
+        title: 'Success',
+        text: `${newUploadedImages.length} cell images uploaded and processed.`,
+        icon: 'success',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#3085d6',
+      });
+
+      if (!hasDataset && navigate) {
+        navigate("/display-images", { replace: true });
+      } else {
+        window.dispatchEvent(
+          new CustomEvent(IMAGES_APPENDED_EVENT, {
+            detail: newUploadedImages,
+          })
+        );
+      }
+
+      hasDataset = true;
+    } catch (error: any) {
+      console.error("Error uploading cell images (append):", error);
+      await Swal.fire({
+        title: 'Error',
+        text: error.response?.data?.message || "Failed to upload cell images. Please try again.",
+        icon: 'error',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#3085d6',
+      });
+    }
   };
   input.click();
 };
@@ -129,15 +161,15 @@ export const handleOpenMaskFolder = async (navigate: NavigateFunction) => {
   }
 };
 
-export const handleRevert = (_navigate: NavigateFunction) => {
+export const handleRevert = () => {
     dispatchFileMenuAction('REVERT');
 };
   
-export const handleClose = (_navigate?: NavigateFunction) => {
+export const handleClose = () => {
   dispatchFileMenuAction('CLOSE');
 };
   
-export const handleCloseAll = (_navigate: NavigateFunction) => {
+export const handleCloseAll = () => {
   dispatchFileMenuAction('CLOSE_ALL');
 };
   

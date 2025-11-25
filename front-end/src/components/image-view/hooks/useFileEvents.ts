@@ -415,7 +415,6 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         const response = await axios.post(
           `${API_BASE_URL}/revert/${currentFile.id}`,
         );
-  
         const updated = response.data.image as ImageInfo;
   
         setImageArray(prev => {
@@ -424,13 +423,17 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
             copy[currentIndex] = {
               ...copy[currentIndex],
               ...updated,
+              cropped_url: (updated as any).cropped_url ?? null,
+              edited_url: (updated as any).edited_url ?? null,
             };
           }
           return copy;
         });
   
-        const newUrl = updated.url || currentImageURL;
-        setCurrentImageURL(newUrl);
+        const newUrl = (updated as any).cropped_url ?? (updated as any).edited_url ?? updated.url ?? null;
+        if (newUrl) {
+          setCurrentImageURL(newUrl);
+        }
   
         await Swal.fire({
           title: 'Reverted',

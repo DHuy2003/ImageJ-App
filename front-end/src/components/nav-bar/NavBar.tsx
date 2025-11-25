@@ -3,7 +3,6 @@ import DropdownMenu from "../dropdown-menu/DropdownMenu";
 import { useNavigate } from "react-router-dom";
 import "./NavBar.css";
 import { 
-    handleNewWindow, 
     handleOpen, 
     handleOpenFolder, 
     handleOpenMaskFolder,
@@ -31,12 +30,6 @@ import {
     handleRotate,
     handleProperties,
 } from "../../utils/nav-bar/editUtils";
-import {
-    handleZoomIn,
-    handleZoomOut,
-    handleScaleToFit,
-    handleZoomToSelection,
-} from "../../utils/nav-bar/imageUtils";
 
 const NavBar = () => {
     const navigate = useNavigate();
@@ -53,15 +46,14 @@ const NavBar = () => {
                 <DropdownMenu 
                     label="File" 
                     items={[
-                        {label: "New Window", onClick: () => handleNewWindow()},
                         {label: "Open", onClick: () => handleOpen(navigate)},
                         {label: "Open Folder", onClick: () => handleOpenFolder(navigate)},
                         {label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate)},
-                        {label: "Revert", onClick: () => handleRevert(navigate)},
-                        {label: "Close", onClick: () => handleClose(navigate)},
-                        {label: "Close All", onClick: () => handleCloseAll(navigate)},
-                        {label: "Save", onClick: handleSave},
-                        {label: "Save All", onClick: handleSaveAll},
+                        { label: "Revert", onClick: handleRevert},
+                        { label: "Close", onClick: handleClose},
+                        { label: "Close All", onClick: handleCloseAll},
+                        { label: "Save", onClick: handleSave},
+                        { label: "Save All", onClick: handleSaveAll},
                         {label: "Quit", onClick: () => handleQuit(navigate)}
                     ]}
                 />
@@ -69,22 +61,22 @@ const NavBar = () => {
                 <DropdownMenu 
                     label="Edit" 
                     items={[
-                        {label: "Undo", onClick: () => handleUndo()},
-                        {label: "Cut", onClick: () => handleCut()},
-                        {label: "Clear", onClick: () => handleClear()},
-                        {label: "Clear Outside", onClick: () => handleClearOutside()},
-                        {label: "Fill", onClick: () => handleFill()},
-                        {label: "Draw", onClick: () => handleDraw()},
-                        {label: "Invert", onClick: () => handleInvert()},
+                        {label: "Undo", onClick: handleUndo},
+                        {label: "Cut", onClick: handleCut},
+                        {label: "Clear", onClick: handleClear},
+                        {label: "Clear Outside", onClick: handleClearOutside},
+                        {label: "Fill", onClick: handleFill},
+                        {label: "Draw", onClick: handleDraw},
+                        {label: "Invert", onClick: handleInvert},
                         {label: "Selection", subItems: [
-                            {label: "Select All", onClick: () => handleSelectionAll()},
-                            {label: "Select None", onClick: () => handleSelectionNone()},
-                            {label: "Restore Selection", onClick: () => handleRestoreSelection()},
-                            {label: "Fit Circle", onClick: () => handleFitCircle()},
-                            {label: "Fit Rectangle", onClick: () => handleFitRectangle()},
-                            {label: "Properties...", onClick: () => handleProperties()},
-                            {label: "Scale...", onClick: () => handleScale()},
-                            {label: "Rotate...", onClick: () => handleRotate()},
+                            {label: "Select All", onClick: handleSelectionAll},
+                            {label: "Select None", onClick: handleSelectionNone},
+                            {label: "Restore Selection", onClick: handleRestoreSelection},
+                            {label: "Fit Circle", onClick: handleFitCircle},
+                            {label: "Fit Rectangle", onClick: handleFitRectangle},
+                            {label: "Properties...", onClick: handleProperties},
+                            {label: "Scale...", onClick: handleScale},
+                            {label: "Rotate...", onClick: handleRotate},
                             {label: "Translate..."}
                         ]}
                     ]}
@@ -99,10 +91,10 @@ const NavBar = () => {
                         {label: "Duplicate..."},
                         {label: "Rename"}, 
                         {label: "Zoom", subItems: [
-                            {label: "In (+)", onClick: handleZoomIn},
-                            {label: "Out (-)", onClick: handleZoomOut},
-                            {label: "To Selection", onClick: handleZoomToSelection},
-                            {label: "Scale to Fit", onClick: handleScaleToFit}
+                            {label: "In (+)"},
+                            {label: "Out (-)"},
+                            {label: "To Selection"},
+                            {label: "Scale to Fit"}
                         ]},
                         {label: "Transform", subItems: [
                             {label: "Flip"},
