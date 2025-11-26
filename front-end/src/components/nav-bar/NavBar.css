@@ -23,7 +23,8 @@ html {
     align-items: center; 
     gap: 10px;
     color: #8b4513;
-    margin-right: 40px;
+    margin-right: 24px;
+    flex: 0 0 auto; 
 }
 
 #navbar-icon {
@@ -49,6 +50,8 @@ html {
     display: flex;
     list-style: none;
     gap: 20px;
+    flex: 1 1 auto;
+    min-width: 0;  
 }
 
 #navbar-menu li {
@@ -72,10 +75,18 @@ html {
     border-radius: 4px;
 }
 
+#navbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 0 0 auto;
+}
+
 .navbar-menu-item {
     display: flex;
     align-items: center;
     color: #000;
+    flex: 0 0 auto;
 }
 
 .menu-icon {
@@ -93,5 +104,4 @@ html {
     line-height: 48px; 
     padding: 0 10px;
 }
-
 

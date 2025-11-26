@@ -10,10 +10,8 @@ type BrushOverlayWithCommitProps = BrushOverlayProps & {
 const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithCommitProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize] = useState(8);
-
   const hasInitializedSize = useRef(false);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const hasDrawnRef = useRef(false);
@@ -25,14 +23,12 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
     if (!ctx) return;
   
     if (tool === 'brush') {
-      // Mỗi lần bật Brush: reset hoàn toàn overlay
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       hasInitializedSize.current = false;
       lastPosRef.current = null;
       hasDrawnRef.current = false;
       setIsDrawing(false);
     } else {
-      // Khi chuyển sang tool khác: cũng clear overlay cho chắc
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       hasInitializedSize.current = false;
       lastPosRef.current = null;
@@ -84,10 +80,8 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
     if (!canvas) return { x: 0, y: 0 };
 
     const rect = canvas.getBoundingClientRect();
-
     const scaleX = canvas.width / rect.width || 1;
     const scaleY = canvas.height / rect.height || 1;
-
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
@@ -133,11 +127,9 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
 
   const endDrawing = () => {
     setIsDrawing(false);
-
     if (hasDrawnRef.current && canvasRef.current && onCommit) {
       onCommit(canvasRef.current);
     }
-
     lastPosRef.current = null;
     hasDrawnRef.current = false;
   };
