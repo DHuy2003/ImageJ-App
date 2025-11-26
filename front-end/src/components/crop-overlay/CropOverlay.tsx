@@ -9,7 +9,6 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
   const [action, setAction] = useState<null | "move" | "resize">(null);
   const [resizeDir, setResizeDir] = useState<string>("");
   const [startPos, setStartPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-
   const relBoxRef = useRef({ left: 0, top: 0, width: 1, height: 1 });
 
   useImperativeHandle(ref, () => ({

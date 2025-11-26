@@ -58,6 +58,7 @@ html {
   background-color: #fff;
   border: 2px solid #2f2e2e;
   border-radius: 8px;
+  min-height: 0;
 }
 
 #image-container #image-controls{
@@ -65,6 +66,7 @@ html {
   justify-content: space-between;
   align-items: center;
   padding: 10px 20px;
+  flex: 0 0 auto;
 }
 
 .image-controls-icon {
@@ -95,11 +97,17 @@ html {
   justify-content: center;
   align-items: center;
   position: relative;
+  flex: 1 1 0;    
+  min-height: 0;
+  overflow: hidden;
 }
 
 #image-display.show-mask-layout {
+  display: flex;
   flex-direction: row; 
-  gap: 10px; 
+  gap: 10px;
+  justify-content: center;
+  align-items: center; 
 }
 
 #image-display .small-image {
@@ -113,12 +121,15 @@ html {
 #image-display img {
   max-width: 100%; 
   max-height: 100%; 
+  width: auto;       
+  height: auto;      
   object-fit: contain; 
   border-radius: 10px;
-  box-shadow: 0 0 10px rgba(0,0,0,0.2);
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
 }
 
 #image-container p {
+  flex: 0 0 auto;
   text-align: center;
   font-size: 16px;
   font-weight: 500;

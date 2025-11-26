@@ -2,7 +2,6 @@ import Swal from "sweetalert2";
 import { showSelectionRequired, type SelectedRoiInfo } from "../../types/roi";
 
 let currentSelection: SelectedRoiInfo = null;
-
 if (typeof window !== "undefined" && !(window as any).__editUtilsRoiListenerAttached) {
   const handler = (e: Event) => {
     const ce = e as CustomEvent<{
@@ -243,16 +242,18 @@ export const handleProperties = () => {
   
     const { type, x, y, width, height } = currentSelection;
     const fmt = (v: number) => v.toFixed(2);
+    const xmin = x;
+    const ymin = y;
+    const xmax = x + width;
+    const ymax = y + height;
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
   
     if (type === "circle") {
         const diameterX = width;
         const diameterY = height;
         const diameter = (diameterX + diameterY) / 2;
         const radius = diameter / 2;
-    
-        const centerX = x + width / 2;
-        const centerY = y + height / 2;
-    
         const areaCircle = Math.PI * radius * radius;
     
         Swal.fire({
@@ -260,19 +261,27 @@ export const handleProperties = () => {
             html: `
                 <div style="text-align:left; font-family:monospace; line-height:1.55; font-size:17px;">
 
-                <p style="font-size:18px; font-weight:600;"><b>Type:</b> Circle</p>
-                <hr style="margin:10px 0;"/>
+                    <p style="font-size:18px; font-weight:600;"><b>Type:</b> Circle</p>
+                    <hr style="margin:10px 0;"/>
 
-                <p style="font-size:18px; font-weight:600;">Center (px)</p>
-                <p>Xc: <b>${fmt(centerX)}</b></p>
-                <p>Yc: <b>${fmt(centerY)}</b></p>
+                    <p style="font-size:18px; font-weight:600;">Center (px)</p>
+                    <p>Xc: <b>${fmt(centerX)}</b></p>
+                    <p>Yc: <b>${fmt(centerY)}</b></p>
 
-                <hr style="margin:14px 0;"/>
+                    <hr style="margin:14px 0;"/>
 
-                <p style="font-size:18px; font-weight:600;">Geometry</p>
-                <p>Radius: <b>${fmt(radius)}</b> px</p>
-                <p>Diameter: <b>${fmt(diameter)}</b> px</p>
-                <p>Area: <b>${fmt(areaCircle)}</b> px²</p>
+                    <p style="font-size:18px; font-weight:600;">Bounding box (px)</p>
+                    <p>xmin: <b>${fmt(xmin)}</b></p>
+                    <p>ymin: <b>${fmt(ymin)}</b></p>
+                    <p>xmax: <b>${fmt(xmax)}</b></p>
+                    <p>ymax: <b>${fmt(ymax)}</b></p>
+
+                    <hr style="margin:14px 0;"/>
+
+                    <p style="font-size:18px; font-weight:600;">Geometry</p>
+                    <p>Radius: <b>${fmt(radius)}</b> px</p>
+                    <p>Diameter: <b>${fmt(diameter)}</b> px</p>
+                    <p>Area: <b>${fmt(areaCircle)}</b> px²</p>
 
                 </div>
             `,
@@ -292,9 +301,17 @@ export const handleProperties = () => {
                 <p style="font-size:18px; font-weight:600;"><b>Type:</b> Rectangle</p>
                 <hr style="margin:10px 0;"/>
 
-                <p style="font-size:18px; font-weight:600;">Location (px)</p>
-                <p>X: <b>${fmt(x)}</b></p>
-                <p>Y: <b>${fmt(y)}</b></p>
+                <p style="font-size:18px; font-weight:600;">Center (px)</p>
+                <p>Xc: <b>${fmt(centerX)}</b></p>
+                <p>Yc: <b>${fmt(centerY)}</b></p>
+
+                <hr style="margin:14px 0;"/>
+
+                <p style="font-size:18px; font-weight:600;">Bounding box (px)</p>
+                <p>xmin: <b>${fmt(xmin)}</b></p>
+                <p>ymin: <b>${fmt(ymin)}</b></p>
+                <p>xmax: <b>${fmt(xmax)}</b></p>
+                <p>ymax: <b>${fmt(ymax)}</b></p>
 
                 <hr style="margin:14px 0;"/>
 
@@ -309,5 +326,6 @@ export const handleProperties = () => {
         confirmButtonColor: "#3085d6",
     });
 };
-  
+
+
 

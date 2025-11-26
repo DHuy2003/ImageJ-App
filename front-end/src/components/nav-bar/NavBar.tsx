@@ -139,16 +139,17 @@ const NavBar = () => {
 
             <div className="divider"></div>
                 
-            <div className="navbar-menu-item">
-                <BarChart3 className="menu-icon" ></BarChart3>
-                <a href="#">Result</a>
-            </div>
+            <div id="navbar-right">
+                <div className="navbar-menu-item">
+                    <BarChart3 className="menu-icon" />
+                    <a href="#">Result</a>
+                </div>
 
-            <div className="navbar-menu-item">
-                <Search className="menu-icon"></Search>
-                <a href="#">Article</a>
+                <div className="navbar-menu-item">
+                    <Search className="menu-icon" />
+                    <a href="#">Article</a>
+                </div>
             </div>
-            
         </div>
 
     );
