@@ -6,6 +6,7 @@ import {
     handleOpen, 
     handleOpenFolder, 
     handleOpenMaskFolder,
+    handleCreateMask,
     handleRevert,
     handleClose, 
     handleCloseAll, 
@@ -28,7 +29,7 @@ import {
     handleFitRectangle,
     handleScale,
     handleRotate,
-    handleProperties,
+    handleProperties
 } from "../../utils/nav-bar/editUtils";
 
 import {
@@ -55,6 +56,7 @@ const NavBar = () => {
                         {label: "Open", onClick: () => handleOpen(navigate)},
                         {label: "Open Folder", onClick: () => handleOpenFolder(navigate)},
                         {label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate)},
+                        {label: "Create Mask", onClick: handleCreateMask},
                         { label: "Revert", onClick: handleRevert},
                         { label: "Close", onClick: handleClose},
                         { label: "Close All", onClick: handleCloseAll},

@@ -6,6 +6,7 @@ from app.services.image_file_services import (
     upload_mask_images,
     save_image,
     update_edited_image,
+    update_mask_image,
     revert_image,
     delete_image,
     cleanup_folders,
@@ -139,6 +140,23 @@ def upload_edited_image(image_id):
         }), 200
     except Exception as e:
         print(f"Error saving edited image: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
+@image_file_bp.route('/update-mask/<int:image_id>', methods=['POST'])
+@cross_origin()
+def upload_mask_image(image_id):
+    if "mask" not in request.files:
+        return jsonify({"error": "No mask image uploaded"}), 400
+
+    mask_image = request.files["mask"]
+    try:
+        info = update_mask_image(mask_image, image_id)
+        return jsonify({
+            "message": "Mask image saved successfully",
+            "image": info
+        }), 200
+    except Exception as e:
+        print(f"Error saving mask image: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
 @image_file_bp.route('/revert/<int:image_id>', methods=['POST'])
