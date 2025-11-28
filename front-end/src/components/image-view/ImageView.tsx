@@ -13,6 +13,8 @@ import useFileEvents from './hooks/useFileEvents';
 import BrushOverlay from '../brush-overlay/BrushOverlay';
 import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
 
+const ZOOM_FACTOR = 1.25; // Tỉ lệ phóng to/thu nhỏ
+const DEFAULT_ZOOM_LEVEL = 1.0;
 
 const ImageView = ({ imageArray }: ImageViewProps) => {
   const [visibleImages, setVisibleImages] = useState<ImageInfo[]>(imageArray);
@@ -31,6 +33,48 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [undoStack, setUndoStack] = useState<UndoEntry[][]>(() =>
     imageArray.map(() => [] as UndoEntry[]),
   );
+  const [zoomLevel, setZoomLevel] = useState<number>(DEFAULT_ZOOM_LEVEL);
+  const [scaleToFit, setScaleToFit] = useState<boolean>(true);
+
+  useEffect(() => {
+    const handleZoomInEvent = () => {
+      setScaleToFit(false);
+      setZoomLevel(prev => {
+        const nextZoom = prev * ZOOM_FACTOR;
+        return Math.min(nextZoom, 32.0);
+      });
+    };
+
+
+    const handleZoomOutEvent = () => {
+      setScaleToFit(false);
+      setZoomLevel(prev => {
+        const nextZoom = prev / ZOOM_FACTOR;
+        return Math.max(nextZoom, 0.1);
+      });
+    };
+
+
+    const handleScaleToFitEvent = () => {
+      setScaleToFit(prev => {
+        if (!prev) {
+          setZoomLevel(DEFAULT_ZOOM_LEVEL);
+        }
+        return !prev;
+      });
+    };
+    window.addEventListener('imageZoomIn', handleZoomInEvent);
+    window.addEventListener('imageZoomOut', handleZoomOutEvent);
+    window.addEventListener('imageScaleToFit', handleScaleToFitEvent);
+
+
+    return () => {
+      window.removeEventListener('imageZoomIn', handleZoomInEvent);
+      window.removeEventListener('imageZoomOut', handleZoomOutEvent);
+      window.removeEventListener('imageScaleToFit', handleScaleToFitEvent);
+    };
+  }, []);
+
   
   const pushUndo = () => {
     if (!currentImageURL || !currentFile) return;
@@ -393,14 +437,22 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           className={showMask ? 'show-mask-layout' : ''}
         >
           {currentImageURL && (
-            <img
-              ref={imgRef}
-              crossOrigin="anonymous"
-              referrerPolicy="no-referrer"
-              src={currentImageURL}
-              alt={currentFile?.filename}
-              className={showMask ? 'small-image' : ''}
-            />
+            <div id="image-wrapper">
+              <img
+                ref={imgRef}
+                crossOrigin="anonymous"
+                referrerPolicy="no-referrer"
+                src={currentImageURL}
+                alt={currentFile?.filename}
+                className={showMask ? 'small-image' : ''}
+                style={{
+                  transform: scaleToFit ? 'none' : `scale(${zoomLevel})`,
+                  maxWidth: scaleToFit ? '100%' : 'none',
+                  maxHeight: scaleToFit ? '100%' : 'none',
+                  transformOrigin: 'center center',
+                }}
+              />
+            </div>
           )}
 
           {showMask && currentFile?.mask_url && (

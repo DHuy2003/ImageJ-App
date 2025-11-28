@@ -1,5 +1,5 @@
 export const TOOLBAR_EVENT_NAME = 'toolbar-action';
-export type ToolbarTool = 'pointer' | 'rect' | 'circle' | 'brush';
+export type ToolbarTool = 'pointer' | 'rect' | 'circle' | 'hand' | 'brush';
 
 export type ToolbarAction =
   | { type: 'SET_TOOL'; tool: ToolbarTool }
@@ -9,37 +9,37 @@ let currentTool: ToolbarTool = 'pointer';
 export const getCurrentToolbarTool = () => currentTool;
 
 export const emitToolbarAction = (action: ToolbarAction) => {
-    if (action.type === 'SET_TOOL') {
-      currentTool = action.tool;
-    }
-  
-    window.dispatchEvent(
-      new CustomEvent<ToolbarAction>(TOOLBAR_EVENT_NAME, {
-        detail: action,
-      }),
-    );
+  if (action.type === 'SET_TOOL') {
+    currentTool = action.tool;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<ToolbarAction>(TOOLBAR_EVENT_NAME, {
+      detail: action,
+    }),
+  );
 };
 
 export const handleMousePointerClick = () => {
-    emitToolbarAction({ type: 'SET_TOOL', tool: 'pointer' });
-    const clearSelectionEvent = new CustomEvent('editSelectNone');
-    window.dispatchEvent(clearSelectionEvent);
+  emitToolbarAction({ type: 'SET_TOOL', tool: 'pointer' });
+  const clearSelectionEvent = new CustomEvent('editSelectNone');
+  window.dispatchEvent(clearSelectionEvent);
 };
-  
+
 export const handleSquareClick = () => {
-    emitToolbarAction({ type: 'SET_TOOL', tool: 'rect' });
+  emitToolbarAction({ type: 'SET_TOOL', tool: 'rect' });
 };
-  
+
 export const handleCircleClick = () => {
-    emitToolbarAction({ type: 'SET_TOOL', tool: 'circle' });
-};  
+  emitToolbarAction({ type: 'SET_TOOL', tool: 'circle' });
+};
 
 let isPanMode = false;
 export const handleHandClick = () => {
-    isPanMode = !isPanMode;
-    emitToolbarAction({ type: 'PAN_MODE', enabled: isPanMode });
+  isPanMode = !isPanMode;
+  emitToolbarAction({ type: 'PAN_MODE', enabled: isPanMode });
 };
 
 export const handleBrushClick = () => {
-    emitToolbarAction({ type: 'SET_TOOL', tool: 'brush' });
+  emitToolbarAction({ type: 'SET_TOOL', tool: 'brush' });
 };
