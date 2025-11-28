@@ -161,6 +161,11 @@ export const handleOpenMaskFolder = async (navigate: NavigateFunction) => {
   }
 };
 
+export const handleCreateMask = () => {
+  const event = new CustomEvent('createMask');
+  window.dispatchEvent(event);
+};
+
 export const handleRevert = () => {
     dispatchFileMenuAction('REVERT');
 };

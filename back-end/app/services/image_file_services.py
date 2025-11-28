@@ -254,6 +254,41 @@ def update_edited_image(image_file, image_id):
         "edited_url": edited_url,
     }
 
+def update_mask_image(mask_file, image_id):
+    img_record = ImageModel.query.get(image_id)
+    if not img_record:
+        raise ValueError(f"Image with id {image_id} not found")
+
+    stem = Path(img_record.filename).stem if img_record.filename else f"image_{image_id}"
+    mask_filename = f"{stem}_mask.png"
+    output_path = os.path.join(MASK_FOLDER, mask_filename)
+
+    img = PILImage.open(mask_file)
+    # mask có thể là L hoặc RGB, convert nếu cần
+    if img.mode not in ["L", "RGB", "RGBA"]:
+        img = img.convert("L")
+    img.save(output_path, "PNG")
+
+    img_record.mask_filename = mask_filename
+    img_record.mask_filepath = output_path
+    # status: nếu đã có filename thì có thể là 'original' hoặc 'edited', tuỳ em
+    if img_record.filename and img_record.status == "mask_only":
+        img_record.status = "original"
+    db.session.commit()
+
+    mask_url = url_for(
+        'image_file_bp.get_mask_image',
+        filename=mask_filename,
+        _external=True
+    )
+
+    return {
+        "id": img_record.id,
+        "mask_filepath": img_record.mask_filepath,
+        "mask_url": mask_url,
+        "mask_filename": img_record.mask_filename,
+    }
+
 def get_all_images():
     images = ImageModel.query.filter(ImageModel.filename.isnot(None)).all()
     image_list = []
