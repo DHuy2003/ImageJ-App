@@ -170,7 +170,7 @@ def upload_cell_images(images):
         try:
             cell_image_info = process_and_save_image(image, CONVERTED_FOLDER)
             cell_image_info["url"] = url_for(
-                'image_file_bp.get_converted_image',
+                'image_bp.get_converted_image',
                 filename=cell_image_info['converted_filename'],
                 _external=True
             )
@@ -202,12 +202,12 @@ def upload_mask_images(images):
                     if linked_image_record.filename:
                         cell_converted_filename = os.path.splitext(linked_image_record.filename)[0] + '.png'
                         mask_info["url"] = url_for(
-                            'image_file_bp.get_converted_image',
+                            'image_bp.get_converted_image',
                             filename=cell_converted_filename,
                             _external=True
                         )
                     mask_info["mask_url"] = url_for(
-                        'image_file_bp.get_mask_image',
+                        'image_bp.get_mask_image',
                         filename=linked_image_record.mask_filename,
                         _external=True
                     )
@@ -223,7 +223,7 @@ def upload_mask_images(images):
             })
     return uploaded_masks_info
 
-def update_edited_image(image_file, image_id):
+def update_edited_image(image, image_id):
     img_record = ImageModel.query.get(image_id)
     if not img_record:
         raise ValueError(f"Image with id {image_id} not found")
@@ -232,7 +232,7 @@ def update_edited_image(image_file, image_id):
     edited_filename = f"{stem}_edited.png"
     output_path = os.path.join(EDITED_FOLDER, edited_filename)
 
-    img = PILImage.open(image_file)
+    img = PILImage.open(image)
     if img.mode not in ["RGB", "RGBA", "L"]:
         img = img.convert("RGB")
     img.save(output_path, "PNG")
@@ -243,7 +243,7 @@ def update_edited_image(image_file, image_id):
     db.session.commit()
 
     edited_url = url_for(
-        'image_file_bp.get_edited_image',
+        'image_bp.get_edited_image',
         filename=edited_filename,
         _external=True
     )
@@ -264,20 +264,18 @@ def update_mask_image(mask_file, image_id):
     output_path = os.path.join(MASK_FOLDER, mask_filename)
 
     img = PILImage.open(mask_file)
-    # mask có thể là L hoặc RGB, convert nếu cần
     if img.mode not in ["L", "RGB", "RGBA"]:
         img = img.convert("L")
     img.save(output_path, "PNG")
 
     img_record.mask_filename = mask_filename
     img_record.mask_filepath = output_path
-    # status: nếu đã có filename thì có thể là 'original' hoặc 'edited', tuỳ em
     if img_record.filename and img_record.status == "mask_only":
         img_record.status = "original"
     db.session.commit()
 
     mask_url = url_for(
-        'image_file_bp.get_mask_image',
+        'image_bp.get_mask_image',
         filename=mask_filename,
         _external=True
     )
@@ -303,7 +301,7 @@ def get_all_images():
             if img_db.filename:
                 converted_filename = os.path.splitext(img_db.filename)[0] + '.png'
                 original_url = url_for(
-                    'image_file_bp.get_converted_image',
+                    'image_bp.get_converted_image',
                     filename=converted_filename,
                     _external=True
                 )
@@ -312,14 +310,14 @@ def get_all_images():
                 edited_filename = os.path.basename(img_db.edited_filepath)
                 if os.path.exists(img_db.edited_filepath):
                     edited_url = url_for(
-                        'image_file_bp.get_edited_image',
+                        'image_bp.get_edited_image',
                         filename=edited_filename,
                         _external=True
                     )
 
             if img_db.mask_filename:
                 mask_url = url_for(
-                    'image_file_bp.get_mask_image',
+                    'image_bp.get_mask_image',
                     filename=img_db.mask_filename,
                     _external=True
                 )
@@ -451,14 +449,14 @@ def revert_image(image_id):
     if img_db.filename:
         converted_filename = os.path.splitext(img_db.filename)[0] + '.png'
         original_url = url_for(
-            'image_file_bp.get_converted_image',
+            'image_bp.get_converted_image',
             filename=converted_filename,
             _external=True
         )
 
     if img_db.mask_filename:
         mask_url = url_for(
-            'image_file_bp.get_mask_image',
+            'image_bp.get_mask_image',
             filename=img_db.mask_filename,
             _external=True
         )

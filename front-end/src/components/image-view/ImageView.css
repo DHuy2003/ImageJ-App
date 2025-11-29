@@ -139,6 +139,14 @@ html {
   border-radius: 10px;
 }
 
+#image-wrapper.pan-mode {
+  cursor: url('/images/hand.png'), grab;
+}
+
+#image-wrapper.pan-mode.pan-active {
+  cursor: grabbing;
+}
+
 #image-container p {
   flex: 0 0 auto;
   text-align: center;

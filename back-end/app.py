@@ -1,6 +1,6 @@
 from app import create_app
 import atexit
-from app.services.image_file_services import cleanup_folders, cleanup_database
+from app.services.image_services import cleanup_folders, cleanup_database
 from app.extensions import db
 
 app = create_app()

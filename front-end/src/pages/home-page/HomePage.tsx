@@ -1,5 +1,5 @@
 import './HomePage.css';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate} from 'react-router-dom';
 import { useEffect } from 'react';
 import { uploadCellImages } from '../../utils/common/uploadImages';
 import axios from 'axios';
@@ -8,16 +8,6 @@ const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
 const HomePage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const isNewWindow = searchParams.get("newWindow") === "true";
-
-  useEffect(() => {
-    if (isNewWindow) {
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('newWindow');
-      window.history.replaceState({}, '', newUrl);
-    }
-  }, [isNewWindow]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
