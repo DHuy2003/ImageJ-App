@@ -15,12 +15,6 @@ type UseEditEventsParams = {
   setIsCropping: (value: boolean) => void;
   setVisibleImages: React.Dispatch<React.SetStateAction<ImageInfo[]>>;
 }
-/**
- * Hook này ONLY xử lý:
- *  - enableCropMode  (Cut)
- *  - editClear / editClearOutside / editFill / editInvert / editDraw / editRotate
- * Tất cả các event này đều được dispatch từ editUtils.ts
- */
 
 const useEditEvents = ({
   imgRef,
