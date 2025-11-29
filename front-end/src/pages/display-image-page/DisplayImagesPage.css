@@ -8,6 +8,15 @@ html {
     font-family: Arial, Helvetica, sans-serif;
 }
 
+.display-images-page {
+    background-color: white; 
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 #no-image{
     height: 100vh;
     display: flex;
