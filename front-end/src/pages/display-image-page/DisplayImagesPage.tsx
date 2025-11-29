@@ -48,19 +48,19 @@ const DisplayImagesPage = () => {
 
   if (loading) {
     return (
-      <>
+      <div className="display-images-page">
         <NavBar />
         <ToolBar />
         <div id="no-image">
           <h2 id="no-image-mess">Loading images...</h2>
         </div>
-      </>
+      </div>
     );
   }
-
+  
   if (error || !imageArray || imageArray.length === 0) {
     return (
-      <>
+      <div className="display-images-page">
         <NavBar />
         <ToolBar />
         <div id="no-image">
@@ -69,16 +69,16 @@ const DisplayImagesPage = () => {
           </h2>
           <FaFileCircleXmark id='no-image-icon' />          
         </div>
-      </>
+      </div>
     );
   }
-
+  
   return (
-    <>
+    <div className="display-images-page">
       <NavBar />
       <ToolBar />
       <ImageView imageArray={imageArray} />
-    </>
+    </div>
   );
 };
 
