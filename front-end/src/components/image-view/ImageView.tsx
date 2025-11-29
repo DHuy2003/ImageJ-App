@@ -2,21 +2,23 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { CropOverlayHandle, RelativeCropRect } from '../../types/crop';
 import type { ImageInfo, ImageViewProps } from '../../types/image';
+import { type RoiTool } from '../../types/roi';
 import { formatFileSize } from '../../utils/common/formatFileSize';
+import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
+import { analyzeImageHistogram, processBrightnessContrast } from '../../utils/nav-bar/imageUtils'; // Import helpers
+import BrushOverlay from '../brush-overlay/BrushOverlay';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
-import { type RoiTool } from '../../types/roi';
 import './ImageView.css';
-import useEditEvents from './hooks/useEditEvents';
-import { useToolbarToolSelection } from './hooks/useToolbarToolSelection';
-import useFileEvents from './hooks/useFileEvents';
-import BrushOverlay from '../brush-overlay/BrushOverlay';
-import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
-import usePanMode from './hooks/usePanMode';
-import useUndoStack from './hooks/useUndoStack';
-import useMaskCreation from './hooks/useMaskCreation';
-import useRoiSelection from './hooks/useRoiSelection';
+import BrightnessContrastDialog from './dialogs/BrightContrast';
 import useBrushCommit from './hooks/useBrushCommit';
+import useEditEvents from './hooks/useEditEvents';
+import useFileEvents from './hooks/useFileEvents';
+import useMaskCreation from './hooks/useMaskCreation';
+import usePanMode from './hooks/usePanMode';
+import useRoiSelection from './hooks/useRoiSelection';
+import { useToolbarToolSelection } from './hooks/useToolbarToolSelection';
+import useUndoStack from './hooks/useUndoStack';
 
 const ZOOM_FACTOR = 1.25; // Tỉ lệ phóng to/thu nhỏ
 const DEFAULT_ZOOM_LEVEL = 1.0;
@@ -39,7 +41,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [scaleToFit, setScaleToFit] = useState<boolean>(true);
   const [panMode, setPanMode] = useState<boolean>(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-
+  const [showBC, setShowBC] = useState(false);
+  const [displayRange, setDisplayRange] = useState({ min: 0, max: 255 });
+  const [originalImageData, setOriginalImageData] = useState<ImageData | null>(null);
+  const [histogramData, setHistogramData] = useState<number[]>([]);
   const { pushUndo } = useUndoStack({
     visibleImages,
     currentIndex,
@@ -51,7 +56,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
   const {
     pan,
-    cursor,    
+    cursor,
     isPanning,
     handleMouseDown: handlePanMouseDown,
     handleMouseMove: handlePanMouseMove,
@@ -203,7 +208,119 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setShowMask((prev) => !prev);
     setShowProperties((prev) => !prev);
   };
-  
+
+  //New
+  const getImageData = (): { ctx: CanvasRenderingContext2D, imageData: ImageData, canvas: HTMLCanvasElement } | null => {
+    if (!imgRef.current) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = imgRef.current.naturalWidth;
+    canvas.height = imgRef.current.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(imgRef.current, 0, 0);
+    return { ctx, imageData: ctx.getImageData(0, 0, canvas.width, canvas.height), canvas };
+  };
+
+  // --- Update Image Source from Canvas ---
+  const updateImageFromCanvas = (canvas: HTMLCanvasElement, saveToHistory: boolean = true) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const newUrl = URL.createObjectURL(blob);
+
+      if (saveToHistory) {
+        pushUndo();
+      }
+
+      setCurrentImageURL(newUrl);
+    });
+  };
+
+  const handleOpenBCEvent = () => {
+        const dataObj = getImageData();
+        if (dataObj) {
+            setOriginalImageData(dataObj.imageData);
+            const { bins } = analyzeImageHistogram(dataObj.imageData);
+            setHistogramData(bins);
+            setShowBC(true);
+        }
+    };
+
+  // 2. Preview thay đổi (Vẽ lên Canvas nhưng không lưu History)
+  const applyVisualChanges = (min: number, max: number) => {
+    if (!originalImageData) return;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = originalImageData.width;
+    tempCanvas.height = originalImageData.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clone dữ liệu gốc
+    const freshData = new ImageData(
+      new Uint8ClampedArray(originalImageData.data),
+      originalImageData.width,
+      originalImageData.height
+    );
+
+    // Tính toán pixel mới
+    const processed = processBrightnessContrast(freshData, min, max);
+    ctx.putImageData(processed, 0, 0);
+
+    // Update lên màn hình (tham số false = không push Undo)
+    updateImageFromCanvas(tempCanvas, false);
+  };
+
+  // 3. Khi người dùng thay đổi Slider (Bất kỳ slider nào từ Dialog)
+  const handleBCChange = (newMin: number, newMax: number) => {
+    // Cập nhật State (để Dialog hiển thị đúng số)
+    setDisplayRange({ min: newMin, max: newMax });
+    // Cập nhật hình ảnh
+    applyVisualChanges(newMin, newMax);
+  };
+
+  // 4. Auto
+  const handleBCAuto = () => {
+    if (!originalImageData) return;
+    // Dùng hàm phân tích mới để lấy min/max thực tế
+    const { min, max } = analyzeImageHistogram(originalImageData);
+    handleBCChange(min, max);
+  };
+
+  // 5. Reset (Về 0-255)
+  const handleBCReset = () => {
+    handleBCChange(0, 255);
+  };
+
+  // 6. Apply (Chốt đơn)
+  const handleBCApply = () => {
+    // Vẽ lần cuối
+    applyVisualChanges(displayRange.min, displayRange.max);
+
+    // Lưu vào Undo History (Lúc này ảnh trên màn hình đã thành ảnh gốc mới)
+    pushUndo();
+
+    // Reset thông số hiển thị về mặc định vì pixel đã bị thay đổi vĩnh viễn
+    setDisplayRange({ min: 0, max: 255 });
+    setOriginalImageData(null);
+    setShowBC(false);
+  };
+
+  // 7. Đóng (Hủy, nhưng giữ hiển thị preview - Non-destructive viewing)
+  const handleBCClose = () => {
+    setShowBC(false);
+    // Nếu muốn khi đóng mà hủy bỏ thay đổi (như nút Cancel), gọi handleBCReset() ở đây.
+    // Nhưng ImageJ thường giữ nguyên view (non-destructive).
+  };
+
+  useEffect(() => {
+    window.addEventListener('openBrightnessContrast', handleOpenBCEvent);
+    return () => {
+      window.removeEventListener('openBrightnessContrast', handleOpenBCEvent);
+    };
+  }, [currentImageURL]); // Re-bind khi URL đổi
+
+
+
   return (
     <div id="image-view">
       {currentFile && showProperties && (
@@ -217,6 +334,17 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         </div>
       )}
 
+      <BrightnessContrastDialog
+        isOpen={showBC}
+        onClose={handleBCClose}
+        onApply={handleBCApply}
+        onChange={handleBCChange}
+        onReset={handleBCReset}
+        onAuto={handleBCAuto}
+        currentMin={displayRange.min}
+        currentMax={displayRange.max}
+        histogram={histogramData}
+      />
       <div id="image-container">
         <div id="image-controls">
           <button className="image-controls-btn" onClick={handlePrev} disabled={currentIndex === 0 || visibleImages.length <= 1}>
@@ -238,12 +366,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           </button>
         </div>
 
-        <div 
-          id="image-display" 
+        <div
+          id="image-display"
           className={showMask ? 'show-mask-layout' : ''}
         >
           {currentImageURL && (
-            <div 
+            <div
               id="image-wrapper"
               ref={wrapperRef}
               onMouseDown={handlePanMouseDown}

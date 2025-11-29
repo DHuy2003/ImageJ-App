@@ -36,6 +36,7 @@ import {
     handleZoomIn,
     handleZoomOut,
     handleScaleToFit,
+    handleOpenBrightnessContrast
 } from "../../utils/nav-bar/imageUtils";
 
 const NavBar = () => {
@@ -93,7 +94,12 @@ const NavBar = () => {
                 <DropdownMenu 
                     label="Image" 
                     items={[
-                        {label: "Type"},
+                        {label: "Type", subItems: [
+                            {label: "8-bit"},
+                            {label: "16-bit"},
+                            {label: "32-bit"},
+                            {label: "RGB Color"},
+                        ]},
                         {label: "Color"},
                         {label: "Show Info..."},
                         {label: "Duplicate..."},
@@ -110,7 +116,7 @@ const NavBar = () => {
                         ]}, 
                         {label: "Adjust", subItems: [
                             {label: "Size"},
-                            {label: "Brightness/Contrast..."},
+                            {label: "Brightness/Contrast...", onClick: handleOpenBrightnessContrast},
                             {label: "Color Balance..."},
                             {label: "Threshold..."}
                         ]}
