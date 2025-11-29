@@ -227,7 +227,7 @@ def reset_dataset():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/segmentation/<int:image_id>', methods=['POST'])
+@image_bp.route('/segmentation/<int:image_id>', methods=['POST'])
 @cross_origin()
 def segment_single_image(image_id):
     """Chạy Cellpose segmentation cho một ảnh"""
@@ -244,7 +244,7 @@ def segment_single_image(image_id):
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/segmentation/batch', methods=['POST'])
+@image_bp.route('/segmentation/batch', methods=['POST'])
 @cross_origin()
 def segment_batch_images():
     """Chạy Cellpose segmentation cho nhiều ảnh hoặc tất cả ảnh chưa có mask"""
@@ -264,7 +264,7 @@ def segment_batch_images():
 
 # ============ Cell Features Routes ============
 
-@image_file_bp.route('/features', methods=['GET'])
+@image_bp.route('/features', methods=['GET'])
 @cross_origin()
 def get_features():
     """Get all cell features"""
@@ -279,7 +279,7 @@ def get_features():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/features/<int:image_id>', methods=['GET'])
+@image_bp.route('/features/<int:image_id>', methods=['GET'])
 @cross_origin()
 def get_image_features(image_id):
     """Get cell features for a specific image"""
@@ -295,7 +295,7 @@ def get_image_features(image_id):
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/features/extract/<int:image_id>', methods=['POST'])
+@image_bp.route('/features/extract/<int:image_id>', methods=['POST'])
 @cross_origin()
 def extract_image_features(image_id):
     """Extract features from mask for a single image"""
@@ -314,7 +314,7 @@ def extract_image_features(image_id):
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/features/extract/batch', methods=['POST'])
+@image_bp.route('/features/extract/batch', methods=['POST'])
 @cross_origin()
 def extract_batch_features():
     """Extract features for multiple images or all images with masks"""
@@ -332,7 +332,7 @@ def extract_batch_features():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/features/export', methods=['GET'])
+@image_bp.route('/features/export', methods=['GET'])
 @cross_origin()
 def export_features():
     """Export all features to CSV"""
@@ -350,7 +350,7 @@ def export_features():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/features/export/<int:image_id>', methods=['GET'])
+@image_bp.route('/features/export/<int:image_id>', methods=['GET'])
 @cross_origin()
 def export_image_features(image_id):
     """Export features for a specific image to CSV"""
@@ -370,7 +370,7 @@ def export_image_features(image_id):
 
 # ============ Cell Tracking Routes ============
 
-@image_file_bp.route('/tracking/run-gnn', methods=['POST'])
+@image_bp.route('/tracking/run-gnn', methods=['POST'])
 @cross_origin()
 def run_gnn_tracking():
     """Run GNN-based cell tracking using cell-tracker-gnn"""
@@ -386,7 +386,7 @@ def run_gnn_tracking():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/tracking/tracks', methods=['GET'])
+@image_bp.route('/tracking/tracks', methods=['GET'])
 @cross_origin()
 def get_tracks():
     """Get all track summaries"""
@@ -401,7 +401,7 @@ def get_tracks():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/tracking/tracks/<int:track_id>', methods=['GET'])
+@image_bp.route('/tracking/tracks/<int:track_id>', methods=['GET'])
 @cross_origin()
 def get_single_track(track_id):
     """Get all cells for a specific track"""
@@ -417,7 +417,7 @@ def get_single_track(track_id):
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/tracking/export', methods=['GET'])
+@image_bp.route('/tracking/export', methods=['GET'])
 @cross_origin()
 def export_tracking_csv():
     """Export tracking results to CSV"""
@@ -435,7 +435,7 @@ def export_tracking_csv():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/tracking/export-gnn', methods=['POST'])
+@image_bp.route('/tracking/export-gnn', methods=['POST'])
 @cross_origin()
 def export_for_gnn():
     """Export features in cell-tracker-gnn compatible format"""
@@ -455,7 +455,7 @@ def export_for_gnn():
 
 # ============ Cell Clustering Routes ============
 
-@image_file_bp.route('/clustering/features', methods=['GET'])
+@image_bp.route('/clustering/features', methods=['GET'])
 @cross_origin()
 def get_clustering_features():
     """Get list of available features for clustering"""
@@ -469,7 +469,7 @@ def get_clustering_features():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/clustering/run', methods=['POST'])
+@image_bp.route('/clustering/run', methods=['POST'])
 @cross_origin()
 def run_clustering():
     """Run full clustering pipeline (GMM + HMM)"""
@@ -494,7 +494,7 @@ def run_clustering():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/clustering/gmm', methods=['POST'])
+@image_bp.route('/clustering/gmm', methods=['POST'])
 @cross_origin()
 def run_gmm_only():
     """Run GMM clustering only"""
@@ -517,7 +517,7 @@ def run_gmm_only():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/clustering/hmm', methods=['POST'])
+@image_bp.route('/clustering/hmm', methods=['POST'])
 @cross_origin()
 def run_hmm_only():
     """Run HMM smoothing on existing GMM clusters"""
@@ -535,7 +535,7 @@ def run_hmm_only():
         return jsonify({"error": str(e)}), 500
 
 
-@image_file_bp.route('/clustering/results', methods=['GET'])
+@image_bp.route('/clustering/results', methods=['GET'])
 @cross_origin()
 def get_cluster_results():
     """Get current clustering results summary"""

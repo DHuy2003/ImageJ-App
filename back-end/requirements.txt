@@ -8,3 +8,6 @@ requests
 cellpose
 torch
 scikit-image
+scikit-learn
+hmmlearn
+scipy
