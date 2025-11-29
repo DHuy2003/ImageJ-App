@@ -490,6 +490,23 @@ html {
   display: block;
 }
 
+#image-wrapper.pan-mode {
+  cursor: url('/images/hand.png'), grab;
+}
+
+#image-wrapper.pan-mode.pan-active {
+  cursor: grabbing;
+}
+
+#image-container p {
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 500;
+  color: black;
+  margin-top: 10px;
+}
+
 /* ============ Mask Wrapper ============ */
 .mask-wrapper {
   position: relative;

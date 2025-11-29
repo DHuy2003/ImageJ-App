@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, send_from_directory, Response, current_app
 from flask_cors import cross_origin
-from app.services.image_file_services import (
+from app.services.image_services import (
     get_all_images,
     upload_cell_images,
     upload_mask_images,
@@ -40,14 +40,14 @@ from app.services.clustering_services import (
 from app import config
 import os
 
-image_file_bp = Blueprint('image_file_bp', __name__)
+image_bp = Blueprint('image_bp', __name__)
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 CONVERTED_FOLDER = config.CONVERTED_FOLDER
 MASK_FOLDER = config.MASK_FOLDER
 EDITED_FOLDER = config.EDITED_FOLDER
 
-@image_file_bp.route('/uploads/<filename>')
+@image_bp.route('/uploads/<filename>')
 @cross_origin() 
 def get_origin_image(filename):
     try:
@@ -55,7 +55,7 @@ def get_origin_image(filename):
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
     
-@image_file_bp.route('/converted/<filename>')
+@image_bp.route('/converted/<filename>')
 @cross_origin() 
 def get_converted_image(filename):
     try:
@@ -63,7 +63,7 @@ def get_converted_image(filename):
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
 
-@image_file_bp.route('/masks/<filename>')
+@image_bp.route('/masks/<filename>')
 @cross_origin()  
 def get_mask_image(filename):
     try:
@@ -71,7 +71,7 @@ def get_mask_image(filename):
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
     
-@image_file_bp.route('/edited/<filename>')
+@image_bp.route('/edited/<filename>')
 @cross_origin()
 def get_edited_image(filename):
     try:
@@ -79,12 +79,12 @@ def get_edited_image(filename):
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
 
-@image_file_bp.route('/', methods=['GET'])
+@image_bp.route('/', methods=['GET'])
 def get_images():
     images = get_all_images()
     return jsonify({"images": images}), 200
 
-@image_file_bp.route('/upload-cells', methods=['POST'])
+@image_bp.route('/upload-cells', methods=['POST'])
 def upload_cells():
     if "images" not in request.files:
         return jsonify({"error": "No cell images uploaded"}), 400
@@ -97,7 +97,7 @@ def upload_cells():
         "images": uploaded_cells_info
     }), 200
 
-@image_file_bp.route('/upload-masks', methods=['POST'])
+@image_bp.route('/upload-masks', methods=['POST'])
 def upload_masks():
     if "masks" not in request.files:
         return jsonify({"error": "No mask images uploaded"}), 400
@@ -110,7 +110,7 @@ def upload_masks():
         "masks": uploaded_masks_info
     }), 200
 
-@image_file_bp.route('/save', methods=['POST'])
+@image_bp.route('/save', methods=['POST'])
 @cross_origin()
 def save_images():
     try:
@@ -150,7 +150,7 @@ def save_images():
         print(f"Error in save image: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@image_file_bp.route('/update/<int:image_id>', methods=['POST'])
+@image_bp.route('/update/<int:image_id>', methods=['POST'])
 @cross_origin()
 def upload_edited_image(image_id):
     if "edited" not in request.files:
@@ -167,7 +167,7 @@ def upload_edited_image(image_id):
         print(f"Error saving edited image: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
-@image_file_bp.route('/update-mask/<int:image_id>', methods=['POST'])
+@image_bp.route('/update-mask/<int:image_id>', methods=['POST'])
 @cross_origin()
 def upload_mask_image(image_id):
     if "mask" not in request.files:
@@ -184,7 +184,7 @@ def upload_mask_image(image_id):
         print(f"Error saving mask image: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
-@image_file_bp.route('/revert/<int:image_id>', methods=['POST'])
+@image_bp.route('/revert/<int:image_id>', methods=['POST'])
 @cross_origin()
 def revert_single_image(image_id):
     try:
@@ -199,7 +199,7 @@ def revert_single_image(image_id):
         print(f"Error reverting image {image_id}: {e}")
         return jsonify({"error": "Failed to revert image"}), 500
     
-@image_file_bp.route('/delete/<int:image_id>', methods=['DELETE'])
+@image_bp.route('/delete/<int:image_id>', methods=['DELETE'])
 @cross_origin()
 def remove_image(image_id):
     try:
@@ -215,7 +215,7 @@ def remove_image(image_id):
         return jsonify({"error": "Failed to delete image"}), 500
 
 
-@image_file_bp.route('/reset', methods=['POST'])
+@image_bp.route('/reset', methods=['POST'])
 @cross_origin()
 def reset_dataset():
     try:

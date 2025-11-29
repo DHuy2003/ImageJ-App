@@ -13,6 +13,6 @@ def create_app():
 
     db.init_app(app)
 
-    from app.routes.image_file_routes import image_file_bp
-    app.register_blueprint(image_file_bp, url_prefix='/api/images')
+    from app.routes.image_routes import image_bp
+    app.register_blueprint(image_bp, url_prefix='/api/images')
     return app
