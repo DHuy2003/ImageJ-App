@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Play, Settings } from 'lucide-react';
 import axios from 'axios';
+import { TOOL_PROGRESS_EVENT, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
 import './ClusteringDialog.css';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
@@ -48,6 +49,10 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const dispatchProgress = (payload: ToolProgressPayload) => {
+        window.dispatchEvent(new CustomEvent(TOOL_PROGRESS_EVENT, { detail: payload }));
+    };
+
     const handleFeatureToggle = (featureKey: string) => {
         setSelectedFeatures(prev => {
             if (prev.includes(featureKey)) {
@@ -82,6 +87,13 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
         setError(null);
 
         try {
+            dispatchProgress({
+                open: true,
+                title: 'Đang chạy Clustering',
+                message: useHMM
+                    ? 'Đang chạy GMM và HMM smoothing...'
+                    : 'Đang chạy GMM clustering...'
+            });
             const response = await axios.post(`${API_BASE_URL}/clustering/run`, {
                 features: selectedFeatures,
                 n_components: nComponents === 'auto' ? null : nComponents,
@@ -104,6 +116,7 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
             setError(err.response?.data?.error || 'Clustering failed');
         } finally {
             setLoading(false);
+            dispatchProgress({ open: false });
         }
     };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { X, Download, TrendingUp, Activity, BarChart3, Target } from 'lucide-react';
 import './AnalysisResults.css';
@@ -7,6 +7,7 @@ const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
 interface CellFeature {
     id: number;
+    image_id?: number;
     cell_id: number;
     frame_num: number;
     track_id: number | null;
@@ -42,6 +43,11 @@ interface OverviewStats {
 interface ZScoreData {
     cluster: number;
     features: { [key: string]: number };
+}
+
+interface TransitionMatrix {
+    states: number[];
+    matrix: number[][];
 }
 
 interface AnalysisResultsProps {
@@ -88,7 +94,11 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         }
 
         const frames = [...new Set(data.map(d => d.frame_num))];
-        const tracks = [...new Set(data.filter(d => d.track_id !== null).map(d => d.track_id))];
+        const tracks = [...new Set(
+            data
+                .filter(d => d.track_id !== null || d.cell_id !== null)
+                .map(d => `${d.image_id ?? 'img'}-${d.track_id ?? `cell-${d.cell_id}`}`)
+        )];
         const areas = data.filter(d => d.area !== null).map(d => d.area as number);
 
         const avgArea = areas.length > 0 ? areas.reduce((a, b) => a + b, 0) / areas.length : 0;
@@ -161,6 +171,41 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         });
 
         setZScoreData(zScores.sort((a, b) => a.cluster - b.cluster));
+    };
+
+    const computeTransitionMatrix = (
+        data: CellFeature[],
+        stateKey: 'gmm_state' | 'hmm_state'
+    ): TransitionMatrix | null => {
+        const stateData = data.filter(d => (d as any)[stateKey] !== null && (d as any)[stateKey] !== undefined);
+        if (stateData.length === 0) return null;
+
+        const states = [...new Set(stateData.map(d => (d as any)[stateKey] as number))].sort((a, b) => a - b);
+        const indexMap = new Map(states.map((state, idx) => [state, idx]));
+        const matrix = Array.from({ length: states.length }, () => new Array(states.length).fill(0));
+
+        const tracks = new Map<number | string, CellFeature[]>();
+        stateData.forEach(item => {
+            const key = item.track_id ?? item.cell_id ?? `cell-${item.id}`;
+            if (!tracks.has(key)) {
+                tracks.set(key, []);
+            }
+            tracks.get(key)!.push(item);
+        });
+
+        tracks.forEach(items => {
+            const sorted = [...items].sort((a, b) => a.frame_num - b.frame_num);
+            for (let i = 1; i < sorted.length; i++) {
+                const prevState = (sorted[i - 1] as any)[stateKey];
+                const currState = (sorted[i] as any)[stateKey];
+                const fromIdx = indexMap.get(prevState);
+                const toIdx = indexMap.get(currState);
+                if (fromIdx === undefined || toIdx === undefined) continue;
+                matrix[fromIdx][toIdx] += 1;
+            }
+        });
+
+        return { states, matrix };
     };
 
     // Draw cell count chart
@@ -289,8 +334,14 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const trackedCells = features.filter(f => f.track_id !== null);
-        if (trackedCells.length === 0) {
+        // Use track_id if available, otherwise fall back to cell_id so trajectories still render
+        const pathCells = features.filter(f =>
+            (f.track_id !== null || f.cell_id !== null) &&
+            f.centroid_col !== null &&
+            f.centroid_row !== null &&
+            f.frame_num !== undefined
+        );
+        if (pathCells.length === 0) {
             ctx.fillStyle = '#fff';
             ctx.font = '16px Arial';
             ctx.textAlign = 'center';
@@ -298,13 +349,25 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
             return;
         }
 
-        const trackIds = [...new Set(trackedCells.map(f => f.track_id))];
-        const colors = generateColors(trackIds.length);
+        // Group by track_id + image_id to avoid merging tracks across sequences
+        const trackKeys = [...new Set(
+            pathCells.map(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}`)
+        )];
+        const colors = generateColors(trackKeys.length);
+        const trackMeta = trackKeys.map(key => {
+            const sample = pathCells.find(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}` === key);
+            return {
+                key,
+                trackId: sample?.track_id ?? null,
+                cellId: sample?.cell_id ?? null,
+                imageId: sample?.image_id
+            };
+        });
 
         // Get data bounds
-        const allX = trackedCells.map(f => f.centroid_col ?? 0);
-        const allY = trackedCells.map(f => f.centroid_row ?? 0);
-        const allZ = trackedCells.map(f => f.frame_num);
+        const allX = pathCells.map(f => f.centroid_col ?? 0);
+        const allY = pathCells.map(f => f.centroid_row ?? 0);
+        const allZ = pathCells.map(f => f.frame_num);
 
         const minX = Math.min(...allX), maxX = Math.max(...allX);
         const minY = Math.min(...allY), maxY = Math.max(...allY);
@@ -322,9 +385,12 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         const angleZ = 0.6; // Azimuth
 
         const project3D = (x: number, y: number, z: number) => {
+            // Invert Y to match image coordinate system (top-left origin)
+            const invY = maxY - y;
+
             // Normalize to -1 to 1
             const nx = ((x - minX) / rangeX - 0.5) * 2;
-            const ny = ((y - minY) / rangeY - 0.5) * 2;
+            const ny = ((invY / rangeY) - 0.5) * 2;
             const nz = ((z - minZ) / rangeZ - 0.5) * 2;
 
             // Apply rotation
@@ -380,9 +446,9 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         ctx.fillText('Frame', zEnd.x + 10, zEnd.y);
 
         // Draw trajectories
-        trackIds.forEach((trackId, idx) => {
-            const trackData = trackedCells
-                .filter(f => f.track_id === trackId)
+        trackMeta.forEach((track, idx) => {
+            const trackData = pathCells
+                .filter(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}` === track.key)
                 .sort((a, b) => a.frame_num - b.frame_num);
 
             if (trackData.length < 2) return;
@@ -428,16 +494,20 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         ctx.textAlign = 'left';
         const legendX = 20;
         let legendY = 50;
-        trackIds.slice(0, 10).forEach((trackId, idx) => {
+        trackMeta.slice(0, 10).forEach((track, idx) => {
             ctx.fillStyle = colors[idx];
             ctx.fillRect(legendX, legendY - 8, 12, 12);
             ctx.fillStyle = '#fff';
-            ctx.fillText(`Track ${trackId}`, legendX + 18, legendY);
+            ctx.fillText(
+                `${track.trackId !== null ? `Track ${track.trackId}` : `Cell ${track.cellId}`}${track.imageId ? ` (img ${track.imageId})` : ''}`,
+                legendX + 18,
+                legendY
+            );
             legendY += 16;
         });
-        if (trackIds.length > 10) {
+        if (trackMeta.length > 10) {
             ctx.fillStyle = '#888';
-            ctx.fillText(`... and ${trackIds.length - 10} more`, legendX, legendY);
+            ctx.fillText(`... and ${trackMeta.length - 10} more`, legendX, legendY);
         }
     };
 
@@ -488,6 +558,16 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         if (value < -0.5) return 'rgba(230, 126, 34, 0.1)';
         return 'transparent';
     };
+
+    const gmmTransition = useMemo(
+        () => computeTransitionMatrix(features, 'gmm_state'),
+        [features]
+    );
+
+    const hmmTransition = useMemo(
+        () => computeTransitionMatrix(features, 'hmm_state'),
+        [features]
+    );
 
     if (!isOpen) return null;
 
@@ -642,6 +722,82 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                             </tbody>
                                         </table>
                                     </div>
+                                    <div className="stats-table-container">
+                                        <div className="stats-table-header">
+                                            <h3>GMM Empirical Transition Matrix</h3>
+                                            <p className="table-subtitle">Transitions between consecutive frames (counts and row %)</p>
+                                        </div>
+                                        {gmmTransition ? (
+                                            <div className="transition-table-wrapper">
+                                                <table className="stats-table transition-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>From \\ To</th>
+                                                            {gmmTransition.states.map(state => (
+                                                                <th key={`gmm-head-${state}`}>{state}</th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {gmmTransition.matrix.map((row, rowIdx) => {
+                                                            const rowTotal = row.reduce((a, b) => a + b, 0);
+                                                            return (
+                                                                <tr key={`gmm-row-${gmmTransition.states[rowIdx]}`}>
+                                                                    <td className="state-label">State {gmmTransition.states[rowIdx]}</td>
+                                                                    {row.map((value, colIdx) => (
+                                                                        <td key={`gmm-cell-${rowIdx}-${colIdx}`} className="value-cell">
+                                                                            {value}
+                                                                            {rowTotal > 0 ? ` (${formatValue((value / rowTotal) * 100, 1)}%)` : ''}
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <p className="no-data">No GMM labels available. Run clustering to see transitions.</p>
+                                        )}
+                                    </div>
+                                    <div className="stats-table-container">
+                                        <div className="stats-table-header">
+                                            <h3>HMM Empirical Transition Matrix</h3>
+                                            <p className="table-subtitle">Transitions between consecutive frames (counts and row %)</p>
+                                        </div>
+                                        {hmmTransition ? (
+                                            <div className="transition-table-wrapper">
+                                                <table className="stats-table transition-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>From \\ To</th>
+                                                            {hmmTransition.states.map(state => (
+                                                                <th key={`hmm-head-${state}`}>{state}</th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {hmmTransition.matrix.map((row, rowIdx) => {
+                                                            const rowTotal = row.reduce((a, b) => a + b, 0);
+                                                            return (
+                                                                <tr key={`hmm-row-${hmmTransition.states[rowIdx]}`}>
+                                                                    <td className="state-label">State {hmmTransition.states[rowIdx]}</td>
+                                                                    {row.map((value, colIdx) => (
+                                                                        <td key={`hmm-cell-${rowIdx}-${colIdx}`} className="value-cell">
+                                                                            {value}
+                                                                            {rowTotal > 0 ? ` (${formatValue((value / rowTotal) * 100, 1)}%)` : ''}
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <p className="no-data">No HMM labels available. Run HMM analysis to see transitions.</p>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -656,7 +812,11 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                             {(() => {
                                                 const speeds = features.filter(f => f.speed !== null).map(f => f.speed as number);
                                                 const displacements = features.filter(f => f.displacement !== null).map(f => f.displacement as number);
-                                                const tracks = [...new Set(features.filter(f => f.track_id !== null).map(f => f.track_id))];
+                                                const tracks = [...new Set(
+                                                    features
+                                                        .filter(f => (f.track_id !== null || f.cell_id !== null))
+                                                        .map(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}`)
+                                                )];
 
                                                 return (
                                                     <>

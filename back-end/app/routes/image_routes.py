@@ -500,8 +500,31 @@ def run_clustering():
         ])
         max_components = data.get('max_components', 10)
         min_components = data.get('min_components', 2)
+        n_components = data.get('n_components')
+        use_hmm = data.get('use_hmm', True)
 
-        result = run_full_clustering(selected_features, max_components, min_components)
+        if n_components:
+            try:
+                n_components = int(n_components)
+                max_components = n_components
+                min_components = n_components
+            except (TypeError, ValueError):
+                return jsonify({"error": "n_components must be an integer"}), 400
+
+        result = run_full_clustering(
+            selected_features,
+            max_components,
+            min_components,
+            n_components=n_components,
+            use_hmm=use_hmm
+        )
+
+        if isinstance(result, dict) and "error" in result:
+            return jsonify({
+                "error": result.get("error"),
+                "result": result
+            }), 400
+
         return jsonify({
             "message": "Clustering completed",
             "result": result
@@ -525,6 +548,10 @@ def run_gmm_only():
         min_components = data.get('min_components', 2)
 
         result = run_gmm_clustering(selected_features, max_components, min_components)
+
+        if isinstance(result, dict) and "error" in result:
+            return jsonify({"error": result.get("error"), "result": result}), 400
+
         return jsonify({
             "message": "GMM clustering completed",
             "result": result
@@ -543,6 +570,10 @@ def run_hmm_only():
         n_states = data.get('n_states')
 
         result = run_hmm_smoothing(n_states)
+
+        if isinstance(result, dict) and "error" in result:
+            return jsonify({"error": result.get("error"), "result": result}), 400
+
         return jsonify({
             "message": "HMM smoothing completed",
             "result": result

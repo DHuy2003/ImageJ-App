@@ -298,6 +298,19 @@
     margin: 0 0 16px 0;
 }
 
+.stats-table-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.table-subtitle {
+    margin: 0;
+    font-size: 12px;
+    color: #777;
+}
+
 .stats-table {
     width: 100%;
     border-collapse: collapse;
@@ -331,6 +344,32 @@
 
 .stats-table tbody tr:hover {
     background: #f8f9fa;
+}
+
+.transition-table-wrapper {
+    overflow-x: auto;
+}
+
+.transition-table th,
+.transition-table td {
+    text-align: center;
+}
+
+.transition-table .state-label {
+    text-align: left;
+    font-weight: 600;
+    color: #333;
+}
+
+.transition-table .value-cell {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.statistics-tab .no-data {
+    color: #888;
+    font-size: 14px;
+    padding: 12px 0;
 }
 
 /* Motility Tab */

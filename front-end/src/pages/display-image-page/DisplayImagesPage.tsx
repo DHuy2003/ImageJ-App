@@ -5,12 +5,13 @@ import ImageView from '../../components/image-view/ImageView';
 import CellFeaturesTable from '../../components/cell-features-table/CellFeaturesTable';
 import AnalysisResults from '../../components/analysis-results/AnalysisResults';
 import ClusteringDialog from '../../components/clustering-dialog/ClusteringDialog';
+import ProgressDialog from '../../components/progress-dialog/ProgressDialog';
 import { FaFileCircleXmark } from "react-icons/fa6"
 import './DisplayImagesPage.css';
 import { useEffect, useState } from 'react';
 import type { ImageInfo } from '../../types/image';
 import axios from 'axios';
-import { TOOL_EVENT_NAME, type ToolActionPayload } from '../../utils/nav-bar/toolUtils';
+import { TOOL_EVENT_NAME, TOOL_PROGRESS_EVENT, type ToolActionPayload, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -21,6 +22,11 @@ const DisplayImagesPage = () => {
   const [showFeaturesTable, setShowFeaturesTable] = useState(false);
   const [showAnalysisResults, setShowAnalysisResults] = useState(false);
   const [showClusteringDialog, setShowClusteringDialog] = useState(false);
+  const [progressState, setProgressState] = useState<{ open: boolean; title?: string; message?: string }>({
+    open: false,
+    title: '',
+    message: ''
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -51,6 +57,25 @@ const DisplayImagesPage = () => {
     return () => {
       window.removeEventListener('datasetCleared', onDatasetCleared);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleProgress = (e: CustomEvent<ToolProgressPayload>) => {
+      const detail = e.detail;
+      if (!detail) return;
+      if (detail.open) {
+        setProgressState({
+          open: true,
+          title: detail.title || 'Đang xử lý',
+          message: detail.message || 'Vui lòng chờ...'
+        });
+      } else {
+        setProgressState(prev => ({ ...prev, open: false }));
+      }
+    };
+
+    window.addEventListener(TOOL_PROGRESS_EVENT, handleProgress as EventListener);
+    return () => window.removeEventListener(TOOL_PROGRESS_EVENT, handleProgress as EventListener);
   }, []);
 
   useEffect(() => {
@@ -93,6 +118,11 @@ const DisplayImagesPage = () => {
           onClose={() => setShowClusteringDialog(false)}
           onSuccess={() => {}}
         />
+        <ProgressDialog
+          isOpen={progressState.open}
+          title={progressState.title}
+          message={progressState.message}
+        />
       </div>
     );
   }
@@ -117,6 +147,11 @@ const DisplayImagesPage = () => {
           onClose={() => setShowClusteringDialog(false)}
           onSuccess={() => {}}
         />
+        <ProgressDialog
+          isOpen={progressState.open}
+          title={progressState.title}
+          message={progressState.message}
+        />
       </div>
     );
   }
@@ -138,6 +173,11 @@ const DisplayImagesPage = () => {
         isOpen={showClusteringDialog}
         onClose={() => setShowClusteringDialog(false)}
         onSuccess={() => {}}
+      />
+      <ProgressDialog
+        isOpen={progressState.open}
+        title={progressState.title}
+        message={progressState.message}
       />
     </div>
   );

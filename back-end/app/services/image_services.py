@@ -3,7 +3,7 @@ from PIL import Image
 import shutil
 import numpy as np
 from app import db, config
-from app.models import Image as ImageModel
+from app.models import Image as ImageModel, CellFeature
 import re
 from flask import url_for
 from sqlalchemy import or_
@@ -584,9 +584,11 @@ def cleanup_database(app):
     print("Cleaning up DB")
     with app.app_context():
         try:
+            # Clear child table first to avoid FK constraints
+            CellFeature.query.delete()
             ImageModel.query.delete()
             db.session.commit()
-            print("Already cleared all records from the imageJ table.")
+            print("Cleared Image and CellFeature tables.")
         except Exception as e:
             print(f"Failed to clear imageJ table. Reason: {e}")
     print("DB cleanup complete.")

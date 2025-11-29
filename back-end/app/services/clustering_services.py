@@ -246,7 +246,7 @@ def run_hmm_smoothing(n_states=None):
     }
 
 
-def run_full_clustering(selected_features=None, max_components=10, min_components=2):
+def run_full_clustering(selected_features=None, max_components=10, min_components=2, n_components=None, use_hmm=True):
     """
     Run complete clustering pipeline: GMM + HMM
 
@@ -254,24 +254,41 @@ def run_full_clustering(selected_features=None, max_components=10, min_component
         selected_features: Features for GMM
         max_components: Max GMM components
         min_components: Min GMM components
+        n_components: Fixed number of components (overrides min/max when provided)
+        use_hmm: Whether to run HMM smoothing after GMM
 
     Returns:
         dict with full results
     """
+    # Allow caller to pin a fixed number of clusters
+    if n_components:
+        max_components = n_components
+        min_components = n_components
+
     # Run GMM
     gmm_result = run_gmm_clustering(selected_features, max_components, min_components)
 
     if "error" in gmm_result:
         return gmm_result
 
+    result = {
+        "gmm": gmm_result,
+        "hmm": None,
+        "pipeline": "complete" if use_hmm else "gmm_only"
+    }
+
+    if not use_hmm:
+        return result
+
     # Run HMM with same number of states as GMM clusters
     hmm_result = run_hmm_smoothing(n_states=gmm_result['optimal_components'])
+    result["hmm"] = hmm_result
 
-    return {
-        "gmm": gmm_result,
-        "hmm": hmm_result,
-        "pipeline": "complete"
-    }
+    if "error" in hmm_result:
+        result["error"] = hmm_result["error"]
+        return result
+
+    return result
 
 
 def get_clustering_results():
