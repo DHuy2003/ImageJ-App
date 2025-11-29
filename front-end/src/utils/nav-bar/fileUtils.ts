@@ -5,6 +5,11 @@ import axios from 'axios';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
+// Natural sort để sắp xếp file theo tên (001, 002, ..., 010, 011)
+const naturalSort = (a: File, b: File): number => {
+  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+};
+
 export const FILE_MENU_EVENT_NAME = 'fileMenuAction';
 export const IMAGES_APPENDED_EVENT = 'imagesAppended';
 export type FileMenuActionType = 'REVERT' | 'CLOSE' | 'CLOSE_ALL' | 'SAVE' | 'SAVE_ALL';
@@ -107,6 +112,9 @@ export const handleOpenFolder = async (navigate: NavigateFunction) => {
       return;
     }
 
+    // Sắp xếp file theo tên trước khi upload
+    files.sort(naturalSort);
+
     await axios.post(`${API_BASE_URL}/reset`);
 
     await uploadCellImages(files, navigate, false);
@@ -146,6 +154,9 @@ export const handleOpenMaskFolder = async (navigate: NavigateFunction) => {
       });
       return;
     }
+
+    // Sắp xếp file theo tên trước khi upload
+    files.sort(naturalSort);
 
     await uploadMasks(files, navigate);
 

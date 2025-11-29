@@ -2,11 +2,13 @@ import { useLocation } from 'react-router-dom';
 import NavBar from '../../components/nav-bar/NavBar';
 import ToolBar from '../../components/tool-bar/ToolBar';
 import ImageView from '../../components/image-view/ImageView';
+import CellFeaturesTable from '../../components/cell-features-table/CellFeaturesTable';
 import { FaFileCircleXmark } from "react-icons/fa6"
 import './DisplayImagesPage.css';
 import { useEffect, useState } from 'react';
 import type { ImageInfo } from '../../types/image';
 import axios from 'axios';
+import { TOOL_EVENT_NAME, type ToolActionPayload } from '../../utils/nav-bar/toolUtils';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -14,6 +16,7 @@ const DisplayImagesPage = () => {
   const [imageArray, setImageArray] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showFeaturesTable, setShowFeaturesTable] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -43,6 +46,19 @@ const DisplayImagesPage = () => {
     window.addEventListener('datasetCleared', onDatasetCleared);
     return () => {
       window.removeEventListener('datasetCleared', onDatasetCleared);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleToolAction = (e: CustomEvent<ToolActionPayload>) => {
+      if (e.detail.type === 'SHOW_FEATURES') {
+        setShowFeaturesTable(true);
+      }
+    };
+
+    window.addEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
+    return () => {
+      window.removeEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
     };
   }, []);
 
@@ -78,6 +94,10 @@ const DisplayImagesPage = () => {
       <NavBar />
       <ToolBar />
       <ImageView imageArray={imageArray} />
+      <CellFeaturesTable
+        isOpen={showFeaturesTable}
+        onClose={() => setShowFeaturesTable(false)}
+      />
     </>
   );
 };

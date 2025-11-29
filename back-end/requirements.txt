@@ -5,3 +5,6 @@ flask-cors
 Flask-SQLAlchemy
 python-dotenv
 requests
+cellpose
+torch
+scikit-image
