@@ -145,8 +145,19 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
         const dx = e.clientX - startPos.x;
         const dy = e.clientY - startPos.y;
 
-        if (resizeDir.includes("e")) newWidth = Math.max(MIN_SIZE, Math.min(relativeRect.width + dx, relativeImgRect.right - relativeRect.left));
-        if (resizeDir.includes("s")) newHeight = Math.max(MIN_SIZE, Math.min(relativeRect.height + dy, relativeImgRect.bottom - relativeImgRect.top));
+        if (resizeDir.includes("e")) {
+          const maxWidth = relativeImgRect.right - relativeRect.left;
+          newWidth = Math.max(MIN_SIZE, Math.min(relativeRect.width + dx, maxWidth));
+        }
+      
+        if (resizeDir.includes("s")) {
+          const maxHeight = relativeImgRect.bottom - relativeRect.top;
+          newHeight = Math.max(
+            MIN_SIZE,
+            Math.min(relativeRect.height + dy, maxHeight)
+          );
+        }
+
         if (resizeDir.includes("w")) {
           const potentialNewWidth = relativeRect.width - dx;
           const potentialNewLeft = relativeRect.left + dx;
@@ -161,6 +172,7 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, o
             newWidth = relativeRect.right - relativeImgRect.left;
           }
         }
+        
         if (resizeDir.includes("n")) {
           const potentialNewHeight = relativeRect.height - dy;
           const potentialNewTop = relativeRect.top + dy;

@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { CropOverlayHandle } from '../../types/crop';
+import type { CropOverlayHandle, RelativeCropRect } from '../../types/crop';
 import type { ImageInfo, ImageViewProps, UndoEntry } from '../../types/image';
 import { base64ToBytes, formatFileSize } from '../../utils/common/formatFileSize';
 import CropOverlay from '../crop-overlay/CropOverlay';
@@ -27,7 +27,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const cropRef = useRef<CropOverlayHandle | null>(null);
   const [showConfirmCrop, setShowConfirmCrop] = useState(false);
-  const [cropRectData, setCropRectData] = useState<DOMRect | null>(null);
+  const [cropRectData, setCropRectData] = useState<RelativeCropRect | null>(null);
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
   const [undoStack, setUndoStack] = useState<UndoEntry[][]>(() =>
@@ -95,7 +95,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     });
   }; 
 
-  useEditEvents({
+  const { cropImage } = useEditEvents({
     imgRef,
     selectedRoi,
     currentFile: currentFile ?? null,
@@ -186,84 +186,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     }
   }, [currentFile, currentIndex]);
 
-  const handleCrop = (cropRect: DOMRect) => {
-    const img = imgRef.current;
-    if (!img) return;
-    
-    const imgRect = img.getBoundingClientRect();
-
-    let cropX = (cropRect.left - imgRect.left) * (img.naturalWidth / imgRect.width);
-    let cropY = (cropRect.top - imgRect.top) * (img.naturalHeight / imgRect.height);
-    let cropW = cropRect.width * (img.naturalWidth / imgRect.width);
-    let cropH = cropRect.height * (img.naturalHeight / imgRect.height);
-
-    cropX = Math.max(0, Math.min(cropX, img.naturalWidth));
-    cropY = Math.max(0, Math.min(cropY, img.naturalHeight));
-    cropW = Math.max(1, Math.min(cropW, img.naturalWidth - cropX));
-    cropH = Math.max(1, Math.min(cropH, img.naturalHeight - cropY));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(cropW);
-    canvas.height = Math.round(cropH);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.referrerPolicy = 'no-referrer';
-    let src = img.currentSrc || img.src;
-
-    if (/^https?:\/\//i.test(src)) {
-      src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
-    }
-    image.src = src;
-
-    image.onload = () => {
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-    
-      ctx.drawImage(
-        image,
-        Math.round(cropX),
-        Math.round(cropY),
-        Math.round(cropW),
-        Math.round(cropH),
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
-    
-      const newSrc = canvas.toDataURL('image/png');
-      const base64 = newSrc.split(',')[1];
-      const newSize = base64ToBytes(base64);
-
-      pushUndo();
-      setCurrentImageURL(newSrc);
-      setVisibleImages(prev => {
-        const copy = [...prev];
-        if (copy[currentIndex]) {
-          copy[currentIndex] = {
-            ...copy[currentIndex],
-            cropped_url: newSrc as any,
-            width: canvas.width,
-            height: canvas.height,
-            size: newSize,
-            bitDepth: 8, 
-          } as any;
-        }
-        return copy;
-      });
-    
-      setIsCropping(false);
-      setShowConfirmCrop(false);
-      setCropRectData(null);
-    };    
-
-    image.onerror = (e) => {
-      console.error('Image load (CORS) failed: ', e, src);
-      alert('Cannot export cropped image due to CORS. Please refresh after backend CORS fix.');
-    };
+  const handleCrop = (relRect: RelativeCropRect) => {
+    cropImage(relRect);
+    // UI: tắt crop mode + popup sau khi gửi lệnh cắt
+    setIsCropping(false);
+    setShowConfirmCrop(false);
+    setCropRectData(null);
   };
 
   const handleCancelCrop = () => {
@@ -617,6 +545,21 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                   transformOrigin: 'center center',
                 }}
               />
+
+              {isCropping && (
+                <CropOverlay
+                  ref={cropRef}
+                  imgRef={imgRef}
+                  onCrop={() => {
+                    const rel = cropRef.current?.getRelativeRect();
+                    if (rel) {
+                      setCropRectData(rel);
+                      setShowConfirmCrop(true);
+                    }
+                  }}
+                  onCancel={handleCancelCrop}
+                />
+              )}
             </div>
           )}
 
@@ -627,18 +570,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               src={currentFile.mask_url}
               alt={`${currentFile?.filename} mask`}
               className="mask-image small-image"
-            />
-          )}
-
-          {isCropping && (
-            <CropOverlay
-              ref={cropRef}
-              imgRef={imgRef}
-              onCrop={(cropRect) => {
-                setCropRectData(cropRect);
-                setShowConfirmCrop(true);
-              }}
-              onCancel={handleCancelCrop}
             />
           )}
 
@@ -656,33 +587,37 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             onCommit={handleBrushCommit}
           />
 
+          {isCropping && (
+            <div className="crop-controls">
+              <button
+                onClick={() => {
+                  const rel = cropRef.current?.getRelativeRect();
+                  if (rel) {
+                    setCropRectData(rel);
+                    setShowConfirmCrop(true);
+                  }
+                }}
+              >
+                Crop
+              </button>
+              <button onClick={handleCancelCrop}>Cancel</button>
+            </div>
+          )}
         </div>
 
         <p>Frame {currentIndex + 1} of {visibleImages.length}</p>
-
-        {isCropping && (
-          <div className="crop-controls">
-            <button
-              onClick={() => {
-                const rect = cropRef.current?.getRect();
-                if (rect) {
-                  setCropRectData(rect);
-                  setShowConfirmCrop(true);
-                }
-              }}
-            >
-              Crop
-            </button>
-            <button onClick={handleCancelCrop}>Cancel</button>
-          </div>
-        )}
 
         {showConfirmCrop && cropRectData && (
           <div className="confirm-popup">
             <div className="confirm-box">
               <p>Do you want to replace the original image?</p>
               <div className="confirm-buttons">
-                <button className="yes" onClick={() => handleCrop(cropRectData)}>Yes</button>
+                <button
+                  className="yes"
+                  onClick={() => handleCrop(cropRectData)}
+                >
+                  Yes
+                </button>
                 <button className="no" onClick={() => setShowConfirmCrop(false)}>No</button>
               </div>
             </div>

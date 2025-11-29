@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { base64ToBytes } from '../../../utils/common/formatFileSize';
 import { showSelectionRequired, type SelectedRoiInfo } from '../../../types/roi';
 import type { ImageInfo } from '../../../types/image';
+import type { RelativeCropRect } from '../../../types/crop';
 
 type UseEditEventsParams = {
   imgRef: React.RefObject<HTMLImageElement | null>;
@@ -32,6 +33,90 @@ const useEditEvents = ({
   setIsCropping,
   setVisibleImages
 }: UseEditEventsParams) => {
+  const cropImage = (relRect: RelativeCropRect) => {
+    if (!imgRef.current || !currentFile) return;
+
+    const img = imgRef.current;
+    const naturalW = img.naturalWidth;
+    const naturalH = img.naturalHeight;
+    if (!naturalW || !naturalH) return;
+
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+    const left = clamp01(relRect.left);
+    const top = clamp01(relRect.top);
+    const width = clamp01(relRect.width);
+    const height = clamp01(relRect.height);
+
+    let cropX = left * naturalW;
+    let cropY = top * naturalH;
+    let cropW = width * naturalW;
+    let cropH = height * naturalH;
+
+    cropX = Math.max(0, Math.min(cropX, naturalW - 1));
+    cropY = Math.max(0, Math.min(cropY, naturalH - 1));
+    cropW = Math.max(1, Math.min(cropW, naturalW - cropX));
+    cropH = Math.max(1, Math.min(cropH, naturalH - cropY));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(cropW);
+    canvas.height = Math.round(cropH);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer';
+
+    let src = currentImageURL || img.currentSrc || img.src;
+    if (/^https?:\/\//i.test(src)) {
+      src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
+    }
+    image.src = src;
+
+    image.onload = () => {
+      // lưu undo trước khi thay ảnh
+      pushUndo();
+
+      ctx.drawImage(
+        image,
+        Math.round(cropX),
+        Math.round(cropY),
+        Math.round(cropW),
+        Math.round(cropH),
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      const newSrc = canvas.toDataURL('image/png');
+      const base64 = newSrc.split(',')[1];
+      const newSize = base64ToBytes(base64);
+
+      setCurrentImageURL(newSrc);
+
+      setVisibleImages(prev => {
+        const copy = [...prev];
+        if (copy[currentIndex]) {
+          copy[currentIndex] = {
+            ...copy[currentIndex],
+            cropped_url: newSrc as any,
+            width: canvas.width,
+            height: canvas.height,
+            size: newSize,
+            bitDepth: currentFile.bitDepth ?? 8,
+          } as any;
+        }
+        return copy;
+      });
+    };
+
+    image.onerror = (e) => {
+      console.error('Image load (CORS) failed: ', e, src);
+      alert('Cannot export cropped image due to CORS. Please refresh after backend CORS fix.');
+    };
+  };
+
   const applyRoiEdit = (
     mode: 'clear' | 'clearOutside' | 'fill' | 'invert' | 'draw' | 'rotate',
     roi: SelectedRoiInfo,
@@ -374,6 +459,11 @@ const useEditEvents = ({
       window.removeEventListener('editRotate', onRotate);
     };
   }, [selectedRoi, currentIndex, currentImageURL, currentFile, setVisibleImages, setCurrentImageURL, pushUndo]); 
+
+  return {
+    cropImage,
+  };
+  
 };
 
 export default useEditEvents;

@@ -10,3 +10,10 @@ export type CropOverlayHandle = {
         | { left: number; top: number; width: number; height: number }
         | null;
 };
+
+export type RelativeCropRect = {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+};

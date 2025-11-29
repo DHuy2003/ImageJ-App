@@ -123,8 +123,8 @@ html {
   display: flex;
   justify-content: center;
   align-items: center;
-  border-radius: 10px;
-  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  /* border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5); */
   max-width: 100%;
   max-height: 100%;  
   overflow: hidden;          
@@ -149,9 +149,14 @@ html {
 }
 
 .crop-controls {
+  position: absolute;
+  left: 50%;
+  bottom: -55px;           
+  transform: translateX(-50%);
   display: flex;
   justify-content: center;
-  gap: 20px; 
+  gap: 20px;
+  z-index: 20;            
 }
 
 .crop-controls button {
