@@ -500,6 +500,7 @@ def revert_image(image_id):
     }
 
     
+    
 def delete_image(image_id):
     img = ImageModel.query.get(image_id)
     if not img:
