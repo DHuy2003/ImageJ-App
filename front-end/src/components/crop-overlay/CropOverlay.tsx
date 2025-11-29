@@ -4,7 +4,7 @@ import type { CropOverlayProps, CropOverlayHandle } from '../../types/crop';
 
 const MIN_SIZE = 50;
 
-const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ onCrop, onCancel, imgRef }, ref) => {
+const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ imgRef }, ref) => {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [action, setAction] = useState<null | "move" | "resize">(null);
   const [resizeDir, setResizeDir] = useState<string>("");

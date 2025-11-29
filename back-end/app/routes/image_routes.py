@@ -14,7 +14,8 @@ from app.services.image_services import (
 )
 from app.services.segmentation_services import (
     run_cellpose_segmentation,
-    run_batch_segmentation
+    run_batch_segmentation,
+    get_cell_contours
 )
 from app.services.feature_extraction_services import (
     extract_features_from_mask,
@@ -259,6 +260,22 @@ def segment_batch_images():
         }), 200
     except Exception as e:
         print(f"Error in batch segmentation: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@image_bp.route('/segmentation/contours/<int:image_id>', methods=['GET'])
+@cross_origin()
+def get_contours(image_id):
+    """Get cell contours for visualization"""
+    try:
+        contours = get_cell_contours(image_id)
+        return jsonify({
+            "image_id": image_id,
+            "contours": contours,
+            "num_cells": len(contours)
+        }), 200
+    except Exception as e:
+        print(f"Error getting contours for image {image_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 

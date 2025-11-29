@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Eye, EyeOff, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Maximize } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import type { CropOverlayHandle, RelativeCropRect } from '../../types/crop';
@@ -44,6 +44,14 @@ interface CellFeature {
   turning: number | null;
   gmm_state: number | null;
   hmm_state: number | null;
+}
+
+interface CellContour {
+  cell_id: number;
+  feature_id: number;
+  gmm_state: number | null;
+  hmm_state: number | null;
+  contour: number[][];  // Array of [x, y] points
 }
 
 // Cluster colors for visualization
@@ -138,6 +146,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [zoomLevel, setZoomLevel] = useState<number>(DEFAULT_ZOOM_LEVEL);
   const [scaleToFit, setScaleToFit] = useState<boolean>(true);
   const [frameFeatures, setFrameFeatures] = useState<CellFeature[]>([]);
+  const [cellContours, setCellContours] = useState<CellContour[]>([]);
   const [showClustering, setShowClustering] = useState<boolean>(false);
   const [clusteringAvailable, setClusteringAvailable] = useState<boolean>(false);
   const [panMode, setPanMode] = useState<boolean>(false);
@@ -154,7 +163,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
   const {
     pan,
-    cursor,
     isPanning,
     handleMouseDown: handlePanMouseDown,
     handleMouseMove: handlePanMouseMove,
@@ -285,49 +293,70 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     }
   }, [currentFile, currentIndex]);
 
-  // Fetch features for the current frame
+  // Fetch features and contours for the current frame
   useEffect(() => {
-    const fetchFrameFeatures = async () => {
+    const fetchFrameData = async () => {
       if (!currentFile?.id) {
         setFrameFeatures([]);
+        setCellContours([]);
         setClusteringAvailable(false);
         return;
       }
       try {
-        const response = await axios.get(`${API_BASE_URL}/features/${currentFile.id}`);
-        const features = response.data.features || [];
+        // Fetch features and contours in parallel
+        const [featuresRes, contoursRes] = await Promise.all([
+          axios.get(`${API_BASE_URL}/features/${currentFile.id}`),
+          axios.get(`${API_BASE_URL}/segmentation/contours/${currentFile.id}`)
+        ]);
+
+        const features = featuresRes.data.features || [];
+        const contours = contoursRes.data.contours || [];
+
         setFrameFeatures(features);
+        setCellContours(contours);
+
         // Check if clustering data is available
         const hasClustering = features.some((f: CellFeature) => f.gmm_state !== null || f.hmm_state !== null);
         setClusteringAvailable(hasClustering);
       } catch (err) {
-        console.error('Error fetching features:', err);
+        console.error('Error fetching frame data:', err);
         setFrameFeatures([]);
+        setCellContours([]);
         setClusteringAvailable(false);
       }
     };
-    fetchFrameFeatures();
+    fetchFrameData();
   }, [currentFile?.id]);
 
   // Listen for clustering complete event to enable show clustering button
   useEffect(() => {
     const handleClusteringComplete = () => {
-      // Refetch features to get updated clustering data
+      // Refetch features and contours to get updated clustering data
       if (currentFile?.id) {
-        axios.get(`${API_BASE_URL}/features/${currentFile.id}`)
-          .then(response => {
-            const features = response.data.features || [];
+        Promise.all([
+          axios.get(`${API_BASE_URL}/features/${currentFile.id}`),
+          axios.get(`${API_BASE_URL}/segmentation/contours/${currentFile.id}`)
+        ])
+          .then(([featuresRes, contoursRes]) => {
+            const features = featuresRes.data.features || [];
+            const contours = contoursRes.data.contours || [];
             setFrameFeatures(features);
+            setCellContours(contours);
             const hasClustering = features.some((f: CellFeature) => f.gmm_state !== null || f.hmm_state !== null);
             setClusteringAvailable(hasClustering);
           })
-          .catch(err => console.error('Error refetching features:', err));
+          .catch(err => console.error('Error refetching data:', err));
       }
     };
 
     window.addEventListener('clusteringComplete', handleClusteringComplete);
     return () => window.removeEventListener('clusteringComplete', handleClusteringComplete);
   }, [currentFile?.id]);
+
+  // Reset showClustering when changing frames
+  useEffect(() => {
+    setShowClustering(false);
+  }, [currentIndex]);
 
   const handleCrop = (relRect: RelativeCropRect) => {
     cropImage(relRect);
@@ -418,13 +447,20 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               ) : (
                 <div className="features-table-container">
                   <p className="cell-count">{frameFeatures.length} cells detected</p>
-                  <table className="features-table">
+                  <table className="features-table combined-table">
                     <thead>
                       <tr>
                         <th>ID</th>
                         <th>Area</th>
-                        <th>Centroid</th>
+                        <th>X</th>
+                        <th>Y</th>
                         <th>Int.</th>
+                        {frameFeatures.some(f => f.speed !== null) && (
+                          <>
+                            <th>Spd</th>
+                            <th>Trn</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -432,37 +468,19 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                         <tr key={feature.id}>
                           <td className="cell-id">{feature.cell_id}</td>
                           <td>{formatValue(feature.area, 0)}</td>
-                          <td>({formatValue(feature.centroid_col, 0)}, {formatValue(feature.centroid_row, 0)})</td>
+                          <td>{formatValue(feature.centroid_col, 0)}</td>
+                          <td>{formatValue(feature.centroid_row, 0)}</td>
                           <td>{formatValue(feature.mean_intensity, 0)}</td>
+                          {frameFeatures.some(f => f.speed !== null) && (
+                            <>
+                              <td className="motion-cell">{formatValue(feature.speed, 1)}</td>
+                              <td className="motion-cell">{formatValue(feature.turning, 2)}</td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {frameFeatures.some(f => f.speed !== null) && (
-                    <>
-                      <h4 className="motion-header">Motion Features</h4>
-                      <table className="features-table motion-table">
-                        <thead>
-                          <tr>
-                            <th>ID</th>
-                            <th>Speed</th>
-                            <th>Disp.</th>
-                            <th>Turn</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {frameFeatures.map((feature) => (
-                            <tr key={feature.id}>
-                              <td className="cell-id">{feature.cell_id}</td>
-                              <td>{formatValue(feature.speed, 1)}</td>
-                              <td>{formatValue(feature.displacement, 1)}</td>
-                              <td>{formatValue(feature.turning, 2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </>
-                  )}
                 </div>
               )}
             </div>
@@ -645,9 +663,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                 />
               )}
 
-              {/* Clustering Overlay */}
-              {showClustering && imgRef.current && frameFeatures.length > 0 && (
-                <div
+              {/* Clustering Overlay - SVG with polygon contours */}
+              {showClustering && imgRef.current && cellContours.length > 0 && (
+                <svg
                   className="clustering-overlay"
                   style={{
                     position: 'absolute',
@@ -657,48 +675,33 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                     height: '100%',
                     pointerEvents: 'none',
                   }}
+                  viewBox={`0 0 ${imgRef.current.naturalWidth} ${imgRef.current.naturalHeight}`}
+                  preserveAspectRatio="none"
                 >
-                  {frameFeatures.filter(f => f.hmm_state !== null || f.gmm_state !== null).map((feature) => {
-                    const img = imgRef.current;
-                    if (!img) return null;
+                  {cellContours
+                    .filter(c => c.hmm_state !== null || c.gmm_state !== null)
+                    .map((contour) => {
+                      const state = contour.hmm_state ?? contour.gmm_state ?? 0;
+                      const colorInfo = CLUSTER_COLORS[state % CLUSTER_COLORS.length];
 
-                    const state = feature.hmm_state ?? feature.gmm_state ?? 0;
-                    const colorInfo = CLUSTER_COLORS[state % CLUSTER_COLORS.length];
+                      // Convert contour points to SVG polygon points string
+                      const pointsStr = contour.contour
+                        .map(([x, y]) => `${x},${y}`)
+                        .join(' ');
 
-                    // Calculate position based on bounding box
-                    const displayedWidth = img.clientWidth;
-                    const displayedHeight = img.clientHeight;
-                    const naturalWidth = img.naturalWidth;
-                    const naturalHeight = img.naturalHeight;
-
-                    const scaleX = displayedWidth / naturalWidth;
-                    const scaleY = displayedHeight / naturalHeight;
-
-                    const left = feature.min_col_bb * scaleX;
-                    const top = feature.min_row_bb * scaleY;
-                    const width = (feature.max_col_bb - feature.min_col_bb) * scaleX;
-                    const height = (feature.max_row_bb - feature.min_row_bb) * scaleY;
-
-                    return (
-                      <div
-                        key={feature.id}
-                        className="cluster-cell"
-                        style={{
-                          position: 'absolute',
-                          left: `${left}px`,
-                          top: `${top}px`,
-                          width: `${width}px`,
-                          height: `${height}px`,
-                          backgroundColor: colorInfo.color,
-                          border: `2px solid ${colorInfo.border}`,
-                          borderRadius: '3px',
-                          boxSizing: 'border-box',
-                        }}
-                        title={`Cell ${feature.cell_id} - Cluster ${state}`}
-                      />
-                    );
-                  })}
-                </div>
+                      return (
+                        <polygon
+                          key={contour.feature_id}
+                          points={pointsStr}
+                          fill={colorInfo.color}
+                          stroke={colorInfo.border}
+                          strokeWidth="2"
+                        >
+                          <title>{`Cell ${contour.cell_id} - Cluster ${state}`}</title>
+                        </polygon>
+                      );
+                    })}
+                </svg>
               )}
             </div>
           )}

@@ -3,6 +3,8 @@ import NavBar from '../../components/nav-bar/NavBar';
 import ToolBar from '../../components/tool-bar/ToolBar';
 import ImageView from '../../components/image-view/ImageView';
 import CellFeaturesTable from '../../components/cell-features-table/CellFeaturesTable';
+import AnalysisResults from '../../components/analysis-results/AnalysisResults';
+import ClusteringDialog from '../../components/clustering-dialog/ClusteringDialog';
 import { FaFileCircleXmark } from "react-icons/fa6"
 import './DisplayImagesPage.css';
 import { useEffect, useState } from 'react';
@@ -17,6 +19,8 @@ const DisplayImagesPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFeaturesTable, setShowFeaturesTable] = useState(false);
+  const [showAnalysisResults, setShowAnalysisResults] = useState(false);
+  const [showClusteringDialog, setShowClusteringDialog] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -51,12 +55,22 @@ const DisplayImagesPage = () => {
 
   useEffect(() => {
     const handleToolAction = (e: CustomEvent<ToolActionPayload>) => {
+      console.log('Tool action received:', e.detail.type);
       if (e.detail.type === 'SHOW_FEATURES') {
         setShowFeaturesTable(true);
+      }
+      if (e.detail.type === 'SHOW_ANALYSIS') {
+        console.log('Setting showAnalysisResults to true');
+        setShowAnalysisResults(true);
+      }
+      if (e.detail.type === 'OPEN_CLUSTERING_DIALOG') {
+        console.log('Setting showClusteringDialog to true');
+        setShowClusteringDialog(true);
       }
     };
 
     window.addEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
+    console.log('Tool event listener registered for:', TOOL_EVENT_NAME);
     return () => {
       window.removeEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
     };
@@ -70,10 +84,19 @@ const DisplayImagesPage = () => {
         <div id="no-image">
           <h2 id="no-image-mess">Loading images...</h2>
         </div>
+        <AnalysisResults
+          isOpen={showAnalysisResults}
+          onClose={() => setShowAnalysisResults(false)}
+        />
+        <ClusteringDialog
+          isOpen={showClusteringDialog}
+          onClose={() => setShowClusteringDialog(false)}
+          onSuccess={() => {}}
+        />
       </div>
     );
   }
-  
+
   if (error || !imageArray || imageArray.length === 0) {
     return (
       <div className="display-images-page">
@@ -83,8 +106,17 @@ const DisplayImagesPage = () => {
           <h2 id="no-image-mess">
             {error || "No image uploaded"}
           </h2>
-          <FaFileCircleXmark id='no-image-icon' />          
+          <FaFileCircleXmark id='no-image-icon' />
         </div>
+        <AnalysisResults
+          isOpen={showAnalysisResults}
+          onClose={() => setShowAnalysisResults(false)}
+        />
+        <ClusteringDialog
+          isOpen={showClusteringDialog}
+          onClose={() => setShowClusteringDialog(false)}
+          onSuccess={() => {}}
+        />
       </div>
     );
   }
@@ -97,6 +129,15 @@ const DisplayImagesPage = () => {
       <CellFeaturesTable
         isOpen={showFeaturesTable}
         onClose={() => setShowFeaturesTable(false)}
+      />
+      <AnalysisResults
+        isOpen={showAnalysisResults}
+        onClose={() => setShowAnalysisResults(false)}
+      />
+      <ClusteringDialog
+        isOpen={showClusteringDialog}
+        onClose={() => setShowClusteringDialog(false)}
+        onSuccess={() => {}}
       />
     </div>
   );

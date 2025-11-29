@@ -154,3 +154,84 @@ def create_colored_mask(masks):
         colored[masks == label] = color
 
     return colored
+
+
+def get_cell_contours(image_id):
+    """
+    Get cell contours from mask for visualization
+
+    Args:
+        image_id: Database ID of the image
+
+    Returns:
+        List of cell contours with cell_id and polygon points
+    """
+    import cv2
+    from app.models import CellFeature
+
+    img_record = ImageModel.query.get(image_id)
+    if not img_record or not img_record.mask_filepath:
+        return []
+
+    if not os.path.exists(img_record.mask_filepath):
+        return []
+
+    # Load the colored mask and convert to label mask
+    mask_img = Image.open(img_record.mask_filepath)
+    mask_array = np.array(mask_img)
+
+    # If colored (RGB), we need to get cell features to map
+    # Load original grayscale mask if available, or use cell features
+    features = CellFeature.query.filter_by(image_id=image_id).all()
+    if not features:
+        return []
+
+    contours_data = []
+
+    for feature in features:
+        # Create a mask for this specific cell based on bounding box and centroid
+        cell_id = feature.cell_id
+        min_row = int(feature.min_row_bb) if feature.min_row_bb else 0
+        max_row = int(feature.max_row_bb) if feature.max_row_bb else mask_array.shape[0]
+        min_col = int(feature.min_col_bb) if feature.min_col_bb else 0
+        max_col = int(feature.max_col_bb) if feature.max_col_bb else mask_array.shape[1]
+
+        # Extract the region
+        if len(mask_array.shape) == 3:
+            region = mask_array[min_row:max_row, min_col:max_col]
+            # Convert to grayscale for contour detection
+            region_gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY)
+        else:
+            region_gray = mask_array[min_row:max_row, min_col:max_col]
+
+        # Threshold to get binary mask
+        _, binary = cv2.threshold(region_gray, 10, 255, cv2.THRESH_BINARY)
+
+        # Find contours
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if contours:
+            # Get the largest contour
+            largest_contour = max(contours, key=cv2.contourArea)
+
+            # Simplify contour for efficiency
+            epsilon = 0.01 * cv2.arcLength(largest_contour, True)
+            simplified = cv2.approxPolyDP(largest_contour, epsilon, True)
+
+            # Convert to list of points and offset by bounding box position
+            points = []
+            for point in simplified:
+                x = int(point[0][0] + min_col)
+                y = int(point[0][1] + min_row)
+                points.append([x, y])
+
+            if len(points) >= 3:  # Need at least 3 points for a polygon
+                contours_data.append({
+                    'cell_id': cell_id,
+                    'feature_id': feature.id,
+                    'gmm_state': feature.gmm_state,
+                    'hmm_state': feature.hmm_state,
+                    'contour': points
+                })
+
+    return contours_data

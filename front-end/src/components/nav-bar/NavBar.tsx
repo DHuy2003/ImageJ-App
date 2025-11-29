@@ -44,6 +44,7 @@ import {
     handleClustering,
     handleExtractFeatures,
     handleShowFeatures,
+    handleShowAnalysis,
 } from "../../utils/nav-bar/toolUtils";
 
 const NavBar = () => {
@@ -167,14 +168,14 @@ const NavBar = () => {
             <div className="divider"></div>
                 
             <div id="navbar-right">
-                <div className="navbar-menu-item">
+                <div className="navbar-menu-item" onClick={handleShowAnalysis}>
                     <BarChart3 className="menu-icon" />
-                    <a href="#">Result</a>
+                    <span>Result</span>
                 </div>
 
                 <div className="navbar-menu-item">
                     <Search className="menu-icon" />
-                    <a href="#">Article</a>
+                    <span>Article</span>
                 </div>
             </div>
         </div>

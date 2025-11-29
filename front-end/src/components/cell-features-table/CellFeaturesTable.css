@@ -1,0 +1,222 @@
+.features-table-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.features-table-container {
+    background: white;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 1200px;
+    height: 80vh;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+/* Header */
+.features-table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e0e0e0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    flex-shrink: 0;
+}
+
+.features-table-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #fff;
+    font-weight: 600;
+}
+
+.features-table-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.features-table-actions button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.features-table-actions button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.features-table-actions button:last-child {
+    background: #fee2e2;
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.features-table-actions button:last-child:hover {
+    background: #dc2626;
+    color: #fff;
+}
+
+.features-table-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Content */
+.features-table-content {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+}
+
+.features-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.features-table th,
+.features-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+    white-space: nowrap;
+}
+
+.features-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #555;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.features-table tbody tr:hover {
+    background: #f0f7ff;
+}
+
+.features-table tbody tr:nth-child(even) {
+    background: #fafafa;
+}
+
+.features-table tbody tr:nth-child(even):hover {
+    background: #f0f7ff;
+}
+
+/* Footer */
+.features-table-footer {
+    padding: 14px 24px;
+    border-top: 1px solid #e0e0e0;
+    background: #f8f9fa;
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+/* Loading, Error, No Data States */
+.loading-text,
+.error-text,
+.no-data-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 200px;
+    padding: 40px;
+    color: #666;
+    font-size: 15px;
+}
+
+.error-text {
+    color: #dc2626;
+}
+
+.no-data-text {
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .features-table-overlay {
+        padding: 10px;
+    }
+
+    .features-table-container {
+        height: 90vh;
+        border-radius: 8px;
+    }
+
+    .features-table-header {
+        flex-direction: column;
+        gap: 12px;
+        padding: 14px 16px;
+    }
+
+    .features-table-header h2 {
+        font-size: 16px;
+    }
+
+    .features-table-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .features-table-actions button {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .features-table th,
+    .features-table td {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .features-table-footer {
+        padding: 12px 16px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 600px) {
+    .features-table-container {
+        height: 95vh;
+    }
+
+    .features-table-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .features-table th,
+    .features-table td {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+}

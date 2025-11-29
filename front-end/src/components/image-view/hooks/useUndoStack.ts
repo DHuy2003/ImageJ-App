@@ -19,7 +19,7 @@ const useUndoStack = ({
   setCurrentImageURL,
   setVisibleImages,
 }: UseUndoStackParams) => {
-  const [undoStack, setUndoStack] = useState<UndoEntry[][]>(() =>
+  const [, setUndoStack] = useState<UndoEntry[][]>(() =>
     visibleImages.map(() => [] as UndoEntry[]),
   );
 

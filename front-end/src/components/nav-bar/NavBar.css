@@ -85,23 +85,33 @@ html {
 .navbar-menu-item {
     display: flex;
     align-items: center;
+    gap: 6px;
     color: #000;
     flex: 0 0 auto;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.navbar-menu-item:hover {
+    background-color: #1A73E8;
+    color: #fff;
+}
+
+.navbar-menu-item:hover .menu-icon {
+    color: #fff;
 }
 
 .menu-icon {
-    margin-left: 20px;
-    height: 16px;
-    vertical-align: middle;
+    height: 18px;
+    width: 18px;
+    color: #555;
 }
 
-.navbar-menu-item a {
-    font-size: 16px;
-    color: #000;
+.navbar-menu-item span {
+    font-size: 14px;
+    font-weight: 500;
     text-transform: uppercase;
-    text-decoration: none;
-    align-items: center;
-    line-height: 48px; 
-    padding: 0 10px;
 }
 
