@@ -967,67 +967,111 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
 
                             {activeTab === 'zscore' && (
                                 <div className="zscore-tab">
-                                    <h3>Z-Score Normalized Features by Cluster</h3>
+                                    <div className="zscore-header">
+                                        <h3>Z-Score Normalized Features by Cluster</h3>
+                                        <p className="zscore-description">
+                                            Standardized mean values (z = (x̄<sub>cluster</sub> - μ) / σ) showing how each cluster deviates from the population mean.
+                                            Values represent standard deviations from the mean.
+                                        </p>
+                                    </div>
                                     {zScoreData.length === 0 ? (
                                         <p className="no-data">No clustering data available. Run clustering first.</p>
                                     ) : (
-                                        <div className="zscore-table-container">
-                                            <table className="zscore-table">
+                                        <div className="zscore-table-container scientific">
+                                            <table className="zscore-table scientific-table">
                                                 <thead>
                                                     <tr>
-                                                        <th>Cluster</th>
+                                                        <th rowSpan={2} className="header-cluster">Cluster</th>
+                                                        <th colSpan={4} className="header-group morphology">Morphological Features</th>
+                                                        <th colSpan={1} className="header-group intensity">Intensity</th>
+                                                        <th colSpan={1} className="header-group motility">Motility</th>
+                                                    </tr>
+                                                    <tr className="subheader">
                                                         <th>Area</th>
-                                                        <th>Intensity</th>
                                                         <th>Eccentricity</th>
                                                         <th>Solidity</th>
                                                         <th>Circularity</th>
+                                                        <th>Mean Int.</th>
                                                         <th>Speed</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {zScoreData.map(row => (
-                                                        <tr key={row.cluster}>
-                                                            <td className="cluster-cell">
-                                                                <span
-                                                                    className="cluster-badge"
-                                                                    style={{
-                                                                        backgroundColor: `hsl(${row.cluster * 60}, 70%, 50%)`
-                                                                    }}
-                                                                >
-                                                                    {row.cluster}
-                                                                </span>
-                                                            </td>
-                                                            {['area', 'mean_intensity', 'eccentricity', 'solidity', 'circularity', 'speed'].map(key => (
-                                                                <td
-                                                                    key={key}
-                                                                    style={{
-                                                                        color: getZScoreColor(row.features[key] || 0),
-                                                                        backgroundColor: getZScoreBg(row.features[key] || 0)
-                                                                    }}
-                                                                >
-                                                                    {formatValue(row.features[key], 3)}
+                                                    {zScoreData.map((row, idx) => {
+                                                        // Count cells in this cluster
+                                                        const clusterCells = features.filter(f =>
+                                                            (f.hmm_state ?? f.gmm_state) === row.cluster
+                                                        ).length;
+
+                                                        return (
+                                                            <tr key={row.cluster}>
+                                                                <td className="cluster-cell">
+                                                                    <div className="cluster-info">
+                                                                        <span
+                                                                            className="cluster-badge"
+                                                                            style={{
+                                                                                backgroundColor: `hsl(${row.cluster * 60}, 70%, 45%)`
+                                                                            }}
+                                                                        >
+                                                                            {row.cluster}
+                                                                        </span>
+                                                                        <span className="cluster-n">(n={clusterCells})</span>
+                                                                    </div>
                                                                 </td>
-                                                            ))}
-                                                        </tr>
-                                                    ))}
+                                                                {['area', 'eccentricity', 'solidity', 'circularity', 'mean_intensity', 'speed'].map(key => {
+                                                                    const value = row.features[key] || 0;
+                                                                    const absValue = Math.abs(value);
+                                                                    const significance = absValue >= 1.96 ? '**' : absValue >= 1.64 ? '*' : '';
+
+                                                                    return (
+                                                                        <td
+                                                                            key={key}
+                                                                            className={`zscore-cell ${value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'}`}
+                                                                            style={{
+                                                                                backgroundColor: getZScoreBg(value)
+                                                                            }}
+                                                                        >
+                                                                            <span className="zscore-value" style={{ color: getZScoreColor(value) }}>
+                                                                                {value > 0 ? '+' : ''}{value.toFixed(2)}
+                                                                            </span>
+                                                                            {significance && <sup className="significance">{significance}</sup>}
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
-                                            <div className="zscore-legend">
-                                                <span className="legend-item">
-                                                    <span className="color-box high"></span> High (&gt;1.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box mid-high"></span> Above avg (0.5-1.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box normal"></span> Normal (-0.5 to 0.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box mid-low"></span> Below avg (-1.5 to -0.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box low"></span> Low (&lt;-1.5)
-                                                </span>
+
+                                            <div className="zscore-footer">
+                                                <div className="zscore-legend scientific">
+                                                    <div className="legend-section">
+                                                        <span className="legend-title">Interpretation:</span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box high"></span> z &gt; +1.5 (significantly above mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box mid-high"></span> +0.5 to +1.5 (above mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box normal"></span> -0.5 to +0.5 (near mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box mid-low"></span> -1.5 to -0.5 (below mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box low"></span> z &lt; -1.5 (significantly below mean)
+                                                        </span>
+                                                    </div>
+                                                    <div className="legend-section significance-legend">
+                                                        <span className="legend-title">Significance:</span>
+                                                        <span className="legend-item">** p &lt; 0.05 (|z| ≥ 1.96)</span>
+                                                        <span className="legend-item">* p &lt; 0.10 (|z| ≥ 1.64)</span>
+                                                    </div>
+                                                </div>
+                                                <div className="zscore-note">
+                                                    <em>Note: Z-scores calculated relative to overall population statistics. n = number of cells per cluster.</em>
+                                                </div>
                                             </div>
                                         </div>
                                     )}

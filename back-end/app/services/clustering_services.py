@@ -66,6 +66,9 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
     if len(cells) < min_components:
         return {"error": f"Not enough cells for clustering. Need at least {min_components}, got {len(cells)}"}
 
+    # Motion features that may be None for frame 0
+    motion_features = {'displacement', 'speed', 'delta_x', 'delta_y', 'turning'}
+
     # Extract feature matrix
     feature_matrix = []
     cell_ids = []
@@ -76,8 +79,12 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
         for feat_name in selected_features:
             val = getattr(cell, feat_name, None)
             if val is None:
-                valid = False
-                break
+                # For motion features on frame 0, use 0 as default
+                if feat_name in motion_features:
+                    val = 0.0
+                else:
+                    valid = False
+                    break
             row.append(val)
 
         if valid:
