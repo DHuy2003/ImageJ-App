@@ -43,13 +43,3 @@ export const handleHandClick = () => {
 export const handleBrushClick = () => {
   emitToolbarAction({ type: 'SET_TOOL', tool: 'brush' });
 };
-
-export const handleCirclePlusClick = () => {
-  const event = new CustomEvent('imageZoomIn');
-  window.dispatchEvent(event);
-};
-
-export const handleCircleMinusClick = () => {
-  const event = new CustomEvent('imageZoomOut');
-  window.dispatchEvent(event);
-};

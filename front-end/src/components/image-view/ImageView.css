@@ -532,8 +532,8 @@ html {
   max-width: 100%;
   max-height: 100%;
   overflow: hidden;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges; 
 }
 
 #image-display #image-wrapper.zoom-wrapper {
@@ -543,26 +543,13 @@ html {
   display: inline-block;
 }
 
-#image-wrapper img {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  border-radius: 8px;
-  display: block;
-  /* Giữ độ sắc nét khi zoom - không làm mờ pixel */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-}
 
-#image-wrapper.zoom-wrapper img {
-  max-width: none;
-  max-height: none;
-  display: block;
-  /* Giữ độ sắc nét khi zoom */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
+#image-wrapper img {
+  max-width: 100%; 
+  max-height: 100%; 
+  width: auto;       
+  height: auto;      
+  object-fit: contain; 
 }
 
 #image-wrapper.pan-mode {

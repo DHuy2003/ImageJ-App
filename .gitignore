@@ -31,6 +31,7 @@ front-end/.vite/
 back-end/uploads/
 back-end/converted/
 back-end/masks/
+back-end/cell_tracker_gnn/
 
 # DATABASE
 back-end/instance/
