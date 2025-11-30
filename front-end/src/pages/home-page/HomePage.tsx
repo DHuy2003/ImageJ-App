@@ -1,27 +1,11 @@
 import './HomePage.css';
-import { useNavigate} from 'react-router-dom';
-import { uploadCellImages } from '../../utils/common/uploadImages';
-import axios from 'axios';
-
-const API_BASE_URL = "http://127.0.0.1:5000/api/images";
+import { useNavigate } from 'react-router-dom';
 
 const HomePage = () => {
   const navigate = useNavigate();
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files) return; 
-    try {
-      await axios.post(`${API_BASE_URL}/reset`);
-  
-      await uploadCellImages(files, navigate, true);
-    } catch (error) {
-      console.error("Error resetting + uploading dataset", error);
-    }
-  };
-
-  const handleUploadClick = () => {
-    document.getElementById('file-input')?.click();
+  const handleStartClick = () => {
+    navigate('/display-images');
   };
 
   return (
@@ -40,7 +24,7 @@ const HomePage = () => {
           <div id="getting-started">
               <p>Getting Started:</p>
               <ul>
-                  <li>Upload multiple cell microscopy images</li>
+                  <li>Upload multiple cell microscopy images via File menu</li>
                   <li>Navigate through frames using the thumbnail panel</li>
                   <li>Run analysis to track cell behavior over time</li>
                   <li>Search relevant research articles</li>
@@ -48,8 +32,7 @@ const HomePage = () => {
           </div>
 
           <div id="upload">
-              <button id="upload-btn" onClick={handleUploadClick}>Upload Your First Dataset</button>
-              <input type="file" id="file-input" accept = "image/*" onChange={handleFileChange} multiple/>
+              <button id="upload-btn" onClick={handleStartClick}>Start Using</button>
           </div>
       </div>
 

@@ -15,17 +15,17 @@ html {
   width: 100%;
   height: 100%;
   z-index: 10;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  pointer-events: none;
 }
-  
+
 .crop-overlay {
   position: absolute;
-  border: 2px solid #00bfff;
+  border: 2px solid #8b5cf6;
   cursor: move;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(139, 92, 246, 0.1);
   touch-action: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
 }
 
 .grid-lines {
@@ -53,10 +53,12 @@ html {
 
 .resize-handle {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  background: #00bfff;
+  width: 10px;
+  height: 10px;
+  background: #8b5cf6;
   border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .resize-handle.nw { 

@@ -46,32 +46,48 @@ def process_and_save_image(image, destination_folder):
     output_path = os.path.join(destination_folder, converted_filename)
 
     if destination_folder == MASK_FOLDER:
-        if img.mode != 'L':
-            img = img.convert('L')
-            arr = np.array(img)
-        
-        arr = arr.astype(np.float32)
-        if arr.max() > 0:
-            arr = (arr / arr.max()) * 255
-        arr = arr.astype(np.uint8)
+        # Convert to grayscale if needed
+        if img.mode != 'L' and img.mode != 'I' and img.mode != 'I;16':
+            if len(arr.shape) == 3:
+                # RGB/RGBA - take first channel or convert
+                arr = arr[:, :, 0].astype(np.int32)
+            else:
+                arr = arr.astype(np.int32)
+        else:
+            arr = np.array(img).astype(np.int32)
 
-        min_pixel_value = arr.min()
+        # Save ORIGINAL mask with true labels for feature extraction
+        # This preserves the actual cell IDs (1, 5, 7, 11, etc.)
+        original_mask_filename = converted_filename_base + '_labels.png'
+        original_mask_path = os.path.join(destination_folder, original_mask_filename)
 
+        # Save as 16-bit or 32-bit to preserve label values > 255
+        if arr.max() > 255:
+            # Use 16-bit PNG for large label values
+            original_mask_img = Image.fromarray(arr.astype(np.uint16), mode='I;16')
+        else:
+            original_mask_img = Image.fromarray(arr.astype(np.uint8), mode='L')
+        original_mask_img.save(original_mask_path)
+
+        # Create colored display mask (for visualization only)
         unique_vals = np.unique(arr)
-        lut = np.zeros((256, 3), dtype=np.uint8)
+        lut = np.zeros((int(arr.max()) + 1, 3), dtype=np.uint8)
 
-        if min_pixel_value < 256: 
-            lut[min_pixel_value] = [0, 0, 0]
+        # Background (0) is black
+        lut[0] = [0, 0, 0]
 
         np.random.seed(42)
         for val in unique_vals:
-            if val != min_pixel_value:
-                color = np.random.randint(0, 255, 3)
-                while np.all(color < 50): 
-                    color = np.random.randint(0, 255, 3)
-                lut[val] = color
+            if val != 0:
+                color = np.random.randint(50, 255, 3)
+                lut[int(val)] = color
 
-        color_arr = lut[arr]
+        # Apply LUT to create colored mask
+        color_arr = np.zeros((arr.shape[0], arr.shape[1], 3), dtype=np.uint8)
+        for val in unique_vals:
+            mask = arr == val
+            color_arr[mask] = lut[int(val)]
+
         img = Image.fromarray(color_arr, mode="RGB")
 
     else: 

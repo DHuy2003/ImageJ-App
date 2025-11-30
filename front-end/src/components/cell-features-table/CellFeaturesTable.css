@@ -16,10 +16,10 @@
 .features-table-container {
     background: white;
     border-radius: 12px;
-    width: 100%;
-    max-width: 1200px;
-    height: 80vh;
-    min-height: 400px;
+    width: 96%;
+    max-width: 1400px;
+    height: 85vh;
+    min-height: 500px;
     display: flex;
     flex-direction: column;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -48,6 +48,31 @@
     display: flex;
     gap: 10px;
     align-items: center;
+}
+
+.frame-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.16);
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.frame-filter label {
+    color: #eef2ff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.frame-filter select {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+    cursor: pointer;
 }
 
 .features-table-actions button {
@@ -168,7 +193,7 @@
     }
 
     .features-table-container {
-        height: 90vh;
+        height: 92vh;
         border-radius: 8px;
     }
 

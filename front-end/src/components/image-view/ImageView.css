@@ -482,6 +482,59 @@ html {
   padding: 20px;
 }
 
+/* Pan mode (hand tool) cursor */
+#image-container #image-display.pan-mode {
+  cursor: grab;
+}
+
+#image-container #image-display.pan-mode.pan-active {
+  cursor: grabbing;
+}
+
+/* Navigator Box - Minimap for zoomed images */
+.navigator-box {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: 100px;
+  height: auto;
+  max-height: 80px;
+  background: rgba(30, 30, 40, 0.9);
+  border: 2px solid #9b59b6;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.navigator-box:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(155, 89, 182, 0.4);
+  border-color: #a855f7;
+}
+
+.navigator-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  pointer-events: none;
+}
+
+.navigator-viewport {
+  position: absolute;
+  border: 2px solid #9b59b6;
+  background: rgba(155, 89, 182, 0.25);
+  pointer-events: none;
+  box-sizing: border-box;
+  min-width: 8px;
+  min-height: 8px;
+  max-width: 100%;
+  max-height: 100%;
+  transition: left 0.05s ease, top 0.05s ease;
+}
+
 #image-display.show-mask-layout {
   display: flex;
   flex-direction: row;
@@ -531,7 +584,7 @@ html {
   align-items: center;
   max-width: 100%;
   max-height: 100%;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -628,28 +681,49 @@ html {
 .crop-controls {
   position: absolute;
   left: 50%;
-  bottom: -55px;
+  bottom: 15px;
   transform: translateX(-50%);
   display: flex;
   justify-content: center;
-  gap: 20px;
-  z-index: 20;
+  align-items: center;
+  gap: 8px;
+  z-index: 200;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(147, 51, 234, 0.15) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 6px 12px;
+  border-radius: 20px;
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .crop-controls button {
-  background: linear-gradient(135deg, #00bfff 0%, #008ecc 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
   color: white;
   border: none;
-  padding: 10px 24px;
-  border-radius: 8px;
+  padding: 5px 14px;
+  border-radius: 14px;
   cursor: pointer;
+  font-size: 11px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
+  letter-spacing: 0.3px;
 }
 
 .crop-controls button:hover {
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 191, 255, 0.4);
+}
+
+.crop-controls button:last-child {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.crop-controls button:last-child:hover {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: none;
 }
 
 /* ============ Confirm Popup ============ */

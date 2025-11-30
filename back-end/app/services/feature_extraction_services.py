@@ -31,14 +31,27 @@ def extract_features_from_mask(image_id):
     if not img_record.mask_filepath or not os.path.exists(img_record.mask_filepath):
         raise ValueError(f"No mask found for image {image_id}")
 
-    # Load mask
-    mask_img = Image.open(img_record.mask_filepath)
-    mask_array = np.array(mask_img)
+    # Try to load the original labels mask first (preserves true cell IDs)
+    mask_dir = os.path.dirname(img_record.mask_filepath)
+    mask_basename = os.path.splitext(os.path.basename(img_record.mask_filepath))[0]
+    labels_mask_path = os.path.join(mask_dir, mask_basename + '_labels.png')
 
-    # Convert to grayscale/labels if colored
-    if len(mask_array.shape) == 3:
-        # Convert colored mask back to labels
-        mask_array = convert_colored_to_labels(mask_array)
+    if os.path.exists(labels_mask_path):
+        # Use the original labels mask (has true cell IDs like 1, 5, 7, 11...)
+        mask_img = Image.open(labels_mask_path)
+        mask_array = np.array(mask_img).astype(np.int32)
+        print(f"Using labels mask: {labels_mask_path}")
+        print(f"Unique labels in mask: {np.unique(mask_array)}")
+    else:
+        # Fall back to colored mask
+        mask_img = Image.open(img_record.mask_filepath)
+        mask_array = np.array(mask_img)
+
+        # Convert to grayscale/labels if colored
+        if len(mask_array.shape) == 3:
+            # Convert colored mask back to labels
+            mask_array = convert_colored_to_labels(mask_array)
+        print(f"Using colored mask (fallback): {img_record.mask_filepath}")
 
     # Load original image for intensity features
     intensity_image = None
@@ -67,7 +80,8 @@ def extract_features_from_mask(image_id):
     regions = measure.regionprops(mask_array, intensity_image=intensity_image)
 
     for idx, region in enumerate(regions):
-        cell_id = idx + 1
+        # Use actual label from mask (region.label), not index
+        cell_id = region.label
 
         # Basic geometry
         area = region.area

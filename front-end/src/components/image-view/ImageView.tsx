@@ -151,6 +151,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [clusteringAvailable, setClusteringAvailable] = useState<boolean>(false);
   const [panMode, setPanMode] = useState<boolean>(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scrollPos, setScrollPos] = useState({ left: 0, top: 0 });
+  const navigatorRef = useRef<HTMLDivElement>(null);
 
   const { pushUndo } = useUndoStack({
     visibleImages,
@@ -171,6 +173,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   } = usePanMode({
     wrapperRef,
     imgRef,
+    displayRef,
     scaleToFit,
     zoomLevel,
     panMode,
@@ -262,6 +265,52 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   });
 
   useToolbarToolSelection(setActiveTool, setPanMode);
+
+  // Track scroll position for navigator
+  useEffect(() => {
+    const display = displayRef.current;
+    if (!display) return;
+
+    const handleScroll = () => {
+      setScrollPos({
+        left: display.scrollLeft,
+        top: display.scrollTop,
+      });
+    };
+
+    display.addEventListener('scroll', handleScroll);
+    return () => display.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Navigator click handler - scroll to clicked position
+  const handleNavigatorClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!displayRef.current || !imgRef.current || !navigatorRef.current || scaleToFit) return;
+
+    const navRect = navigatorRef.current.getBoundingClientRect();
+    const clickX = e.clientX - navRect.left;
+    const clickY = e.clientY - navRect.top;
+
+    // Calculate relative position (0-1)
+    const relX = clickX / navRect.width;
+    const relY = clickY / navRect.height;
+
+    // Calculate actual image dimensions when zoomed
+    const imgWidth = imgRef.current.naturalWidth * zoomLevel;
+    const imgHeight = imgRef.current.naturalHeight * zoomLevel;
+
+    // Calculate scroll position to center viewport on clicked point
+    const containerWidth = displayRef.current.clientWidth;
+    const containerHeight = displayRef.current.clientHeight;
+
+    const newScrollLeft = relX * imgWidth - containerWidth / 2 + 20; // 20 = padding
+    const newScrollTop = relY * imgHeight - containerHeight / 2 + 20;
+
+    displayRef.current.scrollTo({
+      left: Math.max(0, newScrollLeft),
+      top: Math.max(0, newScrollTop),
+      behavior: 'smooth',
+    });
+  };
 
   useEffect(() => {
     const onImagesAppended = (e: Event) => {
@@ -380,7 +429,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   };
 
   const handleToggleMask = () => {
-    setShowMask((prev) => !prev);
+    setShowMask((prev) => {
+      // Khi bật show mask, reset về chế độ fit-to-window
+      if (!prev) {
+        setScaleToFit(true);
+        setZoomLevel(DEFAULT_ZOOM_LEVEL);
+      }
+      return !prev;
+    });
   };
 
   const formatValue = (value: number | null | undefined, decimals: number = 2): string => {
@@ -618,17 +674,17 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         <div
           ref={displayRef}
           id="image-display"
-          className={`${showMask && scaleToFit ? 'show-mask-layout' : ''} ${!scaleToFit ? 'zoom-mode' : ''}`}
+          className={`${showMask && scaleToFit ? 'show-mask-layout' : ''} ${!scaleToFit ? 'zoom-mode' : ''} ${panMode ? 'pan-mode' : ''} ${isPanning ? 'pan-active' : ''}`}
+          onMouseDown={handlePanMouseDown}
+          onMouseMove={handlePanMouseMove}
+          onMouseUp={handlePanMouseUp}
+          onMouseLeave={handlePanMouseLeave}
         >
           {currentImageURL && (
             <div
               id="image-wrapper"
               ref={wrapperRef}
-              onMouseDown={handlePanMouseDown}
-              onMouseMove={handlePanMouseMove}
-              onMouseUp={handlePanMouseUp}
-              onMouseLeave={handlePanMouseLeave}
-              className={`${!scaleToFit ? 'zoom-wrapper' : ''} ${panMode ? 'pan-mode' : ''} ${isPanning ? 'pan-active' : ''}`}
+              className={`${!scaleToFit ? 'zoom-wrapper' : ''}`}
               style={!scaleToFit && imgRef.current ? {
                 width: imgRef.current.naturalWidth * zoomLevel,
                 height: imgRef.current.naturalHeight * zoomLevel,
@@ -644,7 +700,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                 style={!scaleToFit ? {
                   width: imgRef.current?.naturalWidth ? imgRef.current.naturalWidth * zoomLevel : 'auto',
                   height: imgRef.current?.naturalHeight ? imgRef.current.naturalHeight * zoomLevel : 'auto',
-                  transform: `translate(${pan.x}px, ${pan.y}px)`,
                 } : undefined}
               />
 
@@ -742,23 +797,51 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             onCommit={handleBrushCommit}
           />
 
-          {isCropping && (
-            <div className="crop-controls">
-              <button
-                onClick={() => {
-                  const rel = cropRef.current?.getRelativeRect();
-                  if (rel) {
-                    setCropRectData(rel);
-                    setShowConfirmCrop(true);
-                  }
+          {/* Navigator Box - shows minimap with viewport rectangle when zoomed */}
+          {!scaleToFit && currentImageURL && imgRef.current && displayRef.current && (
+            <div
+              ref={navigatorRef}
+              className="navigator-box"
+              onClick={handleNavigatorClick}
+              title="Click to navigate"
+            >
+              <img
+                src={currentImageURL}
+                alt="Navigator"
+                className="navigator-image"
+                draggable={false}
+              />
+              {/* Viewport rectangle */}
+              <div
+                className="navigator-viewport"
+                style={{
+                  left: `${(scrollPos.left / (imgRef.current.naturalWidth * zoomLevel)) * 100}%`,
+                  top: `${(scrollPos.top / (imgRef.current.naturalHeight * zoomLevel)) * 100}%`,
+                  width: `${(displayRef.current.clientWidth / (imgRef.current.naturalWidth * zoomLevel)) * 100}%`,
+                  height: `${(displayRef.current.clientHeight / (imgRef.current.naturalHeight * zoomLevel)) * 100}%`,
                 }}
-              >
-                Crop
-              </button>
-              <button onClick={handleCancelCrop}>Cancel</button>
+              />
             </div>
           )}
         </div>
+
+        {/* Crop Controls - outside image-display to avoid overflow issues */}
+        {isCropping && (
+          <div className="crop-controls">
+            <button
+              onClick={() => {
+                const rel = cropRef.current?.getRelativeRect();
+                if (rel) {
+                  setCropRectData(rel);
+                  setShowConfirmCrop(true);
+                }
+              }}
+            >
+              Crop
+            </button>
+            <button onClick={handleCancelCrop}>Cancel</button>
+          </div>
+        )}
 
         {showConfirmCrop && cropRectData && (
           <div className="confirm-popup">

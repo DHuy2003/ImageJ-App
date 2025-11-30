@@ -35,6 +35,7 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
     const [features, setFeatures] = useState<CellFeature[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [frameFilter, setFrameFilter] = useState<number | 'all'>('all');
 
     useEffect(() => {
         if (isOpen) {
@@ -48,6 +49,7 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
             setError(null);
             const response = await axios.get(`${API_BASE_URL}/features`);
             setFeatures(response.data.features || []);
+            setFrameFilter('all');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to load features');
         } finally {
@@ -79,6 +81,11 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
         return value.toFixed(2);
     };
 
+    const frames = Array.from(new Set(features.map(f => f.frame_num))).sort((a, b) => a - b);
+    const filteredFeatures = frameFilter === 'all'
+        ? features
+        : features.filter(f => f.frame_num === frameFilter);
+
     if (!isOpen) return null;
 
     return (
@@ -87,6 +94,21 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
                 <div className="features-table-header">
                     <h2>Cell Features</h2>
                     <div className="features-table-actions">
+                        <div className="frame-filter">
+                            <label>Frame</label>
+                            <select
+                                value={frameFilter === 'all' ? 'all' : frameFilter}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setFrameFilter(val === 'all' ? 'all' : parseInt(val, 10));
+                                }}
+                            >
+                                <option value="all">All frames</option>
+                                {frames.map(frame => (
+                                    <option key={frame} value={frame}>Frame {frame}</option>
+                                ))}
+                            </select>
+                        </div>
                         <button onClick={fetchFeatures} disabled={loading}>
                             Refresh
                         </button>
@@ -127,7 +149,7 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {features.map((f) => (
+                                {filteredFeatures.map((f) => (
                                     <tr key={f.id}>
                                         <td>{f.frame_num}</td>
                                         <td>{f.cell_id}</td>
@@ -152,7 +174,7 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
                 </div>
 
                 <div className="features-table-footer">
-                    <span>Total: {features.length} cells</span>
+                    <span>Total: {filteredFeatures.length} cells (dataset: {features.length})</span>
                 </div>
             </div>
         </div>
