@@ -18,7 +18,7 @@ import useFileEvents from './hooks/useFileEvents';
 import useMaskCreation from './hooks/useMaskCreation';
 import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
-import { useToolbarToolSelection } from './hooks/useToolbarToolSelection';
+import useToolbarToolSelection from './hooks/useToolbarToolSelection';
 import useUndoStack from './hooks/useUndoStack';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
@@ -168,7 +168,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
   const {
     pan,
-    cursor,
     isPanning,
     handleMouseDown: handlePanMouseDown,
     handleMouseMove: handlePanMouseMove,
