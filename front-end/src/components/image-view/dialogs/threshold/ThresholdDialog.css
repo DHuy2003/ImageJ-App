@@ -1,0 +1,87 @@
+.threshold-dialog-overlay {
+    position: fixed;
+    top: 50px;
+    /* Vị trí lệch một chút giống ImageJ */
+    left: 50px;
+    z-index: 2000;
+}
+
+.threshold-window {
+    background: #e8e8e8;
+    border: 1px solid #444;
+    padding: 5px;
+    width: 280px;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.threshold-header {
+    background: linear-gradient(to right, #000080, #1084d0);
+    color: white;
+    padding: 2px 5px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.histogram-container {
+    background: white;
+    border: 1px solid #999;
+    margin-bottom: 5px;
+}
+
+.hist-canvas {
+    width: 100%;
+    display: block;
+}
+
+.sliders-container {
+    margin-bottom: 10px;
+    position: relative;
+}
+
+.slider-row {
+    margin-bottom: 2px;
+}
+
+.slider-row input[type="range"] {
+    width: 100%;
+    margin: 0;
+    cursor: pointer;
+}
+
+.slider-values {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+}
+
+.controls-row {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.controls-row select {
+    flex: 1;
+}
+
+.checkbox-row {
+    margin-bottom: 10px;
+}
+
+.buttons-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.buttons-row button {
+    width: 23%;
+    padding: 2px 0;
+}
+
+.close-btn {
+    width: 100%;
+    margin-top: 5px;
+}
