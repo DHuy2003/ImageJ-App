@@ -5,3 +5,9 @@ flask-cors
 Flask-SQLAlchemy
 python-dotenv
 requests
+cellpose
+torch
+scikit-image
+scikit-learn
+hmmlearn
+scipy

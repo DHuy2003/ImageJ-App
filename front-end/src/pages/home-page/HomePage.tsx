@@ -1,6 +1,5 @@
 import './HomePage.css';
 import { useNavigate} from 'react-router-dom';
-import { useEffect } from 'react';
 import { uploadCellImages } from '../../utils/common/uploadImages';
 import axios from 'axios';
 

@@ -3,7 +3,7 @@ from PIL import Image
 import shutil
 import numpy as np
 from app import db, config
-from app.models import Image as ImageModel
+from app.models import Image as ImageModel, CellFeature
 import re
 from flask import url_for
 from sqlalchemy import or_
@@ -86,9 +86,13 @@ def process_and_save_image(image, destination_folder):
 
         if arr.dtype in [np.uint16, np.int32, np.float32, np.float64]:
             arr = arr.astype(np.float32)
-            min_val, max_val = np.percentile(arr, [1,99])
-            arr = np.clip((arr - min_val) / (max_val - min_val), 0, 1)
-            arr = arr * 255
+            # Use full range normalization to preserve details
+            min_val = arr.min()
+            max_val = arr.max()
+            if max_val > min_val:
+                arr = (arr - min_val) / (max_val - min_val) * 255
+            else:
+                arr = np.zeros_like(arr)
             arr = arr.astype(np.uint8)
             img = Image.fromarray(arr)
 
@@ -165,6 +169,9 @@ def process_and_save_image(image, destination_folder):
     }
 
 def upload_cell_images(images):
+    # Auto reset: Clear all existing data before uploading new images
+    _auto_reset_data()
+
     uploaded_cells_info = []
     for image in images:
         try:
@@ -181,6 +188,47 @@ def upload_cell_images(images):
                 "error": str(e)
             })
     return uploaded_cells_info
+
+
+def _auto_reset_data():
+    """Auto reset all data when uploading new images"""
+    from app.models import CellFeature
+
+    print("Auto-resetting data for new upload...")
+
+    # Clear CellFeature table first (due to foreign key)
+    try:
+        CellFeature.query.delete()
+        db.session.commit()
+        print("Cleared CellFeature table")
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error clearing CellFeature: {e}")
+
+    # Clear Image table
+    try:
+        ImageModel.query.delete()
+        db.session.commit()
+        print("Cleared Image table")
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error clearing Image table: {e}")
+
+    # Clear folders
+    for folder in [UPLOAD_FOLDER, CONVERTED_FOLDER, MASK_FOLDER, EDITED_FOLDER]:
+        if not os.path.exists(folder):
+            continue
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"Failed to delete {file_path}: {e}")
+
+    print("Auto-reset complete")
 
 def upload_mask_images(images):
     uploaded_masks_info = []
@@ -498,6 +546,7 @@ def revert_image(image_id):
     }
 
     
+    
 def delete_image(image_id):
     img = ImageModel.query.get(image_id)
     if not img:
@@ -535,9 +584,11 @@ def cleanup_database(app):
     print("Cleaning up DB")
     with app.app_context():
         try:
+            # Clear child table first to avoid FK constraints
+            CellFeature.query.delete()
             ImageModel.query.delete()
             db.session.commit()
-            print("Already cleared all records from the imageJ table.")
+            print("Cleared Image and CellFeature tables.")
         except Exception as e:
             print(f"Failed to clear imageJ table. Reason: {e}")
     print("DB cleanup complete.")

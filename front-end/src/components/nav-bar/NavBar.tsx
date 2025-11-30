@@ -38,6 +38,15 @@ import {
     handleScaleToFit,
 } from "../../utils/nav-bar/imageUtils";
 
+import {
+    handleSegmentation,
+    handleTracking,
+    handleClustering,
+    handleExtractFeatures,
+    handleShowFeatures,
+    handleShowAnalysis,
+} from "../../utils/nav-bar/toolUtils";
+
 const NavBar = () => {
     const navigate = useNavigate();
     return(
@@ -128,13 +137,13 @@ const NavBar = () => {
                     ]}
                 />
 
-                <DropdownMenu 
-                    label="Process" 
+                <DropdownMenu
+                    label="Process"
                     items={[{label: "Smooth"},
                         {label: "Sharpen"},
                         {label: "Enhance Contrast..."},
                         {label: "Subtract Background..."},
-                        {label: "Filters"}, 
+                        {label: "Filters"},
                         {label: "Binary", subItems: [
                             {label: "Make Binary"},
                             {label: "Erode"},
@@ -143,19 +152,30 @@ const NavBar = () => {
                         ]}
                     ]}
                 />
+
+                <DropdownMenu
+                    label="Tool"
+                    items={[
+                        {label: "Segmentation", onClick: handleSegmentation},
+                        {label: "Tracking", onClick: handleTracking},
+                        {label: "Extract Features", onClick: handleExtractFeatures},
+                        {label: "Show Features", onClick: handleShowFeatures},
+                        {label: "Clustering", onClick: handleClustering}
+                    ]}
+                />
             </ul>
 
             <div className="divider"></div>
                 
             <div id="navbar-right">
-                <div className="navbar-menu-item">
+                <div className="navbar-menu-item" onClick={handleShowAnalysis}>
                     <BarChart3 className="menu-icon" />
-                    <a href="#">Result</a>
+                    <span>Result</span>
                 </div>
 
                 <div className="navbar-menu-item">
                     <Search className="menu-icon" />
-                    <a href="#">Article</a>
+                    <span>Article</span>
                 </div>
             </div>
         </div>

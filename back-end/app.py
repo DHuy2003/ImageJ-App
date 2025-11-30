@@ -11,11 +11,18 @@ atexit.register(cleanup_database, app=app)
 with app.app_context():
     from sqlalchemy import inspect
     inspector = inspect(db.engine)
+    tables_created = []
+
     if not inspector.has_table("imageJ"):
+        tables_created.append("imageJ")
+    if not inspector.has_table("cell_features"):
+        tables_created.append("cell_features")
+
+    if tables_created:
         db.create_all()
-        print("Database & imageJ table are created!")
+        print(f"Database tables created: {', '.join(tables_created)}")
     else:
-        print("imageJ table already existed.")
+        print("All tables already exist.")
 
 if __name__ == '__main__':
     app.run(debug=True)
