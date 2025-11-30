@@ -3,21 +3,23 @@ import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import type { CropOverlayHandle, RelativeCropRect } from '../../types/crop';
 import type { ImageInfo, ImageViewProps } from '../../types/image';
+import { type RoiTool } from '../../types/roi';
 import { formatFileSize } from '../../utils/common/formatFileSize';
+import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
+import { analyzeImageHistogram, handleScaleToFit, handleZoomIn, handleZoomOut, processBrightnessContrast } from '../../utils/nav-bar/imageUtils'; // Import helpers
+import BrushOverlay from '../brush-overlay/BrushOverlay';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
-import { type RoiTool } from '../../types/roi';
 import './ImageView.css';
-import useEditEvents from './hooks/useEditEvents';
-import { useToolbarToolSelection } from './hooks/useToolbarToolSelection';
-import useFileEvents from './hooks/useFileEvents';
-import BrushOverlay from '../brush-overlay/BrushOverlay';
-import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
-import usePanMode from './hooks/usePanMode';
-import useUndoStack from './hooks/useUndoStack';
-import useMaskCreation from './hooks/useMaskCreation';
-import useRoiSelection from './hooks/useRoiSelection';
+import BrightnessContrastDialog from './dialogs/BrightContrast';
 import useBrushCommit from './hooks/useBrushCommit';
+import useEditEvents from './hooks/useEditEvents';
+import useFileEvents from './hooks/useFileEvents';
+import useMaskCreation from './hooks/useMaskCreation';
+import usePanMode from './hooks/usePanMode';
+import useRoiSelection from './hooks/useRoiSelection';
+import useToolbarToolSelection from './hooks/useToolbarToolSelection';
+import useUndoStack from './hooks/useUndoStack';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -67,9 +69,6 @@ const CLUSTER_COLORS = [
   { color: 'rgba(99, 102, 241, 0.5)', border: '#6366f1', name: 'Indigo' },
   { color: 'rgba(20, 184, 166, 0.5)', border: '#14b8a6', name: 'Cyan' },
 ];
-
-const ZOOM_FACTOR = 1.25; // Tỉ lệ phóng to/thu nhỏ
-const DEFAULT_ZOOM_LEVEL = 1.0;
 
 // Hàm zoom giữ tâm cố định
 const zoomWithCenter = (
@@ -122,6 +121,9 @@ const zoomWithCenter = (
   });
 };
 
+const ZOOM_FACTOR = 1.25; // Tỉ lệ phóng to/thu nhỏ
+const DEFAULT_ZOOM_LEVEL = 1.0;
+
 const ImageView = ({ imageArray }: ImageViewProps) => {
   const [visibleImages, setVisibleImages] = useState<ImageInfo[]>(imageArray);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -151,9 +153,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [clusteringAvailable, setClusteringAvailable] = useState<boolean>(false);
   const [panMode, setPanMode] = useState<boolean>(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [scrollPos, setScrollPos] = useState({ left: 0, top: 0 });
-  const navigatorRef = useRef<HTMLDivElement>(null);
-
+  const [showBC, setShowBC] = useState(false);
+  const [displayRange, setDisplayRange] = useState({ min: 0, max: 255 });
+  const [originalImageData, setOriginalImageData] = useState<ImageData | null>(null);
+  const [histogramData, setHistogramData] = useState<number[]>([]);
   const { pushUndo } = useUndoStack({
     visibleImages,
     currentIndex,
@@ -173,7 +176,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   } = usePanMode({
     wrapperRef,
     imgRef,
-    displayRef,
     scaleToFit,
     zoomLevel,
     panMode,
@@ -265,52 +267,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   });
 
   useToolbarToolSelection(setActiveTool, setPanMode);
-
-  // Track scroll position for navigator
-  useEffect(() => {
-    const display = displayRef.current;
-    if (!display) return;
-
-    const handleScroll = () => {
-      setScrollPos({
-        left: display.scrollLeft,
-        top: display.scrollTop,
-      });
-    };
-
-    display.addEventListener('scroll', handleScroll);
-    return () => display.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Navigator click handler - scroll to clicked position
-  const handleNavigatorClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!displayRef.current || !imgRef.current || !navigatorRef.current || scaleToFit) return;
-
-    const navRect = navigatorRef.current.getBoundingClientRect();
-    const clickX = e.clientX - navRect.left;
-    const clickY = e.clientY - navRect.top;
-
-    // Calculate relative position (0-1)
-    const relX = clickX / navRect.width;
-    const relY = clickY / navRect.height;
-
-    // Calculate actual image dimensions when zoomed
-    const imgWidth = imgRef.current.naturalWidth * zoomLevel;
-    const imgHeight = imgRef.current.naturalHeight * zoomLevel;
-
-    // Calculate scroll position to center viewport on clicked point
-    const containerWidth = displayRef.current.clientWidth;
-    const containerHeight = displayRef.current.clientHeight;
-
-    const newScrollLeft = relX * imgWidth - containerWidth / 2 + 20; // 20 = padding
-    const newScrollTop = relY * imgHeight - containerHeight / 2 + 20;
-
-    displayRef.current.scrollTo({
-      left: Math.max(0, newScrollLeft),
-      top: Math.max(0, newScrollTop),
-      behavior: 'smooth',
-    });
-  };
 
   useEffect(() => {
     const onImagesAppended = (e: Event) => {
@@ -429,15 +385,119 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   };
 
   const handleToggleMask = () => {
-    setShowMask((prev) => {
-      // Khi bật show mask, reset về chế độ fit-to-window
-      if (!prev) {
-        setScaleToFit(true);
-        setZoomLevel(DEFAULT_ZOOM_LEVEL);
+    setShowMask((prev) => !prev);
+    setShowProperties((prev) => !prev);
+  };
+
+  //New
+  const getImageData = (): { ctx: CanvasRenderingContext2D, imageData: ImageData, canvas: HTMLCanvasElement } | null => {
+    if (!imgRef.current) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = imgRef.current.naturalWidth;
+    canvas.height = imgRef.current.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(imgRef.current, 0, 0);
+    return { ctx, imageData: ctx.getImageData(0, 0, canvas.width, canvas.height), canvas };
+  };
+
+  // --- Update Image Source from Canvas ---
+  const updateImageFromCanvas = (canvas: HTMLCanvasElement, saveToHistory: boolean = true) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const newUrl = URL.createObjectURL(blob);
+
+      if (saveToHistory) {
+        pushUndo();
       }
-      return !prev;
+
+      setCurrentImageURL(newUrl);
     });
   };
+
+  const handleOpenBCEvent = () => {
+        const dataObj = getImageData();
+        if (dataObj) {
+            setOriginalImageData(dataObj.imageData);
+            const { bins } = analyzeImageHistogram(dataObj.imageData);
+            setHistogramData(bins);
+            setShowBC(true);
+        }
+    };
+
+  // 2. Preview thay đổi (Vẽ lên Canvas nhưng không lưu History)
+  const applyVisualChanges = (min: number, max: number) => {
+    if (!originalImageData) return;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = originalImageData.width;
+    tempCanvas.height = originalImageData.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clone dữ liệu gốc
+    const freshData = new ImageData(
+      new Uint8ClampedArray(originalImageData.data),
+      originalImageData.width,
+      originalImageData.height
+    );
+
+    // Tính toán pixel mới
+    const processed = processBrightnessContrast(freshData, min, max);
+    ctx.putImageData(processed, 0, 0);
+
+    // Update lên màn hình (tham số false = không push Undo)
+    updateImageFromCanvas(tempCanvas, false);
+  };
+
+  // 3. Khi người dùng thay đổi Slider (Bất kỳ slider nào từ Dialog)
+  const handleBCChange = (newMin: number, newMax: number) => {
+    // Cập nhật State (để Dialog hiển thị đúng số)
+    setDisplayRange({ min: newMin, max: newMax });
+    // Cập nhật hình ảnh
+    applyVisualChanges(newMin, newMax);
+  };
+
+  // 4. Auto
+  const handleBCAuto = () => {
+    if (!originalImageData) return;
+    // Dùng hàm phân tích mới để lấy min/max thực tế
+    const { min, max } = analyzeImageHistogram(originalImageData);
+    handleBCChange(min, max);
+  };
+
+  // 5. Reset (Về 0-255)
+  const handleBCReset = () => {
+    handleBCChange(0, 255);
+  };
+
+  // 6. Apply (Chốt đơn)
+  const handleBCApply = () => {
+    // Vẽ lần cuối
+    applyVisualChanges(displayRange.min, displayRange.max);
+
+    // Lưu vào Undo History (Lúc này ảnh trên màn hình đã thành ảnh gốc mới)
+    pushUndo();
+
+    // Reset thông số hiển thị về mặc định vì pixel đã bị thay đổi vĩnh viễn
+    setDisplayRange({ min: 0, max: 255 });
+    setOriginalImageData(null);
+    setShowBC(false);
+  };
+
+  // 7. Đóng (Hủy, nhưng giữ hiển thị preview - Non-destructive viewing)
+  const handleBCClose = () => {
+    setShowBC(false);
+    // Nếu muốn khi đóng mà hủy bỏ thay đổi (như nút Cancel), gọi handleBCReset() ở đây.
+    // Nhưng ImageJ thường giữ nguyên view (non-destructive).
+  };
+
+  useEffect(() => {
+    window.addEventListener('openBrightnessContrast', handleOpenBCEvent);
+    return () => {
+      window.removeEventListener('openBrightnessContrast', handleOpenBCEvent);
+    };
+  }, [currentImageURL]); // Re-bind khi URL đổi
 
   const formatValue = (value: number | null | undefined, decimals: number = 2): string => {
     if (value === null || value === undefined) return '-';
@@ -476,7 +536,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isResizingLeft, isResizingRight]);
-  
+
   return (
     <div id="image-view">
       {/* LEFT SIDE: Properties & Analysis Panel */}
@@ -584,6 +644,18 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         </div>
       )}
 
+      <BrightnessContrastDialog
+        isOpen={showBC}
+        onClose={handleBCClose}
+        onApply={handleBCApply}
+        onChange={handleBCChange}
+        onReset={handleBCReset}
+        onAuto={handleBCAuto}
+        currentMin={displayRange.min}
+        currentMax={displayRange.max}
+        histogram={histogramData}
+      />
+
       {/* Left Resize Handle */}
       {showProperties && (
         <div
@@ -600,14 +672,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             <div className="zoom-controls">
               <button
                 className="zoom-btn"
-                onClick={() => {
-                  const newZoom = Math.max(zoomLevel / ZOOM_FACTOR, 0.1);
-                  if (displayRef.current && imgRef.current) {
-                    zoomWithCenter(displayRef.current, imgRef.current, zoomLevel, newZoom, scaleToFit);
-                  }
-                  setScaleToFit(false);
-                  setZoomLevel(newZoom);
-                }}
+                onClick={handleZoomOut}
                 title="Zoom Out"
               >
                 <span className="zoom-icon">−</span>
@@ -615,26 +680,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
               <button
                 className="zoom-btn"
-                onClick={() => {
-                  const newZoom = Math.min(zoomLevel * ZOOM_FACTOR, 32.0);
-                  if (displayRef.current && imgRef.current) {
-                    zoomWithCenter(displayRef.current, imgRef.current, zoomLevel, newZoom, scaleToFit);
-                  }
-                  setScaleToFit(false);
-                  setZoomLevel(newZoom);
-                }}
+                onClick={handleZoomIn}
                 title="Zoom In"
               >
                 <span className="zoom-icon">+</span>
               </button>
               <button
                 className={`zoom-btn fit-btn ${scaleToFit ? 'active' : ''}`}
-                onClick={() => {
-                  setScaleToFit(prev => {
-                    if (!prev) setZoomLevel(DEFAULT_ZOOM_LEVEL);
-                    return !prev;
-                  });
-                }}
+                onClick={handleScaleToFit}
                 title="Fit to Window"
               >
                 <Maximize size={14} />
@@ -672,23 +725,18 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         </div>
 
         <div
-          ref={displayRef}
           id="image-display"
-          className={`${showMask && scaleToFit ? 'show-mask-layout' : ''} ${!scaleToFit ? 'zoom-mode' : ''} ${panMode ? 'pan-mode' : ''} ${isPanning ? 'pan-active' : ''}`}
-          onMouseDown={handlePanMouseDown}
-          onMouseMove={handlePanMouseMove}
-          onMouseUp={handlePanMouseUp}
-          onMouseLeave={handlePanMouseLeave}
+          className={showMask ? 'show-mask-layout' : ''}
         >
           {currentImageURL && (
             <div
               id="image-wrapper"
               ref={wrapperRef}
-              className={`${!scaleToFit ? 'zoom-wrapper' : ''}`}
-              style={!scaleToFit && imgRef.current ? {
-                width: imgRef.current.naturalWidth * zoomLevel,
-                height: imgRef.current.naturalHeight * zoomLevel,
-              } : undefined}
+              onMouseDown={handlePanMouseDown}
+              onMouseMove={handlePanMouseMove}
+              onMouseUp={handlePanMouseUp}
+              onMouseLeave={handlePanMouseLeave}
+              className={`${panMode ? 'pan-mode' : ''} ${isPanning ? 'pan-active' : ''}`}
             >
               <img
                 ref={imgRef}
@@ -697,10 +745,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                 src={currentImageURL}
                 alt={currentFile?.filename}
                 className={showMask ? 'small-image' : ''}
-                style={!scaleToFit ? {
-                  width: imgRef.current?.naturalWidth ? imgRef.current.naturalWidth * zoomLevel : 'auto',
-                  height: imgRef.current?.naturalHeight ? imgRef.current.naturalHeight * zoomLevel : 'auto',
-                } : undefined}
+                style={{
+                  // scale dùng để zoom (in/out) ảnh bên trong khung,
+                  // KHÔNG đụng vào kích thước layout ban đầu của ảnh
+                  transform: scaleToFit ? 'none' : `translate(${pan.x}px, ${pan.y}px) scale(${zoomLevel})`,
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  transformOrigin: 'center center',
+                }}
               />
 
               {isCropping && (
@@ -797,51 +849,23 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             onCommit={handleBrushCommit}
           />
 
-          {/* Navigator Box - shows minimap with viewport rectangle when zoomed */}
-          {!scaleToFit && currentImageURL && imgRef.current && displayRef.current && (
-            <div
-              ref={navigatorRef}
-              className="navigator-box"
-              onClick={handleNavigatorClick}
-              title="Click to navigate"
-            >
-              <img
-                src={currentImageURL}
-                alt="Navigator"
-                className="navigator-image"
-                draggable={false}
-              />
-              {/* Viewport rectangle */}
-              <div
-                className="navigator-viewport"
-                style={{
-                  left: `${(scrollPos.left / (imgRef.current.naturalWidth * zoomLevel)) * 100}%`,
-                  top: `${(scrollPos.top / (imgRef.current.naturalHeight * zoomLevel)) * 100}%`,
-                  width: `${(displayRef.current.clientWidth / (imgRef.current.naturalWidth * zoomLevel)) * 100}%`,
-                  height: `${(displayRef.current.clientHeight / (imgRef.current.naturalHeight * zoomLevel)) * 100}%`,
+          {isCropping && (
+            <div className="crop-controls">
+              <button
+                onClick={() => {
+                  const rel = cropRef.current?.getRelativeRect();
+                  if (rel) {
+                    setCropRectData(rel);
+                    setShowConfirmCrop(true);
+                  }
                 }}
-              />
+              >
+                Crop
+              </button>
+              <button onClick={handleCancelCrop}>Cancel</button>
             </div>
           )}
         </div>
-
-        {/* Crop Controls - outside image-display to avoid overflow issues */}
-        {isCropping && (
-          <div className="crop-controls">
-            <button
-              onClick={() => {
-                const rel = cropRef.current?.getRelativeRect();
-                if (rel) {
-                  setCropRectData(rel);
-                  setShowConfirmCrop(true);
-                }
-              }}
-            >
-              Crop
-            </button>
-            <button onClick={handleCancelCrop}>Cancel</button>
-          </div>
-        )}
 
         {showConfirmCrop && cropRectData && (
           <div className="confirm-popup">

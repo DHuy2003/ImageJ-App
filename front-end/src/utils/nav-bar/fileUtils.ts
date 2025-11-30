@@ -5,7 +5,6 @@ import axios from 'axios';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
-// Natural sort để sắp xếp file theo tên (001, 002, ..., 010, 011)
 const naturalSort = (a: File, b: File): number => {
   return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 };
@@ -111,8 +110,6 @@ export const handleOpenFolder = async (navigate: NavigateFunction) => {
       });
       return;
     }
-
-    // Sắp xếp file theo tên trước khi upload
     files.sort(naturalSort);
 
     await axios.post(`${API_BASE_URL}/reset`);
@@ -154,8 +151,6 @@ export const handleOpenMaskFolder = async (navigate: NavigateFunction) => {
       });
       return;
     }
-
-    // Sắp xếp file theo tên trước khi upload
     files.sort(naturalSort);
 
     await uploadMasks(files, navigate);

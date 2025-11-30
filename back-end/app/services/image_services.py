@@ -102,7 +102,6 @@ def process_and_save_image(image, destination_folder):
 
         if arr.dtype in [np.uint16, np.int32, np.float32, np.float64]:
             arr = arr.astype(np.float32)
-            # Use full range normalization to preserve details
             min_val = arr.min()
             max_val = arr.max()
             if max_val > min_val:
@@ -185,10 +184,8 @@ def process_and_save_image(image, destination_folder):
     }
 
 def upload_cell_images(images):
-    # Auto reset: Clear all existing data before uploading new images
-    _auto_reset_data()
-
     uploaded_cells_info = []
+
     for image in images:
         try:
             cell_image_info = process_and_save_image(image, CONVERTED_FOLDER)
@@ -204,47 +201,6 @@ def upload_cell_images(images):
                 "error": str(e)
             })
     return uploaded_cells_info
-
-
-def _auto_reset_data():
-    """Auto reset all data when uploading new images"""
-    from app.models import CellFeature
-
-    print("Auto-resetting data for new upload...")
-
-    # Clear CellFeature table first (due to foreign key)
-    try:
-        CellFeature.query.delete()
-        db.session.commit()
-        print("Cleared CellFeature table")
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error clearing CellFeature: {e}")
-
-    # Clear Image table
-    try:
-        ImageModel.query.delete()
-        db.session.commit()
-        print("Cleared Image table")
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error clearing Image table: {e}")
-
-    # Clear folders
-    for folder in [UPLOAD_FOLDER, CONVERTED_FOLDER, MASK_FOLDER, EDITED_FOLDER]:
-        if not os.path.exists(folder):
-            continue
-        for filename in os.listdir(folder):
-            file_path = os.path.join(folder, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}: {e}")
-
-    print("Auto-reset complete")
 
 def upload_mask_images(images):
     uploaded_masks_info = []
@@ -561,8 +517,6 @@ def revert_image(image_id):
         "last_edited_on": img_db.last_edited_on.isoformat() if img_db.last_edited_on else None,
     }
 
-    
-    
 def delete_image(image_id):
     img = ImageModel.query.get(image_id)
     if not img:
@@ -608,5 +562,4 @@ def cleanup_database(app):
         except Exception as e:
             print(f"Failed to clear imageJ table. Reason: {e}")
     print("DB cleanup complete.")
-
 
