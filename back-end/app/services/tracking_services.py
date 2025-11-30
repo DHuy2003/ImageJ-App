@@ -43,6 +43,10 @@ PRETRAINED_DATASETS = {
         "metric_model": os.path.join(PRETRAINED_MODELS_PATH, "Features_Models", "PhC-C2DH-U373", "all_params.pth"),
         "tracking_model": os.path.join(PRETRAINED_MODELS_PATH, "Tracking_Models", "PhC-C2DH-U373", "checkpoints", "epoch=10.ckpt"),
     },
+    "DIC-C2DH-HeLa": {
+        "metric_model": os.path.join(PRETRAINED_MODELS_PATH, "Features_Models", "DIC-C2DH-HeLa", "all_params.pth"),
+        "tracking_model": os.path.join(PRETRAINED_MODELS_PATH, "Tracking_Models", "DIC-C2DH-HeLa", "checkpoints", "epoch=39.ckpt"),
+    },
 }
 
 
@@ -512,13 +516,20 @@ def _run_gnn_tracking_internal(metric_model_path, tracking_model_path):
                 shutil.copy(img.mask_filepath, os.path.join(seg_dir, dst_name))
 
         # Step 1: Feature extraction using metric learning
+        # Note: inference_clean.py expects folder structure: {csv_dir}/01_CSV/csv/
+        # So we create csv output in {csv_dir}/01_CSV/
         print("Step 1: Extracting features using metric learning model...")
         from src.inference.preprocess_seq2graph_clean import create_csv
+
+        # Create the expected folder structure for inference
+        seq_csv_dir = os.path.join(csv_dir, '01_CSV')
+        os.makedirs(seq_csv_dir, exist_ok=True)
+
         create_csv(
             input_images=img_dir,
             input_seg=seg_dir,
             input_model=metric_model_path,
-            output_csv=csv_dir,
+            output_csv=seq_csv_dir,  # This will create 01_CSV/csv/ folder
             min_cell_size=20
         )
 
@@ -527,7 +538,7 @@ def _run_gnn_tracking_internal(metric_model_path, tracking_model_path):
         from src.inference.inference_clean import predict
         predict(
             ckpt_path=tracking_model_path,
-            path_csv_output=csv_dir,
+            path_csv_output=csv_dir,  # inference will look for {csv_dir}/01_CSV/csv/
             num_seq='01'
         )
 
@@ -548,8 +559,18 @@ def _run_gnn_tracking_internal(metric_model_path, tracking_model_path):
 
 def _process_gnn_results(csv_dir):
     """
-    Process GNN inference results and update database with track assignments
+    Process GNN inference results and update database with track assignments.
+
+    GNN outputs:
+    - pytorch_geometric_data.pt: Graph data with edge_index
+    - all_data_df.csv: DataFrame with cell info (frame_num, id, seg_label, features)
+    - raw_output.pt: GNN edge predictions (probabilities for each edge)
+
+    The edge_index defines pairs of cells that could be linked.
+    The raw_output contains the predicted probability for each edge.
+    We use these predictions to assign track IDs.
     """
+    import torch
     import pandas as pd
 
     # Look for result files
@@ -563,39 +584,100 @@ def _process_gnn_results(csv_dir):
         print("GNN results directory not found")
         return run_tracking_from_mask_labels()  # Fallback to mask labels
 
-    # Load the dataframe with predictions
+    # Load the dataframe with cell info
     df_path = os.path.join(result_dir, 'all_data_df.csv')
-    if not os.path.exists(df_path):
-        print("GNN results CSV not found")
+    graph_path = os.path.join(result_dir, 'pytorch_geometric_data.pt')
+    output_path = os.path.join(result_dir, 'raw_output.pt')
+
+    if not os.path.exists(df_path) or not os.path.exists(graph_path) or not os.path.exists(output_path):
+        print("GNN results files not found")
+        print(f"  df_path exists: {os.path.exists(df_path)}")
+        print(f"  graph_path exists: {os.path.exists(graph_path)}")
+        print(f"  output_path exists: {os.path.exists(output_path)}")
         return run_tracking_from_mask_labels()  # Fallback to mask labels
 
+    # Load GNN outputs
     df = pd.read_csv(df_path)
-    print(f"Loaded GNN results with {len(df)} entries")
+    graph_data = torch.load(graph_path, weights_only=False)
+    raw_output = torch.load(output_path, weights_only=False)
 
-    # TODO: Map GNN predictions to track IDs
-    # The GNN outputs edge predictions that need to be converted to track assignments
-    # For now, we'll use a simplified approach based on the predicted edges
+    print(f"Loaded GNN results:")
+    print(f"  DataFrame: {len(df)} cells")
+    print(f"  Edge index shape: {graph_data.edge_index.shape}")
+    print(f"  Raw output shape: {raw_output.shape}")
 
-    # Update database with track assignments
+    # Get edge predictions (apply sigmoid to get probabilities)
+    edge_probs = torch.sigmoid(raw_output).squeeze().detach().cpu().numpy()
+    edge_index = graph_data.edge_index.cpu().numpy()
+
+    print(f"  Edge probabilities range: [{edge_probs.min():.4f}, {edge_probs.max():.4f}]")
+
+    # Build mapping from df index to (frame_num, seg_label)
+    # The df contains: frame_num, id (track id from GT), seg_label (cell label in mask), features...
+    df_frame_nums = df['frame_num'].values
+    df_seg_labels = df['seg_label'].values if 'seg_label' in df.columns else df['id'].values
+
+    # Get unique frames
+    unique_frames = sorted(df['frame_num'].unique())
+    print(f"  Frames: {unique_frames}")
+
+    # Build cell index mapping: df_index -> (frame_num, seg_label)
+    cell_info = []
+    for idx in range(len(df)):
+        cell_info.append({
+            'df_idx': idx,
+            'frame_num': df_frame_nums[idx],
+            'seg_label': df_seg_labels[idx]
+        })
+
+    # Extract edges between consecutive frames with high probability
+    # edge_index[0] = source nodes, edge_index[1] = target nodes
+    THRESHOLD = 0.5  # Probability threshold for edge acceptance
+
+    # Build adjacency list for high-confidence edges between consecutive frames
+    edges_by_frame = {}  # frame -> list of (src_seg_label, tgt_seg_label, prob)
+
+    for edge_idx in range(edge_index.shape[1]):
+        src_idx = edge_index[0, edge_idx]
+        tgt_idx = edge_index[1, edge_idx]
+        prob = edge_probs[edge_idx]
+
+        src_frame = cell_info[src_idx]['frame_num']
+        tgt_frame = cell_info[tgt_idx]['frame_num']
+
+        # Only consider edges between consecutive frames (src -> tgt, src is earlier)
+        if tgt_frame == src_frame + 1 and prob >= THRESHOLD:
+            src_seg = cell_info[src_idx]['seg_label']
+            tgt_seg = cell_info[tgt_idx]['seg_label']
+
+            if src_frame not in edges_by_frame:
+                edges_by_frame[src_frame] = []
+            edges_by_frame[src_frame].append((src_seg, tgt_seg, prob))
+
+    print(f"  High-confidence edges by frame: {[(f, len(e)) for f, e in edges_by_frame.items()]}")
+
+    # Now update database with track assignments using GNN predictions
     features = CellFeature.query.order_by(CellFeature.frame_num, CellFeature.cell_id).all()
 
-    # Group by frame
+    if not features:
+        return {"error": "No features found in database"}
+
+    # Group features by frame
     frames = {}
     for f in features:
         if f.frame_num not in frames:
-            frames[f.frame_num] = []
-        frames[f.frame_num].append(f)
+            frames[f.frame_num] = {}
+        frames[f.frame_num][f.cell_id] = f  # cell_id is the seg_label
 
     frame_nums = sorted(frames.keys())
     next_track_id = 1
 
     # First frame - assign new track IDs
-    for cell in frames[frame_nums[0]]:
+    for cell_id, cell in frames[frame_nums[0]].items():
         cell.track_id = next_track_id
         next_track_id += 1
 
     # Process subsequent frames using GNN predictions
-    # (Simplified - in practice would use the edge predictions from GNN)
     for i in range(1, len(frame_nums)):
         prev_frame = frame_nums[i - 1]
         curr_frame = frame_nums[i]
@@ -603,45 +685,49 @@ def _process_gnn_results(csv_dir):
         prev_cells = frames[prev_frame]
         curr_cells = frames[curr_frame]
 
-        # Build cost matrix (using feature similarity from GNN embeddings if available)
-        cost_matrix = np.full((len(curr_cells), len(prev_cells)), np.inf)
+        # Get GNN predicted edges for this frame transition
+        gnn_edges = edges_by_frame.get(prev_frame, [])
 
-        for ci, curr_cell in enumerate(curr_cells):
-            for pi, prev_cell in enumerate(prev_cells):
-                if curr_cell.centroid_row is None or prev_cell.centroid_row is None:
-                    continue
-                dist = np.sqrt(
-                    (curr_cell.centroid_row - prev_cell.centroid_row) ** 2 +
-                    (curr_cell.centroid_col - prev_cell.centroid_col) ** 2
-                )
-                if dist <= 100.0:  # Max distance threshold
-                    cost_matrix[ci, pi] = dist
+        # Sort edges by probability (highest first)
+        gnn_edges.sort(key=lambda x: x[2], reverse=True)
 
-        # Hungarian algorithm
-        if cost_matrix.shape[0] > 0 and cost_matrix.shape[1] > 0:
-            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        # Track which cells have been assigned
+        assigned_prev = set()
+        assigned_curr = set()
 
-            assigned_curr = set()
-            for ci, pi in zip(row_ind, col_ind):
-                if cost_matrix[ci, pi] < np.inf:
-                    prev_cell = prev_cells[pi]
-                    curr_cell = curr_cells[ci]
+        # Use GNN predictions to link cells
+        for src_seg, tgt_seg, prob in gnn_edges:
+            # Check if both cells exist and are not yet assigned
+            if src_seg in prev_cells and tgt_seg in curr_cells:
+                if src_seg not in assigned_prev and tgt_seg not in assigned_curr:
+                    prev_cell = prev_cells[src_seg]
+                    curr_cell = curr_cells[tgt_seg]
+
+                    # Assign same track ID
                     curr_cell.track_id = prev_cell.track_id
-                    assigned_curr.add(ci)
+                    assigned_prev.add(src_seg)
+                    assigned_curr.add(tgt_seg)
 
                     # Compute motion features
-                    curr_cell.delta_x = curr_cell.centroid_col - prev_cell.centroid_col
-                    curr_cell.delta_y = curr_cell.centroid_row - prev_cell.centroid_row
-                    curr_cell.displacement = np.sqrt(
-                        curr_cell.delta_x ** 2 + curr_cell.delta_y ** 2
-                    )
-                    curr_cell.speed = curr_cell.displacement
+                    if curr_cell.centroid_col is not None and prev_cell.centroid_col is not None:
+                        curr_cell.delta_x = curr_cell.centroid_col - prev_cell.centroid_col
+                        curr_cell.delta_y = curr_cell.centroid_row - prev_cell.centroid_row
+                        curr_cell.displacement = np.sqrt(
+                            curr_cell.delta_x ** 2 + curr_cell.delta_y ** 2
+                        )
+                        curr_cell.speed = curr_cell.displacement
 
-            # Assign new track IDs to unassigned cells
-            for ci, curr_cell in enumerate(curr_cells):
-                if ci not in assigned_curr:
-                    curr_cell.track_id = next_track_id
-                    next_track_id += 1
+                        # Compute turning angle if previous cell had motion
+                        if prev_cell.delta_x is not None and prev_cell.delta_y is not None:
+                            prev_angle = np.arctan2(prev_cell.delta_y, prev_cell.delta_x)
+                            curr_angle = np.arctan2(curr_cell.delta_y, curr_cell.delta_x)
+                            curr_cell.turning = curr_angle - prev_angle
+
+        # Assign new track IDs to unassigned cells in current frame
+        for cell_id, curr_cell in curr_cells.items():
+            if cell_id not in assigned_curr:
+                curr_cell.track_id = next_track_id
+                next_track_id += 1
 
     db.session.commit()
 
@@ -654,7 +740,7 @@ def _process_gnn_results(csv_dir):
 
     return {
         "message": "GNN Tracking completed",
-        "method": "gnn" if GNN_AVAILABLE else "nearest_neighbor",
+        "method": "gnn",
         "total_tracks": unique_tracks,
         "total_cells": len(features),
         "frames_processed": len(frame_nums)

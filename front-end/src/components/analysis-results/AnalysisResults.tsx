@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import axios from 'axios';
-import { X, Download, TrendingUp, Activity, BarChart3, Target } from 'lucide-react';
+import { Download, TrendingUp, Activity, BarChart3, Target } from 'lucide-react';
 import './AnalysisResults.css';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
@@ -351,10 +351,15 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
 
-        // X-axis labels
+        // X-axis labels - show only a subset to avoid overlapping
+        const maxLabels = 10; // Maximum number of labels to show
+        const step = Math.ceil(frames.length / maxLabels);
         frames.forEach((frame, i) => {
-            const x = padding + (width * i) / (frames.length - 1 || 1);
-            ctx.fillText(String(frame), x, canvas.height - padding + 20);
+            // Only show label at regular intervals
+            if (i % step === 0 || i === frames.length - 1) {
+                const x = padding + (width * i) / (frames.length - 1 || 1);
+                ctx.fillText(String(frame), x, canvas.height - padding + 20);
+            }
         });
 
         // Y-axis labels
@@ -383,35 +388,47 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Use track_id if available, otherwise fall back to cell_id so trajectories still render
-        const pathCells = features.filter(f =>
-            (f.track_id !== null || f.cell_id !== null) &&
+        // Check if tracking has been performed (track_id assigned)
+        const trackedCells = features.filter(f =>
+            f.track_id !== null &&
             f.centroid_col !== null &&
             f.centroid_row !== null &&
             f.frame_num !== undefined
         );
-        if (pathCells.length === 0) {
+
+        if (trackedCells.length === 0) {
             ctx.fillStyle = '#fff';
             ctx.font = '16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('No tracking data available. Run tracking first.', canvas.width / 2, canvas.height / 2);
+            ctx.fillText('No tracking data available.', canvas.width / 2, canvas.height / 2 - 15);
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText('Run "Track Cells" first to generate trajectories.', canvas.width / 2, canvas.height / 2 + 15);
             return;
         }
 
-        // Group by track_id + image_id to avoid merging tracks across sequences
-        const trackKeys = [...new Set(
-            pathCells.map(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}`)
-        )];
-        const colors = generateColors(trackKeys.length);
-        const trackMeta = trackKeys.map(key => {
-            const sample = pathCells.find(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}` === key);
-            return {
-                key,
-                trackId: sample?.track_id ?? null,
-                cellId: sample?.cell_id ?? null,
-                imageId: sample?.image_id
-            };
-        });
+        // Only use cells with valid track_id for trajectory visualization
+        const pathCells = trackedCells;
+
+        // Group by track_id only (each track spans multiple frames/images)
+        const uniqueTrackIds = [...new Set(pathCells.map(f => f.track_id))].sort((a, b) => (a ?? 0) - (b ?? 0));
+
+        // Use nipy_spectral-like color palette (similar to matplotlib)
+        const generateSpectralColors = (count: number): string[] => {
+            const colors: string[] = [];
+            for (let i = 0; i < count; i++) {
+                const t = count > 1 ? i / (count - 1) : 0;
+                // nipy_spectral goes from purple -> blue -> cyan -> green -> yellow -> orange -> red
+                const hue = (1 - t) * 270; // 270 (purple) to 0 (red)
+                colors.push(`hsl(${hue}, 90%, 55%)`);
+            }
+            return colors;
+        };
+
+        const colors = generateSpectralColors(uniqueTrackIds.length);
+        const trackMeta = uniqueTrackIds.map(trackId => ({
+            trackId,
+        }));
 
         // Get data bounds
         const allX = pathCells.map(f => f.centroid_col ?? 0);
@@ -426,86 +443,99 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         const rangeY = maxY - minY || 1;
         const rangeZ = maxZ - minZ || 1;
 
-        // 3D projection parameters
+        // 3D projection parameters - matching matplotlib view_init(elev=25, azim=35)
+        const padding = 80;
+        const plotWidth = canvas.width - padding * 2;
+        const plotHeight = canvas.height - padding * 2;
         const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const scale = Math.min(canvas.width, canvas.height) * 0.35;
-        const angleX = 0.4; // Elevation
-        const angleZ = 0.6; // Azimuth
+        const centerY = canvas.height / 2 + 20;
+
+        // Convert matplotlib angles to radians
+        const elevation = 25 * Math.PI / 180;  // elev=25
+        const azimuth = 35 * Math.PI / 180;    // azim=35
+
+        const scale = Math.min(plotWidth, plotHeight) * 0.4;
 
         const project3D = (x: number, y: number, z: number) => {
-            // Invert Y to match image coordinate system (top-left origin)
-            const invY = maxY - y;
+            // Normalize to 0-1 range
+            const nx = (x - minX) / rangeX;
+            const ny = (y - minY) / rangeY;  // Will be inverted later
+            const nz = (z - minZ) / rangeZ;
 
-            // Normalize to -1 to 1
-            const nx = ((x - minX) / rangeX - 0.5) * 2;
-            const ny = ((invY / rangeY) - 0.5) * 2;
-            const nz = ((z - minZ) / rangeZ - 0.5) * 2;
+            // Center around 0
+            const cx = (nx - 0.5) * 2;
+            const cy = (ny - 0.5) * 2;  // Invert Y (like matplotlib invert_yaxis)
+            const cz = (nz - 0.5) * 2;
 
-            // Apply rotation
-            const cosZ = Math.cos(angleZ), sinZ = Math.sin(angleZ);
-            const cosX = Math.cos(angleX), sinX = Math.sin(angleX);
+            // Apply rotation (azimuth around Z axis)
+            const cosA = Math.cos(azimuth), sinA = Math.sin(azimuth);
+            const x1 = cx * cosA - cy * sinA;
+            const y1 = cx * sinA + cy * cosA;
 
-            const x1 = nx * cosZ - ny * sinZ;
-            const y1 = nx * sinZ + ny * cosZ;
-            const z1 = nz;
-
-            const y2 = y1 * cosX - z1 * sinX;
-            const z2 = y1 * sinX + z1 * cosX;
+            // Apply elevation (rotation around X axis)
+            const cosE = Math.cos(elevation), sinE = Math.sin(elevation);
+            const y2 = y1 * cosE - cz * sinE;
+            const z2 = y1 * sinE + cz * cosE;
 
             return {
                 x: centerX + x1 * scale,
-                y: centerY - y2 * scale,
-                depth: z2
+                y: centerY - z2 * scale,  // Z becomes vertical (like Frame axis in matplotlib)
+                depth: y2
             };
         };
 
-        // Draw axes
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        // Draw grid/axes
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
         ctx.lineWidth = 1;
 
-        const origin = project3D(minX, minY, minZ);
-        const xEnd = project3D(maxX, minY, minZ);
-        const yEnd = project3D(minX, maxY, minZ);
-        const zEnd = project3D(minX, minY, maxZ);
+        // Draw axis lines
+        const origin = project3D(minX, maxY, minZ);  // Inverted Y
+        const xAxisEnd = project3D(maxX, maxY, minZ);
+        const yAxisEnd = project3D(minX, minY, minZ);  // Inverted Y
+        const zAxisEnd = project3D(minX, maxY, maxZ);
 
-        // X axis
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 1.5;
+
+        // X axis (centroid_col)
         ctx.beginPath();
         ctx.moveTo(origin.x, origin.y);
-        ctx.lineTo(xEnd.x, xEnd.y);
+        ctx.lineTo(xAxisEnd.x, xAxisEnd.y);
         ctx.stroke();
 
-        // Y axis
+        // Y axis (centroid_row) - inverted
         ctx.beginPath();
         ctx.moveTo(origin.x, origin.y);
-        ctx.lineTo(yEnd.x, yEnd.y);
+        ctx.lineTo(yAxisEnd.x, yAxisEnd.y);
         ctx.stroke();
 
-        // Z axis (time)
+        // Z axis (frame)
         ctx.beginPath();
         ctx.moveTo(origin.x, origin.y);
-        ctx.lineTo(zEnd.x, zEnd.y);
+        ctx.lineTo(zAxisEnd.x, zAxisEnd.y);
         ctx.stroke();
 
         // Axis labels
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = '12px Arial';
-        ctx.fillText('X', xEnd.x + 10, xEnd.y);
-        ctx.fillText('Y', yEnd.x + 10, yEnd.y);
-        ctx.fillText('Frame', zEnd.x + 10, zEnd.y);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.font = '13px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Col', xAxisEnd.x + 15, xAxisEnd.y + 5);
+        ctx.fillText('Row', yAxisEnd.x - 15, yAxisEnd.y + 5);
+        ctx.fillText('Frame', zAxisEnd.x - 5, zAxisEnd.y - 15);
 
-        // Draw trajectories
+        // Draw trajectories (lines only, like matplotlib code)
         trackMeta.forEach((track, idx) => {
             const trackData = pathCells
-                .filter(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}` === track.key)
+                .filter(f => f.track_id === track.trackId)
                 .sort((a, b) => a.frame_num - b.frame_num);
 
-            if (trackData.length < 2) return;
+            if (trackData.length < 2) return;  // Need at least 2 points for a line
 
             ctx.strokeStyle = colors[idx];
             ctx.lineWidth = 2;
-            ctx.beginPath();
+            ctx.globalAlpha = 0.9;  // alpha=0.9 like matplotlib
 
+            ctx.beginPath();
             trackData.forEach((point, i) => {
                 const projected = project3D(
                     point.centroid_col ?? 0,
@@ -519,54 +549,39 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                 }
             });
             ctx.stroke();
-
-            // Draw start point
-            const start = project3D(
-                trackData[0].centroid_col ?? 0,
-                trackData[0].centroid_row ?? 0,
-                trackData[0].frame_num
-            );
-            ctx.fillStyle = colors[idx];
-            ctx.beginPath();
-            ctx.arc(start.x, start.y, 4, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.globalAlpha = 1.0;
         });
 
         // Title
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Cell Trajectories (3D)', canvas.width / 2, 30);
+        ctx.fillText('Cell Movement Over Time (3D)', canvas.width / 2, 25);
 
-        // Legend
-        ctx.font = '11px Arial';
+        // Legend (show first 10 tracks)
+        ctx.font = '10px Arial';
         ctx.textAlign = 'left';
-        const legendX = 20;
-        let legendY = 50;
-        trackMeta.slice(0, 10).forEach((track, idx) => {
+        const legendX = 15;
+        let legendY = 45;
+        const tracksToShow = Math.min(10, trackMeta.length);
+        trackMeta.slice(0, tracksToShow).forEach((track, idx) => {
             ctx.fillStyle = colors[idx];
-            ctx.fillRect(legendX, legendY - 8, 12, 12);
+            ctx.fillRect(legendX, legendY - 6, 10, 10);
             ctx.fillStyle = '#fff';
-            ctx.fillText(
-                `${track.trackId !== null ? `Track ${track.trackId}` : `Cell ${track.cellId}`}${track.imageId ? ` (img ${track.imageId})` : ''}`,
-                legendX + 18,
-                legendY
-            );
-            legendY += 16;
+            ctx.fillText(`Track ${track.trackId}`, legendX + 14, legendY + 2);
+            legendY += 14;
         });
         if (trackMeta.length > 10) {
             ctx.fillStyle = '#888';
-            ctx.fillText(`... and ${trackMeta.length - 10} more`, legendX, legendY);
+            ctx.font = '9px Arial';
+            ctx.fillText(`+${trackMeta.length - 10} more tracks`, legendX, legendY + 2);
         }
-    };
 
-    const generateColors = (count: number): string[] => {
-        const colors: string[] = [];
-        for (let i = 0; i < count; i++) {
-            const hue = (i * 360) / count;
-            colors.push(`hsl(${hue}, 80%, 60%)`);
-        }
-        return colors;
+        // Info text
+        ctx.fillStyle = '#aaa';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${uniqueTrackIds.length} tracks, ${trackedCells.length} cells`, canvas.width - 15, canvas.height - 10);
     };
 
     const handleExport = async () => {
@@ -952,67 +967,111 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
 
                             {activeTab === 'zscore' && (
                                 <div className="zscore-tab">
-                                    <h3>Z-Score Normalized Features by Cluster</h3>
+                                    <div className="zscore-header">
+                                        <h3>Z-Score Normalized Features by Cluster</h3>
+                                        <p className="zscore-description">
+                                            Standardized mean values (z = (x̄<sub>cluster</sub> - μ) / σ) showing how each cluster deviates from the population mean.
+                                            Values represent standard deviations from the mean.
+                                        </p>
+                                    </div>
                                     {zScoreData.length === 0 ? (
                                         <p className="no-data">No clustering data available. Run clustering first.</p>
                                     ) : (
-                                        <div className="zscore-table-container">
-                                            <table className="zscore-table">
+                                        <div className="zscore-table-container scientific">
+                                            <table className="zscore-table scientific-table">
                                                 <thead>
                                                     <tr>
-                                                        <th>Cluster</th>
+                                                        <th rowSpan={2} className="header-cluster">Cluster</th>
+                                                        <th colSpan={4} className="header-group morphology">Morphological Features</th>
+                                                        <th colSpan={1} className="header-group intensity">Intensity</th>
+                                                        <th colSpan={1} className="header-group motility">Motility</th>
+                                                    </tr>
+                                                    <tr className="subheader">
                                                         <th>Area</th>
-                                                        <th>Intensity</th>
                                                         <th>Eccentricity</th>
                                                         <th>Solidity</th>
                                                         <th>Circularity</th>
+                                                        <th>Mean Int.</th>
                                                         <th>Speed</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {zScoreData.map(row => (
-                                                        <tr key={row.cluster}>
-                                                            <td className="cluster-cell">
-                                                                <span
-                                                                    className="cluster-badge"
-                                                                    style={{
-                                                                        backgroundColor: `hsl(${row.cluster * 60}, 70%, 50%)`
-                                                                    }}
-                                                                >
-                                                                    {row.cluster}
-                                                                </span>
-                                                            </td>
-                                                            {['area', 'mean_intensity', 'eccentricity', 'solidity', 'circularity', 'speed'].map(key => (
-                                                                <td
-                                                                    key={key}
-                                                                    style={{
-                                                                        color: getZScoreColor(row.features[key] || 0),
-                                                                        backgroundColor: getZScoreBg(row.features[key] || 0)
-                                                                    }}
-                                                                >
-                                                                    {formatValue(row.features[key], 3)}
+                                                    {zScoreData.map((row, idx) => {
+                                                        // Count cells in this cluster
+                                                        const clusterCells = features.filter(f =>
+                                                            (f.hmm_state ?? f.gmm_state) === row.cluster
+                                                        ).length;
+
+                                                        return (
+                                                            <tr key={row.cluster}>
+                                                                <td className="cluster-cell">
+                                                                    <div className="cluster-info">
+                                                                        <span
+                                                                            className="cluster-badge"
+                                                                            style={{
+                                                                                backgroundColor: `hsl(${row.cluster * 60}, 70%, 45%)`
+                                                                            }}
+                                                                        >
+                                                                            {row.cluster}
+                                                                        </span>
+                                                                        <span className="cluster-n">(n={clusterCells})</span>
+                                                                    </div>
                                                                 </td>
-                                                            ))}
-                                                        </tr>
-                                                    ))}
+                                                                {['area', 'eccentricity', 'solidity', 'circularity', 'mean_intensity', 'speed'].map(key => {
+                                                                    const value = row.features[key] || 0;
+                                                                    const absValue = Math.abs(value);
+                                                                    const significance = absValue >= 1.96 ? '**' : absValue >= 1.64 ? '*' : '';
+
+                                                                    return (
+                                                                        <td
+                                                                            key={key}
+                                                                            className={`zscore-cell ${value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'}`}
+                                                                            style={{
+                                                                                backgroundColor: getZScoreBg(value)
+                                                                            }}
+                                                                        >
+                                                                            <span className="zscore-value" style={{ color: getZScoreColor(value) }}>
+                                                                                {value > 0 ? '+' : ''}{value.toFixed(2)}
+                                                                            </span>
+                                                                            {significance && <sup className="significance">{significance}</sup>}
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
-                                            <div className="zscore-legend">
-                                                <span className="legend-item">
-                                                    <span className="color-box high"></span> High (&gt;1.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box mid-high"></span> Above avg (0.5-1.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box normal"></span> Normal (-0.5 to 0.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box mid-low"></span> Below avg (-1.5 to -0.5)
-                                                </span>
-                                                <span className="legend-item">
-                                                    <span className="color-box low"></span> Low (&lt;-1.5)
-                                                </span>
+
+                                            <div className="zscore-footer">
+                                                <div className="zscore-legend scientific">
+                                                    <div className="legend-section">
+                                                        <span className="legend-title">Interpretation:</span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box high"></span> z &gt; +1.5 (significantly above mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box mid-high"></span> +0.5 to +1.5 (above mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box normal"></span> -0.5 to +0.5 (near mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box mid-low"></span> -1.5 to -0.5 (below mean)
+                                                        </span>
+                                                        <span className="legend-item">
+                                                            <span className="color-box low"></span> z &lt; -1.5 (significantly below mean)
+                                                        </span>
+                                                    </div>
+                                                    <div className="legend-section significance-legend">
+                                                        <span className="legend-title">Significance:</span>
+                                                        <span className="legend-item">** p &lt; 0.05 (|z| ≥ 1.96)</span>
+                                                        <span className="legend-item">* p &lt; 0.10 (|z| ≥ 1.64)</span>
+                                                    </div>
+                                                </div>
+                                                <div className="zscore-note">
+                                                    <em>Note: Z-scores calculated relative to overall population statistics. n = number of cells per cluster.</em>
+                                                </div>
                                             </div>
                                         </div>
                                     )}

@@ -567,16 +567,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                     <thead>
                       <tr>
                         <th>ID</th>
-                        <th>Area</th>
-                        <th>X</th>
-                        <th>Y</th>
-                        <th>Int.</th>
-                        {frameFeatures.some(f => f.speed !== null) && (
-                          <>
-                            <th>Spd</th>
-                            <th>Trn</th>
-                          </>
-                        )}
+                        <th>Area (px²)</th>
+                        <th>Aspect Ratio</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -584,15 +576,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                         <tr key={feature.id}>
                           <td className="cell-id">{feature.cell_id}</td>
                           <td>{formatValue(feature.area, 0)}</td>
-                          <td>{formatValue(feature.centroid_col, 0)}</td>
-                          <td>{formatValue(feature.centroid_row, 0)}</td>
-                          <td>{formatValue(feature.mean_intensity, 0)}</td>
-                          {frameFeatures.some(f => f.speed !== null) && (
-                            <>
-                              <td className="motion-cell">{formatValue(feature.speed, 1)}</td>
-                              <td className="motion-cell">{formatValue(feature.turning, 2)}</td>
-                            </>
-                          )}
+                          <td>{formatValue(feature.aspect_ratio, 2)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Play, Settings } from 'lucide-react';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 import { TOOL_PROGRESS_EVENT, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
 import './ClusteringDialog.css';
 
@@ -10,27 +11,48 @@ interface FeatureOption {
     key: string;
     label: string;
     description: string;
-    category: 'morphology' | 'intensity' | 'motion';
+    category: 'morphology' | 'intensity' | 'motion' | 'position' | 'bounding_box';
 }
 
 const AVAILABLE_FEATURES: FeatureOption[] = [
     // Morphology features
     { key: 'area', label: 'Area', description: 'Cell area in pixels', category: 'morphology' },
+    { key: 'convex_area', label: 'Convex Area', description: 'Area of convex hull', category: 'morphology' },
     { key: 'major_axis_length', label: 'Major Axis', description: 'Length of major axis', category: 'morphology' },
     { key: 'minor_axis_length', label: 'Minor Axis', description: 'Length of minor axis', category: 'morphology' },
     { key: 'aspect_ratio', label: 'Aspect Ratio', description: 'Major/Minor axis ratio', category: 'morphology' },
     { key: 'eccentricity', label: 'Eccentricity', description: 'Shape elongation (0=circle, 1=line)', category: 'morphology' },
     { key: 'solidity', label: 'Solidity', description: 'Area / Convex hull area', category: 'morphology' },
-    { key: 'circularity', label: 'Circularity', description: 'How circular the cell is', category: 'morphology' },
+    { key: 'circularity', label: 'Circularity', description: 'How circular the cell is (4π×Area/Perimeter²)', category: 'morphology' },
+    { key: 'extent', label: 'Extent', description: 'Ratio of cell area to bounding box area', category: 'morphology' },
 
     // Intensity features
     { key: 'mean_intensity', label: 'Mean Intensity', description: 'Average pixel intensity', category: 'intensity' },
     { key: 'max_intensity', label: 'Max Intensity', description: 'Maximum pixel intensity', category: 'intensity' },
     { key: 'min_intensity', label: 'Min Intensity', description: 'Minimum pixel intensity', category: 'intensity' },
+    { key: 'intensity_ratio_max_mean', label: 'Max/Mean Ratio', description: 'Ratio of max to mean intensity', category: 'intensity' },
+    { key: 'intensity_ratio_mean_min', label: 'Mean/Min Ratio', description: 'Ratio of mean to min intensity', category: 'intensity' },
+
+    // Position features
+    { key: 'centroid_row', label: 'Centroid Y', description: 'Y coordinate of cell center', category: 'position' },
+    { key: 'centroid_col', label: 'Centroid X', description: 'X coordinate of cell center', category: 'position' },
+
+    // Bounding box features
+    { key: 'min_row_bb', label: 'BB Min Row', description: 'Bounding box top edge', category: 'bounding_box' },
+    { key: 'min_col_bb', label: 'BB Min Col', description: 'Bounding box left edge', category: 'bounding_box' },
+    { key: 'max_row_bb', label: 'BB Max Row', description: 'Bounding box bottom edge', category: 'bounding_box' },
+    { key: 'max_col_bb', label: 'BB Max Col', description: 'Bounding box right edge', category: 'bounding_box' },
+    { key: 'bb_height', label: 'BB Height', description: 'Bounding box height', category: 'bounding_box' },
+    { key: 'bb_width', label: 'BB Width', description: 'Bounding box width', category: 'bounding_box' },
+    { key: 'bb_area', label: 'BB Area', description: 'Bounding box area', category: 'bounding_box' },
+    { key: 'bb_extent', label: 'BB Extent', description: 'Cell area / BB area ratio', category: 'bounding_box' },
+    { key: 'bb_aspect_ratio', label: 'BB Aspect Ratio', description: 'BB width / BB height', category: 'bounding_box' },
 
     // Motion features
-    { key: 'speed', label: 'Speed', description: 'Cell movement speed', category: 'motion' },
+    { key: 'speed', label: 'Speed', description: 'Cell movement speed (px/frame)', category: 'motion' },
     { key: 'displacement', label: 'Displacement', description: 'Distance from previous position', category: 'motion' },
+    { key: 'delta_x', label: 'Delta X', description: 'X displacement from previous frame', category: 'motion' },
+    { key: 'delta_y', label: 'Delta Y', description: 'Y displacement from previous frame', category: 'motion' },
     { key: 'turning', label: 'Turning Angle', description: 'Direction change angle', category: 'motion' },
 ];
 
@@ -109,8 +131,41 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
             // Dispatch event to update UI
             window.dispatchEvent(new CustomEvent('clusteringComplete'));
 
-            const gmmClusters = response.data.result?.gmm?.optimal_components || 0;
-            alert(`Clustering completed: ${gmmClusters} clusters identified`);
+            const gmmResult = response.data.result?.gmm || {};
+            const hmmResult = response.data.result?.hmm || {};
+
+            const statsHtml = `
+                <div style="text-align:left;margin-top:12px;">
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+                        <span style="color:#666;font-size:13px;">Clusters Identified</span>
+                        <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.optimal_components || 0}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+                        <span style="color:#666;font-size:13px;">Cells Classified</span>
+                        <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.cells_classified || 'N/A'}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+                        <span style="color:#666;font-size:13px;">Features Used</span>
+                        <span style="font-weight:600;color:#333;font-size:14px;">${selectedFeatures.length}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+                        <span style="color:#666;font-size:13px;">HMM Smoothing</span>
+                        <span style="font-weight:600;color:#333;font-size:14px;">${useHMM ? 'Applied' : 'Disabled'}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;">
+                        <span style="color:#666;font-size:13px;">BIC Score</span>
+                        <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.bic ? gmmResult.bic.toFixed(2) : 'N/A'}</span>
+                    </div>
+                </div>
+            `;
+
+            Swal.fire({
+                title: 'Clustering Complete',
+                html: statsHtml,
+                icon: 'success',
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#27ae60',
+            });
         } catch (err: any) {
             console.error('Clustering error:', err);
             setError(err.response?.data?.error || 'Clustering failed');
@@ -124,6 +179,8 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
 
     const morphologyFeatures = AVAILABLE_FEATURES.filter(f => f.category === 'morphology');
     const intensityFeatures = AVAILABLE_FEATURES.filter(f => f.category === 'intensity');
+    const positionFeatures = AVAILABLE_FEATURES.filter(f => f.category === 'position');
+    const boundingBoxFeatures = AVAILABLE_FEATURES.filter(f => f.category === 'bounding_box');
     const motionFeatures = AVAILABLE_FEATURES.filter(f => f.category === 'motion');
 
     return (
@@ -190,6 +247,64 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
                                 </div>
                                 <div className="feature-list">
                                     {intensityFeatures.map(feature => (
+                                        <label key={feature.key} className="feature-item">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedFeatures.includes(feature.key)}
+                                                onChange={() => handleFeatureToggle(feature.key)}
+                                            />
+                                            <span className="feature-info">
+                                                <span className="feature-label">{feature.label}</span>
+                                                <span className="feature-desc">{feature.description}</span>
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Position Features */}
+                            <div className="feature-category">
+                                <div className="category-header">
+                                    <span className="category-title position">Position</span>
+                                    <button
+                                        className="select-all-btn"
+                                        onClick={() => handleSelectAll('position')}
+                                    >
+                                        {positionFeatures.every(f => selectedFeatures.includes(f.key))
+                                            ? 'Deselect All' : 'Select All'}
+                                    </button>
+                                </div>
+                                <div className="feature-list">
+                                    {positionFeatures.map(feature => (
+                                        <label key={feature.key} className="feature-item">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedFeatures.includes(feature.key)}
+                                                onChange={() => handleFeatureToggle(feature.key)}
+                                            />
+                                            <span className="feature-info">
+                                                <span className="feature-label">{feature.label}</span>
+                                                <span className="feature-desc">{feature.description}</span>
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Bounding Box Features */}
+                            <div className="feature-category">
+                                <div className="category-header">
+                                    <span className="category-title bounding-box">Bounding Box</span>
+                                    <button
+                                        className="select-all-btn"
+                                        onClick={() => handleSelectAll('bounding_box')}
+                                    >
+                                        {boundingBoxFeatures.every(f => selectedFeatures.includes(f.key))
+                                            ? 'Deselect All' : 'Select All'}
+                                    </button>
+                                </div>
+                                <div className="feature-list">
+                                    {boundingBoxFeatures.map(feature => (
                                         <label key={feature.key} className="feature-item">
                                             <input
                                                 type="checkbox"
