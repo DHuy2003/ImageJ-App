@@ -366,6 +366,15 @@
     white-space: nowrap;
 }
 
+.transition-table .heat-cell {
+    transition: background-color 0.2s ease;
+}
+
+.feature-change-note {
+    font-size: 12px;
+    color: #777;
+}
+
 .statistics-tab .no-data {
     color: #888;
     font-size: 14px;

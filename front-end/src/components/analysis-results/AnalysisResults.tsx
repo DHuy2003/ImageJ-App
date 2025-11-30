@@ -50,6 +50,13 @@ interface TransitionMatrix {
     matrix: number[][];
 }
 
+interface FeatureChange {
+    feature: string;
+    meanDelta: number;
+    medianDelta: number;
+    samples: number;
+}
+
 interface AnalysisResultsProps {
     isOpen: boolean;
     onClose: () => void;
@@ -63,6 +70,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const [loading, setLoading] = useState(false);
     const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
     const [zScoreData, setZScoreData] = useState<ZScoreData[]>([]);
+    const [featureChanges, setFeatureChanges] = useState<FeatureChange[]>([]);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const trajectoryCanvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -80,6 +88,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
             setFeatures(allFeatures);
             calculateOverviewStats(allFeatures);
             calculateZScores(allFeatures);
+            calculateFeatureChanges(allFeatures);
         } catch (err) {
             console.error('Error fetching features:', err);
         } finally {
@@ -171,6 +180,46 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         });
 
         setZScoreData(zScores.sort((a, b) => a.cluster - b.cluster));
+    };
+
+    const calculateFeatureChanges = (data: CellFeature[]) => {
+        const keys = ['area', 'mean_intensity', 'eccentricity', 'solidity', 'circularity', 'speed', 'displacement'];
+        const deltas: { [key: string]: number[] } = {};
+        keys.forEach(k => (deltas[k] = []));
+
+        const groups = new Map<string, CellFeature[]>();
+        data.forEach(item => {
+            const key = `${item.image_id ?? 'img'}-${item.track_id ?? `cell-${item.cell_id}`}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(item);
+        });
+
+        groups.forEach(items => {
+            const sorted = items
+                .filter(f => f.frame_num !== undefined)
+                .sort((a, b) => a.frame_num - b.frame_num);
+            for (let i = 1; i < sorted.length; i++) {
+                const prev = sorted[i - 1];
+                const curr = sorted[i];
+                keys.forEach(k => {
+                    const prevVal = (prev as any)[k];
+                    const currVal = (curr as any)[k];
+                    if (prevVal !== null && prevVal !== undefined && currVal !== null && currVal !== undefined) {
+                        deltas[k].push(Math.abs(currVal - prevVal));
+                    }
+                });
+            }
+        });
+
+        const changes: FeatureChange[] = keys.map(k => {
+            const arr = deltas[k].sort((a, b) => a - b);
+            if (arr.length === 0) return { feature: k, meanDelta: 0, medianDelta: 0, samples: 0 };
+            const meanDelta = arr.reduce((a, b) => a + b, 0) / arr.length;
+            const medianDelta = arr[Math.floor(arr.length / 2)];
+            return { feature: k, meanDelta, medianDelta, samples: arr.length };
+        }).filter(f => f.samples > 0);
+
+        setFeatureChanges(changes);
     };
 
     const computeTransitionMatrix = (
@@ -559,6 +608,19 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         return 'transparent';
     };
 
+    const transitionCellStyle = (value: number, maxValue: number, rowTotal: number) => {
+        const intensity = maxValue ? Math.min(1, value / maxValue) : 0;
+        const bg = `rgba(52, 152, 219, ${0.15 + 0.55 * intensity})`;
+        const pct = rowTotal > 0 ? (value / rowTotal) * 100 : 0;
+        return {
+            backgroundColor: bg,
+            color: '#0f172a',
+            fontWeight: value === maxValue && maxValue > 0 ? 700 : 500,
+            border: '1px solid rgba(0,0,0,0.05)',
+            title: `${value} (${pct.toFixed(1)}%)`
+        };
+    };
+
     const gmmTransition = useMemo(
         () => computeTransitionMatrix(features, 'gmm_state'),
         [features]
@@ -722,6 +784,32 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                             </tbody>
                                         </table>
                                     </div>
+                                    {featureChanges.length > 0 && (
+                                        <div className="stats-table-container">
+                                            <h3>Feature Change per Step</h3>
+                                            <p className="table-subtitle">Độ biến đổi trung bình/median giữa các frame liên tiếp (theo track hoặc cell)</p>
+                                            <table className="stats-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Feature</th>
+                                                        <th>Mean Δ</th>
+                                                        <th>Median Δ</th>
+                                                        <th>Samples</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {featureChanges.map(row => (
+                                                        <tr key={row.feature}>
+                                                            <td className="feature-name">{row.feature.replace(/_/g, ' ')}</td>
+                                                            <td>{formatValue(row.meanDelta)}</td>
+                                                            <td>{formatValue(row.medianDelta)}</td>
+                                                            <td>{row.samples}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
                                     <div className="stats-table-container">
                                         <div className="stats-table-header">
                                             <h3>GMM Empirical Transition Matrix</h3>
@@ -741,13 +829,17 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                                     <tbody>
                                                         {gmmTransition.matrix.map((row, rowIdx) => {
                                                             const rowTotal = row.reduce((a, b) => a + b, 0);
+                                                            const rowMax = Math.max(...row, 0);
                                                             return (
                                                                 <tr key={`gmm-row-${gmmTransition.states[rowIdx]}`}>
                                                                     <td className="state-label">State {gmmTransition.states[rowIdx]}</td>
                                                                     {row.map((value, colIdx) => (
-                                                                        <td key={`gmm-cell-${rowIdx}-${colIdx}`} className="value-cell">
-                                                                            {value}
-                                                                            {rowTotal > 0 ? ` (${formatValue((value / rowTotal) * 100, 1)}%)` : ''}
+                                                                        <td
+                                                                            key={`gmm-cell-${rowIdx}-${colIdx}`}
+                                                                            className="value-cell heat-cell"
+                                                                            style={transitionCellStyle(value, rowMax, rowTotal)}
+                                                                        >
+                                                                            {value}{rowTotal > 0 ? ` (${formatValue((value / rowTotal) * 100, 1)}%)` : ''}
                                                                         </td>
                                                                     ))}
                                                                 </tr>
@@ -779,13 +871,17 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                                     <tbody>
                                                         {hmmTransition.matrix.map((row, rowIdx) => {
                                                             const rowTotal = row.reduce((a, b) => a + b, 0);
+                                                            const rowMax = Math.max(...row, 0);
                                                             return (
                                                                 <tr key={`hmm-row-${hmmTransition.states[rowIdx]}`}>
                                                                     <td className="state-label">State {hmmTransition.states[rowIdx]}</td>
                                                                     {row.map((value, colIdx) => (
-                                                                        <td key={`hmm-cell-${rowIdx}-${colIdx}`} className="value-cell">
-                                                                            {value}
-                                                                            {rowTotal > 0 ? ` (${formatValue((value / rowTotal) * 100, 1)}%)` : ''}
+                                                                        <td
+                                                                            key={`hmm-cell-${rowIdx}-${colIdx}`}
+                                                                            className="value-cell heat-cell"
+                                                                            style={transitionCellStyle(value, rowMax, rowTotal)}
+                                                                        >
+                                                                            {value}{rowTotal > 0 ? ` (${formatValue((value / rowTotal) * 100, 1)}%)` : ''}
                                                                         </td>
                                                                     ))}
                                                                 </tr>

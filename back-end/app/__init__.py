@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from app.extensions import db
 import os
@@ -15,4 +15,10 @@ def create_app():
 
     from app.routes.image_routes import image_bp
     app.register_blueprint(image_bp, url_prefix='/api/images')
+
+    @app.before_request
+    def log_request_info():
+        # Basic request logging for debugging
+        app.logger.info("%s %s", request.method, request.path)
+
     return app

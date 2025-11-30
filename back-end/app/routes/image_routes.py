@@ -390,16 +390,46 @@ def export_image_features(image_id):
 @image_bp.route('/tracking/run-gnn', methods=['POST'])
 @cross_origin()
 def run_gnn_tracking():
-    """Run GNN-based cell tracking using cell-tracker-gnn"""
+    """Run GNN-based cell tracking using cell-tracker-gnn
+
+    Optional JSON body:
+        dataset_name: Name of the dataset to use for selecting pretrained models.
+                     Supports CTC dataset names like "Fluo-N2DL-HeLa", "PhC-C2DH-U373", etc.
+                     If the name matches a pretrained dataset, those models will be used.
+    """
     try:
         from app.services.tracking_services import run_gnn_tracking as gnn_track
-        result = gnn_track()
+
+        # Get optional dataset_name from request body
+        dataset_name = None
+        if request.is_json and request.json:
+            dataset_name = request.json.get('dataset_name')
+
+        result = gnn_track(dataset_name=dataset_name)
         return jsonify({
             "message": "GNN tracking completed",
-            "result": result
+            "result": result,
+            "dataset_name": dataset_name
         }), 200
     except Exception as e:
         print(f"Error in GNN tracking: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@image_bp.route('/tracking/pretrained-datasets', methods=['GET'])
+@cross_origin()
+def get_pretrained_datasets():
+    """Get list of available pretrained datasets for GNN tracking"""
+    try:
+        from app.services.tracking_services import get_available_pretrained_datasets
+        datasets = get_available_pretrained_datasets()
+        return jsonify({
+            "datasets": datasets,
+            "total": len(datasets),
+            "ready_count": sum(1 for d in datasets if d["ready"])
+        }), 200
+    except Exception as e:
+        print(f"Error getting pretrained datasets: {e}")
         return jsonify({"error": str(e)}), 500
 
 

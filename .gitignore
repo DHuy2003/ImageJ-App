@@ -51,3 +51,22 @@ __pycache__/
 *.pyo
 *.pyd
 back-end/venv/
+
+# Machine Learning Models (large files)
+*.pth
+*.ckpt
+*.pt
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Pretrained models directory
+back-end/cell_tracker_gnn/models/pretrained/
+
+# Training outputs and logs
+back-end/cell_tracker_gnn/outputs/
+back-end/cell_tracker_gnn/logs/
+
+# Training data (large datasets)
+back-end/cell_tracker_gnn/data/

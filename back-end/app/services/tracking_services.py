@@ -18,6 +18,84 @@ GNN_TRACKER_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 GNN_MODEL_PATH = os.path.join(GNN_TRACKER_PATH, 'models')  # Where pretrained models should be stored
 GNN_AVAILABLE = False
 
+# Pretrained models path (inside cell_tracker_gnn/models/pretrained/)
+PRETRAINED_MODELS_PATH = os.path.join(GNN_MODEL_PATH, 'pretrained')
+
+# Available pretrained datasets with their model configurations
+PRETRAINED_DATASETS = {
+    "Fluo-C2DL-Huh7": {
+        "metric_model": os.path.join(PRETRAINED_MODELS_PATH, "Features_Models", "Fluo-C2DL-Huh7", "all_params.pth"),
+        "tracking_model": os.path.join(PRETRAINED_MODELS_PATH, "Tracking_Models", "Fluo-C2DL-Huh7", "checkpoints", "epoch=136.ckpt"),
+    },
+    "Fluo-N2DH-SIM+": {
+        "metric_model": os.path.join(PRETRAINED_MODELS_PATH, "Features_Models", "Fluo-N2DH-SIM+", "all_params.pth"),
+        "tracking_model": os.path.join(PRETRAINED_MODELS_PATH, "Tracking_Models", "Fluo-N2DH-SIM+", "checkpoints", "epoch=132.ckpt"),
+    },
+    "Fluo-N2DL-HeLa": {
+        "metric_model": os.path.join(PRETRAINED_MODELS_PATH, "Features_Models", "Fluo-N2DL-HeLa", "all_params.pth"),
+        "tracking_model": os.path.join(PRETRAINED_MODELS_PATH, "Tracking_Models", "Fluo-N2DL-HeLa", "checkpoints", "epoch=312.ckpt"),
+    },
+    "Fluo-N3DH-SIM+": {
+        "metric_model": os.path.join(PRETRAINED_MODELS_PATH, "Features_Models", "Fluo-N3DH-SIM+", "all_params.pth"),
+        "tracking_model": os.path.join(PRETRAINED_MODELS_PATH, "Tracking_Models", "Fluo-N3DH-SIM+", "checkpoints", "epoch=42.ckpt"),
+    },
+    "PhC-C2DH-U373": {
+        "metric_model": os.path.join(PRETRAINED_MODELS_PATH, "Features_Models", "PhC-C2DH-U373", "all_params.pth"),
+        "tracking_model": os.path.join(PRETRAINED_MODELS_PATH, "Tracking_Models", "PhC-C2DH-U373", "checkpoints", "epoch=10.ckpt"),
+    },
+}
+
+
+def get_pretrained_models_for_dataset(dataset_name):
+    """
+    Find matching pretrained models for a given dataset name.
+    Supports partial matching (e.g., "Fluo-N2DL-HeLa-01" matches "Fluo-N2DL-HeLa")
+
+    Args:
+        dataset_name: Name of the dataset (can include sequence number like -01, -02)
+
+    Returns:
+        tuple: (metric_model_path, tracking_model_path) or (None, None) if not found
+    """
+    if not dataset_name:
+        return None, None
+
+    # Try exact match first
+    if dataset_name in PRETRAINED_DATASETS:
+        models = PRETRAINED_DATASETS[dataset_name]
+        if os.path.exists(models["metric_model"]) and os.path.exists(models["tracking_model"]):
+            print(f"Found exact match pretrained models for: {dataset_name}")
+            return models["metric_model"], models["tracking_model"]
+
+    # Try partial match (remove sequence number like -01, -02)
+    for key in PRETRAINED_DATASETS:
+        if dataset_name.startswith(key) or key in dataset_name:
+            models = PRETRAINED_DATASETS[key]
+            if os.path.exists(models["metric_model"]) and os.path.exists(models["tracking_model"]):
+                print(f"Found partial match pretrained models: {key} for dataset: {dataset_name}")
+                return models["metric_model"], models["tracking_model"]
+
+    print(f"No pretrained models found for dataset: {dataset_name}")
+    return None, None
+
+
+def get_available_pretrained_datasets():
+    """
+    Get list of available pretrained datasets with their model status.
+
+    Returns:
+        list: List of dicts with dataset info and model availability
+    """
+    result = []
+    for name, paths in PRETRAINED_DATASETS.items():
+        result.append({
+            "name": name,
+            "metric_model_exists": os.path.exists(paths["metric_model"]),
+            "tracking_model_exists": os.path.exists(paths["tracking_model"]),
+            "ready": os.path.exists(paths["metric_model"]) and os.path.exists(paths["tracking_model"])
+        })
+    return result
+
 def check_gnn_availability():
     """Check if GNN tracking dependencies are available"""
     global GNN_AVAILABLE
@@ -306,13 +384,20 @@ def run_tracking_from_mask_labels():
         }
 
 
-def run_gnn_tracking():
+def run_gnn_tracking(dataset_name=None):
     """
     GNN-based tracking using cell-tracker-gnn
     Falls back to using mask labels as track IDs if GNN is not available
+
+    Args:
+        dataset_name: Optional name of the dataset to use for selecting pretrained models.
+                     Supports CTC dataset names like "Fluo-N2DL-HeLa", "PhC-C2DH-U373", etc.
+                     If the name matches a pretrained dataset, those models will be used.
     """
     print("="*50, flush=True)
     print("GNN TRACKING: Starting GNN-based tracking...", flush=True)
+    if dataset_name:
+        print(f"Dataset name provided: {dataset_name}", flush=True)
 
     # First, auto-extract features if not available
     features = CellFeature.query.order_by(CellFeature.frame_num, CellFeature.cell_id).all()
@@ -333,28 +418,40 @@ def run_gnn_tracking():
         print("="*50, flush=True)
         return run_tracking_from_mask_labels()
 
-    # Check for pretrained models
-    metric_model_path = os.path.join(GNN_MODEL_PATH, 'all_params.pth')
+    # Try to find pretrained models for the given dataset name first
+    metric_model_path = None
     tracking_model_path = None
+    model_source = "unknown"
 
-    # Look for .ckpt file in models directory
-    if os.path.exists(GNN_MODEL_PATH):
-        for f in os.listdir(GNN_MODEL_PATH):
-            if f.endswith('.ckpt'):
-                tracking_model_path = os.path.join(GNN_MODEL_PATH, f)
-                break
+    if dataset_name:
+        metric_model_path, tracking_model_path = get_pretrained_models_for_dataset(dataset_name)
+        if metric_model_path and tracking_model_path:
+            model_source = f"pretrained ({dataset_name})"
+            print(f"Using pretrained models for dataset: {dataset_name}")
+            print(f"  Metric model: {metric_model_path}")
+            print(f"  Tracking model: {tracking_model_path}")
 
-    if not os.path.exists(metric_model_path) or tracking_model_path is None:
+    # Fall back to default models if no pretrained match found
+    if not metric_model_path or not tracking_model_path:
+        metric_model_path = os.path.join(GNN_MODEL_PATH, 'all_params.pth')
+        tracking_model_path = os.path.join(GNN_MODEL_PATH, 'gnn_tracking.ckpt')
+        model_source = "default (local models)"
+        print(f"Using default models from: {GNN_MODEL_PATH}")
+
+    if not os.path.exists(metric_model_path) or not os.path.exists(tracking_model_path):
         print("GNN pretrained models not found!")
         print(f"Expected metric learning model at: {metric_model_path}")
-        print(f"Expected tracking model (.ckpt) in: {GNN_MODEL_PATH}")
-        print("Please download pretrained models from cell-tracker-gnn repository")
+        print(f"Expected tracking model at: {tracking_model_path}")
+        print("Please train models using cell-tracker-gnn or copy pretrained models")
         print("Checking if masks contain embedded track IDs...")
         print("="*50)
         return run_tracking_from_mask_labels()
 
     try:
         result = _run_gnn_tracking_internal(metric_model_path, tracking_model_path)
+        result["model_source"] = model_source
+        if dataset_name:
+            result["dataset_name"] = dataset_name
         print("="*50)
         return result
     except Exception as e:
