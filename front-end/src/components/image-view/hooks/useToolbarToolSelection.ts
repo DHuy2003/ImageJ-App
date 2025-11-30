@@ -3,7 +3,7 @@ import type { ToolbarAction } from '../../../utils/tool-bar/toolBarUtils';
 import type { RoiTool } from '../../../types/roi';
 import { TOOLBAR_EVENT_NAME } from '../../../utils/tool-bar/toolBarUtils';
 
-export const useToolbarToolSelection = (
+const useToolbarToolSelection = (
   setActiveTool: (tool: RoiTool) => void,
   setPanMode?: (enabled: boolean) => void,  
 ) => {
@@ -28,3 +28,4 @@ export const useToolbarToolSelection = (
   }, [setActiveTool, setPanMode]);
 };
 
+export default useToolbarToolSelection;
