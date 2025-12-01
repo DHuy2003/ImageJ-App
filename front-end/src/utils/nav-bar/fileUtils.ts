@@ -24,7 +24,7 @@ const dispatchFileMenuAction = (type: FileMenuActionType) => {
   );
 };
 
-let hasDataset = true;
+let hasDataset = false;
 if (typeof window !== 'undefined') {
   window.addEventListener('datasetCleared', () => {
     hasDataset = false;

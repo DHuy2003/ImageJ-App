@@ -340,6 +340,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   }, [imageArray]);
 
   useEffect(() => {
+    setIsCropping(false);
+    setShowConfirmCrop(false);
+    setCropRectData(null);
+  }, [currentIndex]);
+
+  useEffect(() => {
     if (currentFile) {
       if (currentFile.cropped_url) {
         setCurrentImageURL(currentFile.cropped_url);
@@ -749,10 +755,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               <h3>Image Info</h3>
               <table className="info-table">
                 <tbody>
-                  <tr><td>Name</td><td>{currentFile.filename}</td></tr>
-                  <tr><td>Size</td><td>{formatFileSize(currentFile.size)}</td></tr>
-                  <tr><td>Dimensions</td><td>{currentFile.width} x {currentFile.height} px</td></tr>
-                  <tr><td>Bit Depth</td><td>{currentFile.bitDepth} bit</td></tr>
+                  <tr><td>Name: </td><td>{currentFile.filename}</td></tr>
+                  <tr><td>Size: </td><td>{formatFileSize(currentFile.size)}</td></tr>
+                  <tr><td>Dimensions: </td><td>{currentFile.width} x {currentFile.height} px</td></tr>
+                  <tr><td>Bit Depth: </td><td>{currentFile.bitDepth} bit</td></tr>
                 </tbody>
               </table>
             </div>
@@ -828,8 +834,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           </div>
         </div>
       )}
-
-
 
       <BrightnessContrastDialog
         isOpen={showBC}
@@ -1035,24 +1039,24 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             imgRef={imgRef}
             onCommit={handleBrushCommit}
           />
-
-          {isCropping && (
-            <div className="crop-controls">
-              <button
-                onClick={() => {
-                  const rel = cropRef.current?.getRelativeRect();
-                  if (rel) {
-                    setCropRectData(rel);
-                    setShowConfirmCrop(true);
-                  }
-                }}
-              >
-                Crop
-              </button>
-              <button onClick={handleCancelCrop}>Cancel</button>
-            </div>
-          )}
         </div>
+        
+        {isCropping && (
+          <div className="crop-controls">
+            <button
+              onClick={() => {
+                const rel = cropRef.current?.getRelativeRect();
+                if (rel) {
+                  setCropRectData(rel);
+                  setShowConfirmCrop(true);
+                }
+              }}
+            >
+              Crop
+            </button>
+            <button onClick={handleCancelCrop}>Cancel</button>
+          </div>
+        )}
 
         {showConfirmCrop && cropRectData && (
           <div className="confirm-popup">

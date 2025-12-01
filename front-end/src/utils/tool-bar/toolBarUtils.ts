@@ -6,6 +6,7 @@ export type ToolbarAction =
   | { type: 'PAN_MODE'; enabled: boolean };
 
 let currentTool: ToolbarTool = 'pointer';
+let isPanMode = false;
 export const getCurrentToolbarTool = () => currentTool;
 
 export const emitToolbarAction = (action: ToolbarAction) => {
@@ -20,26 +21,34 @@ export const emitToolbarAction = (action: ToolbarAction) => {
   );
 };
 
+const setPanModeInternal = (enabled: boolean) => {
+  if (isPanMode === enabled) return;
+  isPanMode = enabled;
+  emitToolbarAction({ type: 'PAN_MODE', enabled });
+};
+
 export const handleMousePointerClick = () => {
+  setPanModeInternal(false);
   emitToolbarAction({ type: 'SET_TOOL', tool: 'pointer' });
   const clearSelectionEvent = new CustomEvent('editSelectNone');
   window.dispatchEvent(clearSelectionEvent);
 };
 
 export const handleSquareClick = () => {
+  setPanModeInternal(false);
   emitToolbarAction({ type: 'SET_TOOL', tool: 'rect' });
 };
 
 export const handleCircleClick = () => {
+  setPanModeInternal(false);
   emitToolbarAction({ type: 'SET_TOOL', tool: 'circle' });
 };
 
-let isPanMode = false;
 export const handleHandClick = () => {
-  isPanMode = !isPanMode;
-  emitToolbarAction({ type: 'PAN_MODE', enabled: isPanMode });
+  setPanModeInternal(true);
 };
 
 export const handleBrushClick = () => {
+  setPanModeInternal(false);
   emitToolbarAction({ type: 'SET_TOOL', tool: 'brush' });
 };

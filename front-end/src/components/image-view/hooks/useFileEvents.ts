@@ -96,12 +96,24 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
   };
 
   useEffect(() => {
+    const hasUnsavedImageChanges = () => {
+      if (!currentFile || !currentImageURL) return false;
+      if (currentImageURL.startsWith('data:')) return true;
+      if (currentImageURL.startsWith('blob:')) return true;
+      return false;
+    };
+    
+    const hasUnsavedMaskChanges = () => {
+      if (!currentFile || !currentFile.mask_url) return false;
+      return currentFile.mask_url.startsWith('data:');
+    };
+
     const hasUnsavedChanges = () => {
-      return !!currentImageURL && currentImageURL.startsWith('data:');
+      return hasUnsavedImageChanges() || hasUnsavedMaskChanges();
     };
 
     const saveCurrentImage = async () => {
-      if (!currentFile || !currentImageURL) {
+      if (!currentFile) {
         await Swal.fire({
           title: 'Notice',
           text: 'No image to save.',
@@ -111,8 +123,11 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return false;
       }
-
-      if (!hasUnsavedChanges()) {
+    
+      const unsavedImage = hasUnsavedImageChanges();
+      const unsavedMask = hasUnsavedMaskChanges();
+    
+      if (!unsavedImage && !unsavedMask) {
         await Swal.fire({
           title: 'Notice',
           text: 'The image has no changes to save.',
@@ -122,7 +137,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return false;
       }
-
+    
       if (!(window as any).showDirectoryPicker) {
         await Swal.fire({
           title: 'Notification',
@@ -133,7 +148,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return false;
       }
-
+    
       let dirHandle: any;
       try {
         dirHandle = await (window as any).showDirectoryPicker({
@@ -144,84 +159,134 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           return false;
         }
         console.error('Error choosing folder:', err);
-        await Swal.fire({
-          title: 'Error',
-          text: err.message || 'Failed to choose folder to save image.',
-          icon: 'error',
-          confirmButtonText: 'OK',
-          confirmButtonColor: '#3085d6',
-        });
+        // await Swal.fire({
+        //   title: 'Error',
+        //   text: err.message || 'Failed to choose folder to save image.',
+        //   icon: 'error',
+        //   confirmButtonText: 'OK',
+        //   confirmButtonColor: '#3085d6',
+        // });
         return false;
       }
-
+    
       try {
-        const res = await fetch(currentImageURL);
-        const blob = await res.blob();
+        let updatedImageInfo: ImageInfo & { edited_url?: string | null } = currentFile as any;
+        let editedUrl: string | null = null;
 
-        const formData = new FormData();
-        formData.append(
-          'edited',
-          blob,
-          `${currentFile.filename || 'image'}_edited.png`,
-        );
+        if (unsavedImage && currentImageURL) {
+          const res = await fetch(currentImageURL);
+          const blob = await res.blob();
+    
+          const formData = new FormData();
+          formData.append(
+            'edited',
+            blob,
+            `${currentFile.filename || 'image'}_edited.png`,
+          );
+    
+          const response = await axios.post(
+            `${API_BASE_URL}/update/${currentFile.id}`,
+            formData,
+            {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            },
+          );
+    
+          const updated = response.data
+            .image as ImageInfo & {
+            edited_filepath?: string;
+            edited_url?: string;
+          };
+    
+          editedUrl = (updated as any).edited_url || null;
+    
+          if (!editedUrl && updated.edited_filepath) {
+            const filename = updated.edited_filepath
+              .split(/[/\\]/)
+              .pop();
+            if (filename) {
+              editedUrl = `${API_BASE_URL}/edited/${filename}`;
+            }
+          }
 
-        const response = await axios.post(
-          `${API_BASE_URL}/update/${currentFile.id}`,
-          formData,
-          {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          },
-        );
-
-        const updated = response.data
-          .image as ImageInfo & {
-          edited_filepath?: string;
-          edited_url?: string;
-        };
-
-        let editedUrl: string | null =
-          (updated as any).edited_url || null;
-
-        if (!editedUrl && updated.edited_filepath) {
-          const filename = updated.edited_filepath
-            .split(/[/\\]/)
-            .pop();
-          if (filename) {
-            editedUrl = `${API_BASE_URL}/edited/${filename}`;
+          updatedImageInfo = {
+            ...updatedImageInfo,
+            ...updated,
+            ...(editedUrl
+              ? {
+                  url: editedUrl,
+                  edited_url: editedUrl,
+                  status: 'edited',
+                }
+              : {}),
+          } as any;
+    
+          setImageArray((prev) => {
+            const copy = [...prev];
+            if (copy[currentIndex]) {
+              copy[currentIndex] = updatedImageInfo;
+            }
+            return copy;
+          });
+    
+          if (editedUrl) {
+            setCurrentImageURL(editedUrl);
           }
         }
 
-        setImageArray(prev => {
-          const copy = [...prev];
-          if (copy[currentIndex]) {
-            copy[currentIndex] = {
-              ...copy[currentIndex],
-              ...updated,
-              ...(editedUrl
-                ? {
-                    url: editedUrl,
-                    edited_url: editedUrl,
-                    status: 'edited',
-                  }
-                : {}),
+        if (unsavedMask && currentFile.mask_url) {
+          try {
+            const maskRes = await fetch(currentFile.mask_url);
+            const maskBlob = await maskRes.blob();
+    
+            const maskForm = new FormData();
+            maskForm.append(
+              'mask',
+              maskBlob,
+              `${currentFile.filename || 'image'}_mask.png`,
+            );
+    
+            const maskResponse = await axios.post(
+              `${API_BASE_URL}/update-mask/${currentFile.id}`,
+              maskForm,
+              { headers: { 'Content-Type': 'multipart/form-data' } },
+            );
+    
+            const maskUpdated = maskResponse.data.image as {
+              mask_filepath: string;
+              mask_url: string;
+              mask_filename: string;
+            };
+    
+            updatedImageInfo = {
+              ...updatedImageInfo,
+              ...maskUpdated,
             } as any;
+    
+            setImageArray((prev) => {
+              const copy = [...prev];
+              if (copy[currentIndex]) {
+                copy[currentIndex] = {
+                  ...copy[currentIndex],
+                  ...maskUpdated,
+                } as any;
+              }
+              return copy;
+            });
+          } catch (err) {
+            console.error('Error saving mask:', err);
           }
-          return copy;
-        });
-
-        if (editedUrl) {
-          setCurrentImageURL(editedUrl);
         }
 
         try {
           const imageForTiff: ImageInfo = {
-            ...(currentFile as any),
+            ...(updatedImageInfo as any),
             ...(editedUrl ? { url: editedUrl } : {}),
           } as ImageInfo;
-
+    
           const tiffBlob = await convertImageToTIFF(imageForTiff);
           const saveFilename = generateSaveFilename(imageForTiff);
-
+    
           const fileHandle = await dirHandle.getFileHandle(
             saveFilename,
             { create: true },
@@ -234,34 +299,35 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           await Swal.fire({
             title: 'Warning',
             text:
-              'Image was saved to database but failed to save TIFF file to the selected folder.',
+              'Image/mask was saved to database but failed to save TIFF file to the selected folder.',
             icon: 'warning',
             confirmButtonText: 'OK',
+            confirmButtonTextColor: '#fff',
             confirmButtonColor: '#3085d6',
-          });
+          } as any);
         }
-
+    
         await Swal.fire({
           title: 'Saved',
-          text: 'Image has been saved to the selected folder and updated in the database.',
+          text: 'Image and mask have been saved to the selected folder and updated in the database.',
           icon: 'success',
           confirmButtonText: 'OK',
           confirmButtonColor: '#3085d6',
         });
-
+    
         return true;
       } catch (err: any) {
-        console.error('Error saving image:', err);
+        console.error('Error saving image/mask:', err);
         await Swal.fire({
           title: 'Error',
-          text: err.message || 'Failed to save edited image.',
+          text: err.message || 'Failed to save edited image/mask.',
           icon: 'error',
           confirmButtonText: 'OK',
           confirmButtonColor: '#3085d6',
         });
         return false;
       }
-    };
+    };    
 
     const saveAllImages = async () => {
       if (!imageArray || imageArray.length === 0) {
@@ -274,7 +340,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return;
       }
-
+    
       if (!(window as any).showDirectoryPicker) {
         await Swal.fire({
           title: 'Error',
@@ -292,36 +358,64 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
       } catch {
         return;
       }
-
+    
       for (let i = 0; i < imageArray.length; i++) {
         const img = imageArray[i];
     
         let finalImage = img;
         let editedUrl: string | null = null;
     
-        const needSaveDB =
-          img.url && img.url.startsWith("data:") || 
-          (img as any).cropped_url && (img as any).cropped_url.startsWith("data:");
+        const needSaveImageDB =
+          (img.url && img.url.startsWith('data:')) ||
+          ((img as any).cropped_url && (img as any).cropped_url.startsWith('data:'));
+    
+        const needSaveMaskDB =
+          typeof img.mask_url === 'string' && img.mask_url.startsWith('data:');
 
-        if (needSaveDB) {
+        if (needSaveImageDB) {
           try {
-            const res = await fetch(img.url || (img as any).cropped_url);
+            const cropped = (img as any).cropped_url as string | undefined;
+            let sourceUrl: string | null = null;
+
+            if (cropped && cropped.startsWith('data:')) {
+              sourceUrl = cropped;
+            } else if (img.url && img.url.startsWith('data:')) {
+              sourceUrl = img.url;
+            } else if (cropped) {
+              sourceUrl = cropped;
+            } else if (img.url) {
+              sourceUrl = img.url;
+            }
+
+            if (!sourceUrl) {
+              console.error('No source URL for saving image id =', img.id);
+              continue;
+            }
+
+            const res = await fetch(sourceUrl);
             const blob = await res.blob();
     
             const formData = new FormData();
-            formData.append("edited", blob, `${img.filename || "image"}_edited.png`);
+            formData.append('edited', blob, `${img.filename || 'image'}_edited.png`);
     
             const response = await axios.post(
               `${API_BASE_URL}/update/${img.id}`,
               formData,
-              { headers: { "Content-Type": "multipart/form-data" } }
+              { headers: { 'Content-Type': 'multipart/form-data' } },
             );
     
-            const updated = response.data.image;
-
+            const updated = response.data.image as ImageInfo & {
+              edited_filepath?: string;
+              edited_url?: string;
+            };
+    
             if (updated.edited_filepath) {
               const filename = updated.edited_filepath.split(/[/\\]/).pop();
-              editedUrl = `${API_BASE_URL}/edited/${filename}`;
+              if (filename) {
+                editedUrl = `${API_BASE_URL}/edited/${filename}`;
+              }
+            } else if ((updated as any).edited_url) {
+              editedUrl = (updated as any).edited_url as string;
             }
     
             finalImage = {
@@ -329,18 +423,60 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
               ...updated,
               url: editedUrl ?? img.url,
               edited_url: editedUrl ?? img.edited_url,
-              status: "edited",
+              status: 'edited',
+              cropped_url: null as any,
             };
     
-            setImageArray(prev => {
+            setImageArray((prev) => {
               const copy = [...prev];
               copy[i] = finalImage;
               return copy;
             });
-    
           } catch (err) {
-            console.error("Save DB fail: ", err);
+            console.error('Save DB fail (image): ', err);
             continue;
+          }
+        }
+
+        if (needSaveMaskDB && img.mask_url) {
+          try {
+            const maskRes = await fetch(img.mask_url);
+            const maskBlob = await maskRes.blob();
+    
+            const maskForm = new FormData();
+            maskForm.append(
+              'mask',
+              maskBlob,
+              `${img.filename || 'image'}_mask.png`,
+            );
+    
+            const maskResp = await axios.post(
+              `${API_BASE_URL}/update-mask/${img.id}`,
+              maskForm,
+              { headers: { 'Content-Type': 'multipart/form-data' } },
+            );
+    
+            const maskUpdated = maskResp.data.image as {
+              mask_filepath: string;
+              mask_url: string;
+              mask_filename: string;
+            };
+    
+            finalImage = {
+              ...finalImage,
+              ...maskUpdated,
+            };
+    
+            setImageArray((prev) => {
+              const copy = [...prev];
+              copy[i] = {
+                ...copy[i],
+                ...maskUpdated,
+              } as any;
+              return copy;
+            });
+          } catch (err) {
+            console.error('Save mask fail: ', err);
           }
         }
 
@@ -356,20 +492,19 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           const writable = await fileHandle.createWritable();
           await writable.write(tiffBlob);
           await writable.close();
-    
         } catch (err) {
-          console.error("TIFF conversion failed: ", err);
+          console.error('TIFF conversion failed: ', err);
         }
       }
     
       await Swal.fire({
-        title: "Saved",
-        text: "All images have been saved to the selected folder.",
-        icon: "success",
-        confirmButtonText: "OK",
-        confirmButtonColor: "#3085d6",
+        title: 'Saved',
+        text: 'All images have been saved to the selected folder.',
+        icon: 'success',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#3085d6',
       });
-    };    
+    };        
   
     const revertCurrentImage = async () => {
       if (!currentFile){
