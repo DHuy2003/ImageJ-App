@@ -1,9 +1,9 @@
 export type ImageInfo = {
     id: number;
     filename: string;
-    url?: string;                
-    original_url?: string | null;    
-    edited_url?: string | null;      
+    url?: string;
+    original_url?: string | null;
+    edited_url?: string | null;
     width: number;
     height: number;
     bitDepth: number;

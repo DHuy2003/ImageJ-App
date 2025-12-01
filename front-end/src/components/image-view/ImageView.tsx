@@ -1,17 +1,42 @@
+import axios from 'axios';
 import { ChevronLeft, ChevronRight, Eye, EyeOff, Maximize } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import type { CropOverlayHandle, RelativeCropRect } from '../../types/crop';
 import type { ImageInfo, ImageViewProps } from '../../types/image';
 import { type RoiTool } from '../../types/roi';
 import { formatFileSize } from '../../utils/common/formatFileSize';
 import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
-import { analyzeImageHistogram, handleScaleToFit, handleZoomIn, handleZoomOut, processBrightnessContrast } from '../../utils/nav-bar/imageUtils'; // Import helpers
+import {
+  analyzeImageHistogram,
+  handleScaleToFit,
+  handleZoomIn,
+  handleZoomOut,
+  processBrightnessContrast,
+  processImageResize,
+  flipHorizontal,
+  flipVertical,
+  rotateLeft90,
+  rotateRight90
+} from '../../utils/nav-bar/imageUtils';
+import {
+  processClose,
+  processConvertToMask,
+  processDilate,
+  processErode,
+  processFindEdges,
+  processMakeBinary,
+  processOpen,
+  processSharpen,
+  processSmooth,
+  processWatershed
+} from '../../utils/nav-bar/processUtils';
 import BrushOverlay from '../brush-overlay/BrushOverlay';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
 import './ImageView.css';
-import BrightnessContrastDialog from './dialogs/BrightContrast';
+import BrightnessContrastDialog from './dialogs/bright-contrast/BrightContrast';
+import ImageSizeDialog from './dialogs/image-size/ImageSizeDialog';
+import NotificationBar, { type NotificationType } from './dialogs/notifications/NotificationBar';
 import useBrushCommit from './hooks/useBrushCommit';
 import useEditEvents from './hooks/useEditEvents';
 import useFileEvents from './hooks/useFileEvents';
@@ -20,7 +45,6 @@ import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
 import useToolbarToolSelection from './hooks/useToolbarToolSelection';
 import useUndoStack from './hooks/useUndoStack';
-
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
 interface CellFeature {
@@ -157,6 +181,31 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [displayRange, setDisplayRange] = useState({ min: 0, max: 255 });
   const [originalImageData, setOriginalImageData] = useState<ImageData | null>(null);
   const [histogramData, setHistogramData] = useState<number[]>([]);
+  const [showSizeDialog, setShowSizeDialog] = useState(false);
+  const [notification, setNotification] = useState<{ message: string, type: NotificationType, isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false
+  });
+
+  const showNotification = (message: string, type: NotificationType = 'info') => {
+    setNotification({ message, type, isVisible: true });
+  };
+
+  const closeNotification = () => {
+    setNotification(prev => ({ ...prev, isVisible: false }));
+  };
+  useEffect(() => {
+    const handleCustomNotification = (e: Event) => {
+      const customEvent = e as CustomEvent<{ message: string, type: NotificationType }>;
+      showNotification(customEvent.detail.message, customEvent.detail.type);
+    };
+
+    window.addEventListener('show-notification', handleCustomNotification);
+    return () => {
+      window.removeEventListener('show-notification', handleCustomNotification);
+    };
+  }, []);
   const { pushUndo } = useUndoStack({
     visibleImages,
     currentIndex,
@@ -165,6 +214,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setCurrentImageURL,
     setVisibleImages,
   });
+
 
   const {
     pan,
@@ -180,6 +230,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     zoomLevel,
     panMode,
   });
+
 
   useEffect(() => {
     const handleZoomInEvent = () => {
@@ -416,14 +467,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   };
 
   const handleOpenBCEvent = () => {
-        const dataObj = getImageData();
-        if (dataObj) {
-            setOriginalImageData(dataObj.imageData);
-            const { bins } = analyzeImageHistogram(dataObj.imageData);
-            setHistogramData(bins);
-            setShowBC(true);
-        }
-    };
+    const dataObj = getImageData();
+    if (dataObj) {
+      setOriginalImageData(dataObj.imageData);
+      const { bins } = analyzeImageHistogram(dataObj.imageData);
+      setHistogramData(bins);
+      setShowBC(true);
+    }
+  };
 
   // 2. Preview thay đổi (Vẽ lên Canvas nhưng không lưu History)
   const applyVisualChanges = (min: number, max: number) => {
@@ -537,6 +588,156 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     };
   }, [isResizingLeft, isResizingRight]);
 
+  useEffect(() => {
+    const handleProcessImage = (e: Event) => {
+      const customEvent = e as CustomEvent<{ action: string }>;
+      const { action } = customEvent.detail;
+
+      const data = getImageData();
+      if (!data) return;
+
+      const { ctx, imageData, canvas } = data;
+      let newImageData: ImageData | null = null;
+
+      // Apply the specific process based on action
+      switch (action) {
+        case 'smooth':
+          newImageData = processSmooth(imageData);
+          break;
+        case 'sharpen':
+          newImageData = processSharpen(imageData);
+          break;
+        case 'find-edges':
+          newImageData = processFindEdges(imageData);
+          break;
+        case 'make-binary':
+          newImageData = processMakeBinary(imageData);
+          break;
+        case 'convert-to-mask':
+          newImageData = processConvertToMask(imageData);
+          break;
+        case 'erode':
+          newImageData = processErode(imageData);
+          break;
+        case 'dilate':
+          newImageData = processDilate(imageData);
+          break;
+        case 'open':
+          newImageData = processOpen(imageData);
+          break;
+        case 'close':
+          newImageData = processClose(imageData);
+          break;
+        case 'watershed':
+          newImageData = processWatershed(imageData);
+          break;
+        default:
+          console.warn('Unknown process action:', action);
+          return;
+      }
+
+      if (newImageData) {
+        ctx.putImageData(newImageData, 0, 0);
+        updateImageFromCanvas(canvas);
+      }
+    };
+
+    window.addEventListener('process-image', handleProcessImage);
+    return () => {
+      window.removeEventListener('process-image', handleProcessImage);
+    };
+  }, [currentImageURL, pushUndo]);
+
+
+  useEffect(() => {
+    const handleOpenSizeEvent = () => setShowSizeDialog(true);
+
+    // ... các event listeners khác ...
+    window.addEventListener('openImageSize', handleOpenSizeEvent);
+
+    return () => {
+      // ... cleanup khác ...
+      window.removeEventListener('openImageSize', handleOpenSizeEvent);
+    };
+  }, []); // dependencies
+
+  // 4. Hàm xử lý khi bấm OK trong dialog
+  const handleSizeApply = (w: number, h: number, d: number, interp: string) => {
+    const dataObj = getImageData();
+    if (!dataObj) return;
+
+    // Gọi hàm logic từ imageUtils (đã được định nghĩa ở bước trước)
+    const newImageData = processImageResize(dataObj.imageData, {
+      newWidth: w,
+      newHeight: h,
+      interpolation: interp as any
+    });
+
+    // Tạo canvas tạm để chuyển đổi ImageData -> URL
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = w;
+    tempCanvas.height = h;
+    const ctx = tempCanvas.getContext('2d');
+    if (ctx) {
+      ctx.putImageData(newImageData, 0, 0);
+      // Cập nhật ảnh hiển thị và lưu vào Undo Stack
+      updateImageFromCanvas(tempCanvas, true);
+    }
+
+    setShowSizeDialog(false);
+  };
+
+    useEffect(() => {
+    const transformImage = (
+      transformFn: (
+        img: HTMLImageElement | null,
+        onComplete: (dataUrl: string, width: number, height: number, size: number) => void
+      ) => void
+    ) => {
+      if (!imgRef.current || !currentFile) return;
+      
+      pushUndo();
+      
+      transformFn(imgRef.current, (dataUrl, width, height, size) => {
+        setCurrentImageURL(dataUrl);
+        setVisibleImages(prev => {
+          const copy = [...prev];
+          if (copy[currentIndex]) {
+            copy[currentIndex] = {
+              ...copy[currentIndex],
+              cropped_url: dataUrl as any,
+              width,
+              height,
+              size,
+              bitDepth: copy[currentIndex].bitDepth ?? 8,
+            } as any;
+          }
+          return copy;
+        });
+      });
+    };
+
+
+    const handleFlipHorizontalEvent = () => transformImage(flipHorizontal);
+    const handleFlipVerticalEvent = () => transformImage(flipVertical);
+    const handleRotateLeft90Event = () => transformImage(rotateLeft90);
+    const handleRotateRight90Event = () => transformImage(rotateRight90);
+
+
+    window.addEventListener('imageFlipHorizontal', handleFlipHorizontalEvent);
+    window.addEventListener('imageFlipVertical', handleFlipVerticalEvent);
+    window.addEventListener('imageRotateLeft90', handleRotateLeft90Event);
+    window.addEventListener('imageRotateRight90', handleRotateRight90Event);
+
+
+    return () => {
+      window.removeEventListener('imageFlipHorizontal', handleFlipHorizontalEvent);
+      window.removeEventListener('imageFlipVertical', handleFlipVerticalEvent);
+      window.removeEventListener('imageRotateLeft90', handleRotateLeft90Event);
+      window.removeEventListener('imageRotateRight90', handleRotateRight90Event);
+    };
+  }, [currentIndex, currentFile, pushUndo, setCurrentImageURL, setVisibleImages]);
+
   return (
     <div id="image-view">
       {/* LEFT SIDE: Properties & Analysis Panel */}
@@ -576,7 +777,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                         <tr key={feature.id}>
                           <td className="cell-id">{feature.cell_id}</td>
                           <td>{formatValue(feature.area, 0)}</td>
-                          <td>{formatValue(feature.aspect_ratio, 2)}</td>
+                          {/* <td>{formatValue(feature.aspect_ratio, 2)}</td> */}
                         </tr>
                       ))}
                     </tbody>
@@ -627,6 +828,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           </div>
         </div>
       )}
+
+
 
       <BrightnessContrastDialog
         isOpen={showBC}
@@ -897,6 +1100,22 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           })}
         </div>
       </div>
+      {currentFile && (
+        <ImageSizeDialog
+          isOpen={showSizeDialog}
+          onClose={() => setShowSizeDialog(false)}
+          onApply={handleSizeApply}
+          currentWidth={imgRef.current?.naturalWidth || 0}
+          currentHeight={imgRef.current?.naturalHeight || 0}
+        />
+      )}
+
+      <NotificationBar
+        message={notification.message}
+        type={notification.type}
+        isVisible={notification.isVisible}
+        onClose={closeNotification}
+      />
     </div>
   );
 };

@@ -1,0 +1,87 @@
+.dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.dialog-box.size-dialog {
+    background: #f0f0f0;
+    /* Màu nền xám nhạt giống ImageJ/Windows cổ điển */
+    padding: 15px;
+    border: 1px solid #999;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 300px;
+    font-family: sans-serif;
+    font-size: 13px;
+    color: #000;
+}
+
+.dialog-title {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.input-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.input-group label {
+    flex: 1;
+}
+
+.input-group input[type="number"] {
+    width: 80px;
+    padding: 2px 5px;
+}
+
+.checkbox-group {
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-group input {
+    margin-right: 8px;
+}
+
+.dropdown-group {
+    margin-top: 15px;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.dropdown-group select {
+    padding: 2px;
+    width: 120px;
+}
+
+.dialog-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.dialog-buttons button {
+    padding: 4px 20px;
+    cursor: pointer;
+    border: 1px solid #888;
+    background: #e1e1e1;
+    min-width: 70px;
+}
+
+.dialog-buttons button:hover {
+    background: #d4d4d4;
+}
