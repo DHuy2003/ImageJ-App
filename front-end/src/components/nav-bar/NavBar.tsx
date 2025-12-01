@@ -1,37 +1,36 @@
 import { BarChart3, Microscope, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import DropdownMenu from "../dropdown-menu/DropdownMenu";
+import "./NavBar.css";
 import {
-    handleClear,
-    handleClearOutside,
-    handleCut,
-    handleDraw,
-    handleFill,
-    handleFitCircle,
-    handleFitRectangle,
-    handleInvert,
-    handleProperties,
-    handleRestoreSelection,
-    handleRotate,
-    handleScale,
-    handleSelectionAll,
-    handleSelectionNone,
-    handleUndo
-} from "../../utils/nav-bar/editUtils";
-import {
-    handleClose,
-    handleCloseAll,
-    handleCreateMask,
     handleOpen,
     handleOpenFolder,
     handleOpenMaskFolder,
-    handleQuit,
+    handleCreateMask,
     handleRevert,
+    handleClose,
+    handleCloseAll,
     handleSave,
     handleSaveAll,
+    handleQuit
 } from "../../utils/nav-bar/fileUtils";
-import DropdownMenu from "../dropdown-menu/DropdownMenu";
-import "./NavBar.css";
-
+import {
+    handleUndo,
+    handleCut,
+    handleClear,
+    handleClearOutside,
+    handleFill,
+    handleDraw,
+    handleInvert,
+    handleSelectionAll,
+    handleSelectionNone,
+    handleRestoreSelection,
+    handleFitCircle,
+    handleFitRectangle,
+    handleProperties,
+    handleScale,
+    handleRotate  
+} from "../../utils/nav-bar/editUtils";
 import {
     handleConvertBitDepth,
     handleOpenBrightnessContrast,
@@ -44,7 +43,6 @@ import {
     handleRotateLeft90,
     handleRotateRight90
 } from "../../utils/nav-bar/imageUtils";
-
 import {
     handleClustering,
     handleExtractFeatures,
@@ -57,7 +55,6 @@ import {
 const dispatchProcessEvent = (action: string) => {
     window.dispatchEvent(new CustomEvent('process-image', { detail: { action } }));
 };
-
 
 const NavBar = () => {
     const navigate = useNavigate();

@@ -12,11 +12,30 @@ import requests
 from io import BytesIO
 from pathlib import Path
 from PIL import Image as PILImage
+from sqlalchemy.exc import OperationalError
+import time
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 CONVERTED_FOLDER = config.CONVERTED_FOLDER
 MASK_FOLDER = config.MASK_FOLDER
 EDITED_FOLDER = config.EDITED_FOLDER
+
+def commit_with_retry(retries: int = 3, delay: float = 0.3):
+    """
+    Commit session với retry, tránh lỗi sqlite 'database is locked' xảy ra lặt vặt.
+    """
+    for attempt in range(retries):
+        try:
+            db.session.commit()
+            return
+        except OperationalError as e:
+            msg = str(e).lower()
+            if "database is locked" in msg and attempt < retries - 1:
+                db.session.rollback()
+                time.sleep(delay)
+                continue
+            db.session.rollback()
+            raise
 
 def determine_bit_depth(img, arr):
     dtype_to_bit = {
@@ -46,10 +65,8 @@ def process_and_save_image(image, destination_folder):
     output_path = os.path.join(destination_folder, converted_filename)
 
     if destination_folder == MASK_FOLDER:
-        # Convert to grayscale if needed
         if img.mode != 'L' and img.mode != 'I' and img.mode != 'I;16':
             if len(arr.shape) == 3:
-                # RGB/RGBA - take first channel or convert
                 arr = arr[:, :, 0].astype(np.int32)
             else:
                 arr = arr.astype(np.int32)
@@ -61,19 +78,15 @@ def process_and_save_image(image, destination_folder):
         original_mask_filename = converted_filename_base + '_labels.png'
         original_mask_path = os.path.join(destination_folder, original_mask_filename)
 
-        # Save as 16-bit or 32-bit to preserve label values > 255
         if arr.max() > 255:
-            # Use 16-bit PNG for large label values
             original_mask_img = Image.fromarray(arr.astype(np.uint16), mode='I;16')
         else:
             original_mask_img = Image.fromarray(arr.astype(np.uint8), mode='L')
         original_mask_img.save(original_mask_path)
 
-        # Create colored display mask (for visualization only)
         unique_vals = np.unique(arr)
         lut = np.zeros((int(arr.max()) + 1, 3), dtype=np.uint8)
 
-        # Background (0) is black
         lut[0] = [0, 0, 0]
 
         np.random.seed(42)
@@ -82,7 +95,6 @@ def process_and_save_image(image, destination_folder):
                 color = np.random.randint(50, 255, 3)
                 lut[int(val)] = color
 
-        # Apply LUT to create colored mask
         color_arr = np.zeros((arr.shape[0], arr.shape[1], 3), dtype=np.uint8)
         for val in unique_vals:
             mask = arr == val
@@ -260,7 +272,8 @@ def update_edited_image(image, image_id):
     img_record.edited_filename = edited_filename
     img_record.edited_filepath = output_path
     img_record.status = "edited"
-    db.session.commit()
+    
+    commit_with_retry()
 
     edited_url = url_for(
         'image_bp.get_edited_image',
@@ -292,7 +305,8 @@ def update_mask_image(mask_file, image_id):
     img_record.mask_filepath = output_path
     if img_record.filename and img_record.status == "mask_only":
         img_record.status = "original"
-    db.session.commit()
+
+    commit_with_retry()
 
     mask_url = url_for(
         'image_bp.get_mask_image',

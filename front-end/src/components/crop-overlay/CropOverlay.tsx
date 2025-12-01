@@ -45,18 +45,18 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ imgRef },
     if (!overlayRef.current || !imgRef.current) return;
     const overlay = overlayRef.current;
     const imgRect = imgRef.current.getBoundingClientRect();
-    const parentRect = overlay.parentElement!.getBoundingClientRect(); // .crop-container
-
+    const parentRect = overlay.parentElement!.getBoundingClientRect();
+  
     const r = relBoxRef.current;
     const newLeft = (imgRect.left - parentRect.left) + r.left * imgRect.width;
     const newTop = (imgRect.top - parentRect.top) + r.top * imgRect.height;
     const newWidth = r.width * imgRect.width;
     const newHeight = r.height * imgRect.height;
-
-    overlay.style.left = `${newLeft}px`;
-    overlay.style.top = `${newTop}px`;
-    overlay.style.width = `${newWidth}px`;
-    overlay.style.height = `${newHeight}px`;
+  
+    overlay.style.left = `${Math.round(newLeft)}px`;
+    overlay.style.top = `${Math.round(newTop)}px`;
+    overlay.style.width = `${Math.round(newWidth)}px`;
+    overlay.style.height = `${Math.round(newHeight)}px`;
   }, [imgRef]);
 
   useLayoutEffect(() => {
@@ -65,10 +65,15 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ imgRef },
     const imgRect = imgRef.current.getBoundingClientRect();
     const parentRect = overlay.parentElement!.getBoundingClientRect();
 
-    overlay.style.width = `${imgRect.width}px`;
-    overlay.style.height = `${imgRect.height}px`;
-    overlay.style.left = `${imgRect.left - parentRect.left}px`;
-    overlay.style.top = `${imgRect.top - parentRect.top}px`;
+    const width = Math.round(imgRect.width);
+    const height = Math.round(imgRect.height);
+    const left = Math.round(imgRect.left - parentRect.left);
+    const top = Math.round(imgRect.top - parentRect.top);
+
+    overlay.style.width = `${width}px`;
+    overlay.style.height = `${height}px`;
+    overlay.style.left = `${left}px`;
+    overlay.style.top = `${top}px`;
 
     relBoxRef.current = { left: 0, top: 0, width: 1, height: 1 };
 
@@ -131,8 +136,8 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ imgRef },
         newLeft = Math.max(relativeImgRect.left, Math.min(newLeft, relativeImgRect.right - relativeRect.width));
         newTop = Math.max(relativeImgRect.top, Math.min(newTop, relativeImgRect.bottom - relativeRect.height));
 
-        overlay.style.left = `${newLeft}px`;
-        overlay.style.top = `${newTop}px`;
+        overlay.style.left = `${Math.round(newLeft)}px`;
+        overlay.style.top = `${Math.round(newTop)}px`;
         setStartPos({ x: e.clientX, y: e.clientY });
       }
 
@@ -188,10 +193,10 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ imgRef },
           }
         }
 
-        overlay.style.width = `${newWidth}px`;
-        overlay.style.height = `${newHeight}px`;
-        overlay.style.left = `${newLeft}px`;
-        overlay.style.top = `${newTop}px`;
+        overlay.style.width = `${Math.round(newWidth)}px`;
+        overlay.style.height = `${Math.round(newHeight)}px`;
+        overlay.style.left = `${Math.round(newLeft)}px`;
+        overlay.style.top = `${Math.round(newTop)}px`;
 
         setStartPos({ x: e.clientX, y: e.clientY });
       }
@@ -229,23 +234,31 @@ const CropOverlay = forwardRef<CropOverlayHandle, CropOverlayProps>(({ imgRef },
     <div className="crop-container">
       <div ref={overlayRef} className="crop-overlay" onMouseDown={handleMouseDown}>
         <div className="grid-lines">
-          {[...Array(4)].map((_, i) => (
-            <div key={`v${i}`} className="v-line" style={{ left: `${(i * 100) / 3}%` }}></div>
+          {[...Array(2)].map((_, i) => (
+            <div
+              key={`v${i}`}
+              className="v-line"
+              style={{ left: `${((i + 1) * 100) / 3}%` }}  // 33.3%, 66.6%
+            />
           ))}
-          {[...Array(4)].map((_, i) => (
-            <div key={`h${i}`} className="h-line" style={{ top: `${(i * 100) / 3}%` }}></div>
+
+          {[...Array(2)].map((_, i) => (
+            <div
+              key={`h${i}`}
+              className="h-line"
+              style={{ top: `${((i + 1) * 100) / 3}%` }}   // 33.3%, 66.6%
+            />
           ))}
         </div>
 
-        {/* handles */}
-        <div className="resize-handle nw" onMouseDown={handleResizeStart("nw")}></div>
-        <div className="resize-handle ne" onMouseDown={handleResizeStart("ne")}></div>
-        <div className="resize-handle sw" onMouseDown={handleResizeStart("sw")}></div>
-        <div className="resize-handle se" onMouseDown={handleResizeStart("se")}></div>
-        <div className="resize-handle n" onMouseDown={handleResizeStart("n")}></div>
-        <div className="resize-handle s" onMouseDown={handleResizeStart("s")}></div>
-        <div className="resize-handle e" onMouseDown={handleResizeStart("e")}></div>
-        <div className="resize-handle w" onMouseDown={handleResizeStart("w")}></div>
+        <div className="crop-resize-handle nw" onMouseDown={handleResizeStart("nw")}></div>
+        <div className="crop-resize-handle ne" onMouseDown={handleResizeStart("ne")}></div>
+        <div className="crop-resize-handle sw" onMouseDown={handleResizeStart("sw")}></div>
+        <div className="crop-resize-handle se" onMouseDown={handleResizeStart("se")}></div>
+        <div className="crop-resize-handle n" onMouseDown={handleResizeStart("n")}></div>
+        <div className="crop-resize-handle s" onMouseDown={handleResizeStart("s")}></div>
+        <div className="crop-resize-handle e" onMouseDown={handleResizeStart("e")}></div>
+        <div className="crop-resize-handle w" onMouseDown={handleResizeStart("w")}></div>
       </div>
     </div>
   );

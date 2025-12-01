@@ -16,7 +16,7 @@
   
 .roi-overlay.tool-rect.roi-enabled,
 .roi-overlay.tool-circle.roi-enabled {
-    cursor: crosshair;
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cline x1='16' y1='4' x2='16' y2='28' stroke='black' stroke-width='2'/%3E%3Cline x1='4' y1='16' x2='28' y2='16' stroke='black' stroke-width='2'/%3E%3C/svg%3E") 16 16, crosshair;
 }
   
 .roi-overlay.tool-pointer.roi-enabled {

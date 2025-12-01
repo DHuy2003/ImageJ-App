@@ -24,11 +24,18 @@ html {
     align-items: center;
     justify-content: flex-start;
     height: 100%;
-    gap: 10px;
+    gap: 20px;
+    background-color: inherit;
 }
 
-#selection li {
-    padding: 0 10px;
+.selection-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    border: none;
+    outline: none;
+    background-color: inherit;
 }
 
 .selection-item {
@@ -36,10 +43,21 @@ html {
     vertical-align: middle;
 }
 
-#selection li:hover {
+.selection-btn:hover {
     background-color: #e0ddd7;
     border-radius: 5px;
     cursor: pointer;
     padding: 10px 10px;
+}
+
+.selection-btn-active {
+    border-radius: 5px;
+    border: 2px solid #4a90e2;
+    background-color: #ffffff;
+    padding: 4px 8px;
+}
+
+.selection-btn-active .selection-item {
+    color: #4a90e2;
 }
 
