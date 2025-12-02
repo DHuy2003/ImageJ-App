@@ -12,6 +12,9 @@ import { useEffect, useState } from 'react';
 import type { ImageInfo } from '../../types/image';
 import axios from 'axios';
 import { TOOL_EVENT_NAME, TOOL_PROGRESS_EVENT, type ToolActionPayload, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
+import VirtualSequencePlayer, { type SequenceFrame } from "../../components/virtual-sequence/VirtualSequencePlayer";
+import VirtualSequenceImportDialog from "../../components/virtual-sequence/VirtualSequenceImportDialog";
+import { VIRTUAL_SEQUENCE_IMPORT_EVENT } from "../../utils/nav-bar/fileUtils";
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -27,6 +30,9 @@ const DisplayImagesPage = () => {
     title: '',
     message: ''
   });
+  const [showVirtualImport, setShowVirtualImport] = useState(false);
+  const [showVirtualPlayer, setShowVirtualPlayer] = useState(false);
+  const [sequenceFrames, setSequenceFrames] = useState<SequenceFrame[]>([]);
   const location = useLocation();
 
   useEffect(() => {
@@ -60,14 +66,31 @@ const DisplayImagesPage = () => {
   }, []);
 
   useEffect(() => {
+    const handleOpenVirtual = () => {
+      setShowVirtualImport(true);
+    };
+
+    window.addEventListener(
+      VIRTUAL_SEQUENCE_IMPORT_EVENT,
+      handleOpenVirtual as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        VIRTUAL_SEQUENCE_IMPORT_EVENT,
+        handleOpenVirtual as EventListener
+      );
+    };
+  }, []);
+
+  useEffect(() => {
     const handleProgress = (e: CustomEvent<ToolProgressPayload>) => {
       const detail = e.detail;
       if (!detail) return;
       if (detail.open) {
         setProgressState({
           open: true,
-          title: detail.title || 'Đang xử lý',
-          message: detail.message || 'Vui lòng chờ...'
+          title: detail.title || 'Processing',
+          message: detail.message || 'Please wait...'
         });
       } else {
         setProgressState(prev => ({ ...prev, open: false }));
@@ -101,6 +124,75 @@ const DisplayImagesPage = () => {
     };
   }, []);
 
+  const handleVirtualImportConfirm = async (config: {
+    files: File[];
+    start: number;
+    count: number;
+    step: number;
+  }) => {
+    const { files, start, count, step } = config;
+    if (!files || files.length === 0) return;
+
+    const total = files.length;
+    const startIndex = Math.max(0, start - 1);
+    const stepValue = Math.max(1, step);
+    const maxFrames = count > 0 ? count : total;
+
+    const selectedFiles: File[] = [];
+    let index = startIndex;
+    let used = 0;
+
+    while (index < total && used < maxFrames) {
+      selectedFiles.push(files[index]);
+      index += stepValue;
+      used += 1;
+    }
+
+    try {
+      const formData = new FormData();
+      selectedFiles.forEach((file) => formData.append("files", file));
+
+      const res = await axios.post(
+        `${API_BASE_URL}/virtual-sequence/preview`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      const framesResp = (res.data && res.data.frames) || [];
+      const frames: SequenceFrame[] = framesResp
+        .filter((f: any) => f.url)
+        .map((f: any) => ({
+          url: f.url as string,
+          name: f.name as string,
+        }));
+
+      if (frames.length === 0) {
+        setShowVirtualImport(false);
+        return;
+      }
+
+      setSequenceFrames(frames);
+      setShowVirtualImport(false);
+      setShowVirtualPlayer(true);
+    } catch (err) {
+      console.error("Error loading virtual sequence preview:", err);
+      alert("Failed to load virtual sequence preview. Please try again.");
+    }
+  };
+
+  const handleCloseVirtualPlayer = () => {
+    sequenceFrames.forEach((f) => {
+      try {
+        URL.revokeObjectURL(f.url);
+      } catch {
+      }
+    });
+    setSequenceFrames([]);
+    setShowVirtualPlayer(false);
+  };
+
   if (loading) {
     return (
       <div className="display-images-page">
@@ -122,6 +214,16 @@ const DisplayImagesPage = () => {
           isOpen={progressState.open}
           title={progressState.title}
           message={progressState.message}
+        />
+        <VirtualSequenceImportDialog
+          isOpen={showVirtualImport}
+          onCancel={() => setShowVirtualImport(false)}
+          onConfirm={handleVirtualImportConfirm}
+        />
+        <VirtualSequencePlayer
+          isOpen={showVirtualPlayer}
+          onClose={handleCloseVirtualPlayer}
+          frames={sequenceFrames}
         />
       </div>
     );
@@ -152,6 +254,16 @@ const DisplayImagesPage = () => {
           title={progressState.title}
           message={progressState.message}
         />
+        <VirtualSequenceImportDialog
+          isOpen={showVirtualImport}
+          onCancel={() => setShowVirtualImport(false)}
+          onConfirm={handleVirtualImportConfirm}
+        />
+        <VirtualSequencePlayer
+          isOpen={showVirtualPlayer}
+          onClose={handleCloseVirtualPlayer}
+          frames={sequenceFrames}
+        />
       </div>
     );
   }
@@ -178,6 +290,16 @@ const DisplayImagesPage = () => {
         isOpen={progressState.open}
         title={progressState.title}
         message={progressState.message}
+      />
+      <VirtualSequenceImportDialog
+        isOpen={showVirtualImport}
+        onCancel={() => setShowVirtualImport(false)}
+        onConfirm={handleVirtualImportConfirm}
+      />
+      <VirtualSequencePlayer
+        isOpen={showVirtualPlayer}
+        onClose={handleCloseVirtualPlayer}
+        frames={sequenceFrames}
       />
     </div>
   );

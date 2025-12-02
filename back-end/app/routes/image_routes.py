@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_from_directory, Response, current_app
+from flask import Blueprint, request, jsonify, send_from_directory, Response, current_app, url_for
 from flask_cors import cross_origin
 from app.services.image_services import (
     get_all_images,
@@ -7,6 +7,7 @@ from app.services.image_services import (
     save_image,
     update_edited_image,
     update_mask_image,
+    convert_image_for_preview,
     revert_image,
     delete_image,
     cleanup_folders,
@@ -110,6 +111,39 @@ def upload_masks():
         "message": "Mask images uploaded and processed successfully",
         "masks": uploaded_masks_info
     }), 200
+
+@image_bp.route('/virtual-sequence/preview', methods=['POST'])
+@cross_origin()
+def virtual_sequence_preview():
+    """
+    Convert uploaded images (e.g. TIFF) to PNGs for virtual sequence preview.
+    Does not modify the image database.
+    """
+    if "files" not in request.files:
+        return jsonify({"error": "No image files uploaded"}), 400
+
+    files = request.files.getlist("files")
+    frames = []
+
+    for f in files:
+        try:
+            preview_filename = convert_image_for_preview(f)
+            preview_url = url_for(
+                'image_bp.get_converted_image',
+                filename=preview_filename,
+                _external=True
+            )
+            frames.append({
+                "name": f.filename,
+                "url": preview_url,
+            })
+        except Exception as e:
+            frames.append({
+                "name": f.filename,
+                "error": str(e),
+            })
+
+    return jsonify({"frames": frames}), 200
 
 @image_bp.route('/save', methods=['POST'])
 @cross_origin()

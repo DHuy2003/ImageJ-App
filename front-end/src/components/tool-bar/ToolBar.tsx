@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MousePointer, Hand, Circle, Square, Brush } from 'lucide-react';
+import { MousePointer, Hand, Circle, Square, Brush, Eraser } from 'lucide-react';
 import './ToolBar.css';
 import {
   handleCircleClick,
@@ -11,6 +11,7 @@ import {
   getCurrentToolbarTool,
   type ToolbarAction,
   type ToolbarTool,
+  handleEraserClick,
 } from '../../utils/tool-bar/toolBarUtils';
 
 const ToolBar = () => {
@@ -72,6 +73,13 @@ const ToolBar = () => {
           onClick={handleBrushClick}
         >
           <Brush className="selection-item" />
+        </button>
+
+        <button
+          className={`selection-btn ${isToolActive('eraser') ? 'selection-btn-active' : ''}`}
+          onClick={handleEraserClick}
+        >
+          <Eraser className="selection-item" />
         </button>
       </ul>
     </div>

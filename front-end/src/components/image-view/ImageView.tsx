@@ -1005,25 +1005,13 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           )}
 
           {showMask && currentFile?.mask_url && (
-            <div
-              className={`mask-wrapper ${!scaleToFit ? 'zoom-wrapper' : ''}`}
-              style={!scaleToFit && imgRef.current ? {
-                width: imgRef.current.naturalWidth * zoomLevel,
-                height: imgRef.current.naturalHeight * zoomLevel,
-              } : undefined}
-            >
-              <img
-                crossOrigin="anonymous"
-                referrerPolicy="no-referrer"
-                src={currentFile.mask_url}
-                alt={`${currentFile?.filename} mask`}
-                className={`mask-image ${scaleToFit ? 'small-image' : ''}`}
-                style={!scaleToFit && imgRef.current ? {
-                  width: imgRef.current.naturalWidth * zoomLevel,
-                  height: imgRef.current.naturalHeight * zoomLevel,
-                } : undefined}
-              />
-            </div>
+            <img
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+              src={currentFile.mask_url}
+              alt={`${currentFile?.filename} mask`}
+              className="mask-image small-image"
+            />
           )}
 
           <RoiOverlay
