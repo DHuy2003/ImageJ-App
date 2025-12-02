@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { BrushOverlayProps } from '../../types/brush';
 import './BrushOverlay.css';
+import { TOOLBAR_EVENT_NAME, type ToolbarAction } from '../../utils/tool-bar/toolBarUtils';
 
 type BrushOverlayWithCommitProps = BrushOverlayProps & {
   onCommit?: (canvas: HTMLCanvasElement) => void;
@@ -10,31 +11,37 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [brushSize] = useState(8);
+  const [brushSize, setBrushSize] = useState(8);
+  const [brushColor, setBrushColor] = useState('#0078d4'); 
   const hasInitializedSize = useRef(false);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const hasDrawnRef = useRef(false);
+
+  useEffect(() => {
+    const listener = (e: Event) => {
+      const action = (e as CustomEvent<ToolbarAction>).detail;
+      if (action.type === 'BRUSH_SETTINGS') {
+        setBrushSize(action.settings.size);
+        setBrushColor(action.settings.color);
+      }
+    };
+
+    window.addEventListener(TOOLBAR_EVENT_NAME, listener as EventListener);
+    return () => window.removeEventListener(TOOLBAR_EVENT_NAME, listener as EventListener);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-  
-    if (tool === 'brush') {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      hasInitializedSize.current = false;
-      lastPosRef.current = null;
-      hasDrawnRef.current = false;
-      setIsDrawing(false);
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      hasInitializedSize.current = false;
-      lastPosRef.current = null;
-      hasDrawnRef.current = false;
-      setIsDrawing(false);
-    }
-  }, [tool]);  
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasInitializedSize.current = false;
+    lastPosRef.current = null;
+    hasDrawnRef.current = false;
+    setIsDrawing(false);
+  }, [tool]);
 
   useEffect(() => {
     if (tool !== 'brush' || disabled) return;
@@ -93,8 +100,8 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = brushSize;
+    ctx.strokeStyle = brushColor;   
+    ctx.lineWidth = brushSize;      
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
