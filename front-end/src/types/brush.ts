@@ -5,3 +5,8 @@ export type BrushOverlayProps = {
   disabled: boolean;
   imgRef: React.RefObject<HTMLImageElement | null>;
 }
+
+export type BrushSettings = {
+  size: number;
+  color: string;
+};

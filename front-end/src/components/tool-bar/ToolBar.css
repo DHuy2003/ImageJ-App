@@ -9,6 +9,7 @@ html {
 }
 
 #toolbar {
+    position: relative;
     height: 48px;
     width: 100%;
     padding: 8px 16px;
@@ -61,3 +62,85 @@ html {
     color: #4a90e2;
 }
 
+.brush-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.brush-popup {
+    position: absolute;
+    left: 48px;
+    top: 0;
+    z-index: 1000;
+    background: #ffffff;
+    border: 1px solid #ccc;
+    border-radius: 6px;                 
+    padding: 12px 16px;                 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    width: 260px;                       
+}
+
+.brush-popup-section + .brush-popup-section {
+    margin-top: 12px;
+}
+
+.brush-popup-title {
+    font-size: 14px;
+    margin-bottom: 6px;
+    font-weight: 700;
+    color: #000;
+}
+
+.brush-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.brush-popup-close {
+    border: none;
+    background: transparent;
+    padding: 2px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.brush-popup-close:hover svg {
+    opacity: 0.7;
+}
+
+.brush-color-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 22px);  
+    gap: 6px;
+    justify-content: center;                
+}
+  
+.brush-color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid #aaa;
+    padding: 0;
+    cursor: pointer;
+}
+
+.brush-color-active {
+    outline: 2px solid #0078d4;
+    outline-offset: 1px;
+}
+
+.brush-popup input[type="range"] {
+    width: 100%;
+    display: block;
+    margin: 4px 0 0;
+}
+
+.brush-thickness-preview {
+    width: 100%;
+    margin-top: 8px;
+    text-align: center;
+}

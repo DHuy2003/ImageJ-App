@@ -1,12 +1,16 @@
+import type { BrushSettings } from "../../types/brush";
+
 export const TOOLBAR_EVENT_NAME = 'toolbar-action';
 export type ToolbarTool = 'pointer' | 'rect' | 'circle' | 'hand' | 'brush' | 'eraser';
 
 export type ToolbarAction =
   | { type: 'SET_TOOL'; tool: ToolbarTool }
-  | { type: 'PAN_MODE'; enabled: boolean };
+  | { type: 'PAN_MODE'; enabled: boolean }
+  | { type: 'BRUSH_SETTINGS'; settings: BrushSettings };
 
 let currentTool: ToolbarTool = 'pointer';
 let isPanMode = false;
+
 export const getCurrentToolbarTool = () => currentTool;
 
 export const emitToolbarAction = (action: ToolbarAction) => {
