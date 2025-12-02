@@ -42,7 +42,8 @@ import {
     handleFlipHorizontal,
     handleFlipVertical,
     handleRotateLeft90,
-    handleRotateRight90
+    handleRotateRight90,
+    handleOpenThreshold
 } from "../../utils/nav-bar/imageUtils";
 import {
     handleClustering,
@@ -59,7 +60,6 @@ const dispatchProcessEvent = (action: string) => {
 
 const NavBar = () => {
     const navigate = useNavigate();
-    const currentDepth = 8;
     return (
         <div id="navbar">
             <div id="navbar-title">
@@ -118,10 +118,10 @@ const NavBar = () => {
                     items={[
                         {
                             label: "Type", subItems: [
-                                { label: "8-bit", onClick: () => handleConvertBitDepth(8, currentDepth) },
-                                { label: "16-bit", onClick: () => handleConvertBitDepth(16, currentDepth) },
-                                { label: "32-bit", onClick: () => handleConvertBitDepth(32, currentDepth) },
-                                { label: "RGB Color", onClick: () => handleConvertBitDepth(24, currentDepth, true) },
+                                { label: "8-bit", onClick: () => handleConvertBitDepth(8, 0) },
+                                { label: "16-bit", onClick: () => handleConvertBitDepth(16, 0) },
+                                { label: "32-bit", onClick: () => handleConvertBitDepth(32, 0) },
+                                { label: "RGB Color", onClick: () => handleConvertBitDepth(24, 0, true) },
                             ]
                         },
                         { label: "Color" },
@@ -149,7 +149,7 @@ const NavBar = () => {
                                 { label: "Brightness/Contrast...", onClick: handleOpenBrightnessContrast },
                                 { label: "Size", onClick: handleOpenImageSize },
                                 { label: "Color Balance..." },
-                                { label: "Threshold..." }
+                                { label: "Threshold...", onClick: handleOpenThreshold}
                             ]
                         }
                     ]}

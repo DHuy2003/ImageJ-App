@@ -328,7 +328,7 @@ export const processErode = (imageData: ImageData): ImageData | null => {
         dispatchNotification("Erode requires a binary image. Use 'Make Binary' first.", 'info');
         return null;
     }
-    return applyRankFilter(imageData, 'max');
+    return applyRankFilter(imageData, 'min');
 };
 
 // --- 8. Dilate ---
@@ -344,7 +344,7 @@ export const processDilate = (imageData: ImageData): ImageData | null => {
         dispatchNotification("Dilate requires a binary image. Use 'Make Binary' first.", 'info');
         return null;
     }
-    return applyRankFilter(imageData, 'min');
+    return applyRankFilter(imageData, 'max');
 };
 
 // --- 9. Open ---
