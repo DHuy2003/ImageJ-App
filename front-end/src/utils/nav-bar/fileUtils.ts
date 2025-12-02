@@ -11,6 +11,7 @@ const naturalSort = (a: File, b: File): number => {
 
 export const FILE_MENU_EVENT_NAME = 'fileMenuAction';
 export const IMAGES_APPENDED_EVENT = 'imagesAppended';
+export const VIRTUAL_SEQUENCE_IMPORT_EVENT = 'openVirtualSequenceImport';
 export type FileMenuActionType = 'REVERT' | 'CLOSE' | 'CLOSE_ALL' | 'SAVE' | 'SAVE_ALL';
 export type FileMenuActionPayload = {
   type: FileMenuActionType;
@@ -118,13 +119,6 @@ export const handleOpenFolder = async (navigate: NavigateFunction) => {
   
   } catch (err: any) {
     console.error("Error opening folder:", err);
-    Swal.fire({
-      title: 'Error',
-      text: err.message || "Failed to open folder.",
-      icon: 'error',
-      confirmButtonText: 'OK',
-      confirmButtonColor: '#3085d6',
-    });
   }
 };
   
@@ -157,19 +151,16 @@ export const handleOpenMaskFolder = async (navigate: NavigateFunction) => {
 
   } catch (err: any) {
     console.error("Error opening mask folder:", err);
-    Swal.fire({
-      title: 'Error',
-      text: err.message || "Failed to open mask folder.",
-      icon: 'error',
-      confirmButtonText: 'OK',
-      confirmButtonColor: '#3085d6',
-    });
   }
 };
 
 export const handleCreateMask = () => {
   const event = new CustomEvent('createMask');
   window.dispatchEvent(event);
+};
+
+export const handleVirtualSequence = () => {
+  window.dispatchEvent(new Event(VIRTUAL_SEQUENCE_IMPORT_EVENT));
 };
 
 export const handleRevert = () => {

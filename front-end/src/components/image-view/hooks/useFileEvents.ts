@@ -159,13 +159,6 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           return false;
         }
         console.error('Error choosing folder:', err);
-        // await Swal.fire({
-        //   title: 'Error',
-        //   text: err.message || 'Failed to choose folder to save image.',
-        //   icon: 'error',
-        //   confirmButtonText: 'OK',
-        //   confirmButtonColor: '#3085d6',
-        // });
         return false;
       }
     
@@ -507,7 +500,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
     };        
   
     const revertCurrentImage = async () => {
-      if (!currentFile){
+      if (!currentFile) {
         await Swal.fire({
           title: 'Notice',
           text: 'No image to revert.',
@@ -517,25 +510,23 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return;
       }
+    
+      const unsaved = hasUnsavedChanges();
 
-      const hasSavedEdit =
-        currentFile.status === 'edited' ||
-        !!(currentFile as any).edited_url;
-  
-      if (!hasUnsavedChanges() && !hasSavedEdit) {
+      if (!unsaved) {
         await Swal.fire({
           title: 'Notice',
-          text: 'Image has no changes to revert.',
+          text: 'Image has no unsaved changes to revert.',
           icon: 'info',
           confirmButtonText: 'OK',
           confirmButtonColor: '#3085d6',
         });
         return;
       }
-  
+    
       const result = await Swal.fire({
-        title: 'Revert to original?',
-        text: 'All changes for this image will be discarded.',
+        title: 'Revert changes?',
+        text: 'All unsaved changes for this image will be discarded.',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Revert',
@@ -543,51 +534,41 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
       });
-  
+    
       if (!result.isConfirmed) return;
-  
-      try {
-        const response = await axios.post(
-          `${API_BASE_URL}/revert/${currentFile.id}`,
-        );
-        const updated = response.data.image as ImageInfo;
-  
-        setImageArray(prev => {
-          const copy = [...prev];
-          if (copy[currentIndex]) {
-            copy[currentIndex] = {
-              ...copy[currentIndex],
-              ...updated,
-              cropped_url: (updated as any).cropped_url ?? null,
-              edited_url: (updated as any).edited_url ?? null,
-            };
-          }
-          return copy;
-        });
-  
-        const newUrl = (updated as any).cropped_url ?? (updated as any).edited_url ?? updated.url ?? null;
-        if (newUrl) {
-          setCurrentImageURL(newUrl);
+
+      const editedUrl = (currentFile as any).edited_url as string | null | undefined;
+      const originalUrl = (currentFile as any).original_url as string | null | undefined;
+      const dbUrl = currentFile.url as string | null | undefined;
+    
+      const baseImageUrl = editedUrl ?? originalUrl ?? dbUrl ?? null;
+
+      setImageArray(prev => {
+        const copy = [...prev];
+        if (copy[currentIndex]) {
+          copy[currentIndex] = {
+            ...copy[currentIndex],
+            url: baseImageUrl ?? copy[currentIndex].url,
+            cropped_url: null as any,
+          } as any;
         }
-  
-        await Swal.fire({
-          title: 'Reverted',
-          text: 'Image has been reverted to the original version.',
-          icon: 'success',
-          confirmButtonText: 'OK',
-          confirmButtonColor: '#3085d6',
-        });
-      } catch (err) {
-        console.error('Error reverting image:', err);
-        await Swal.fire({
-          title: 'Error',
-          text: 'Failed to revert image.',
-          icon: 'error',
-          confirmButtonText: 'OK',
-          confirmButtonColor: '#3085d6',
-        });
+        return copy;
+      });
+    
+      if (baseImageUrl) {
+        setCurrentImageURL(baseImageUrl);
+      } else {
+        setCurrentImageURL(null);
       }
-    };
+    
+      await Swal.fire({
+        title: 'Reverted',
+        text: 'Image has been reverted to the last saved version.',
+        icon: 'success',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#3085d6',
+      });
+    };    
   
     const closeCurrentImage = async () => {
       if (!currentFile || imageArray.length === 0){

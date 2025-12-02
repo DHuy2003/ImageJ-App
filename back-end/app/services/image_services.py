@@ -14,6 +14,7 @@ from pathlib import Path
 from PIL import Image as PILImage
 from sqlalchemy.exc import OperationalError
 import time
+from uuid import uuid4
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 CONVERTED_FOLDER = config.CONVERTED_FOLDER
@@ -21,9 +22,6 @@ MASK_FOLDER = config.MASK_FOLDER
 EDITED_FOLDER = config.EDITED_FOLDER
 
 def commit_with_retry(retries: int = 3, delay: float = 0.3):
-    """
-    Commit session với retry, tránh lỗi sqlite 'database is locked' xảy ra lặt vặt.
-    """
     for attempt in range(retries):
         try:
             db.session.commit()
@@ -194,6 +192,50 @@ def process_and_save_image(image, destination_folder):
         "uploaded_on": image_record.uploaded_on.isoformat(),
         "last_edited_on": image_record.last_edited_on.isoformat() if image_record.last_edited_on else None
     }
+
+def convert_image_for_preview(image):
+    img = Image.open(image)
+    arr = np.array(img)
+
+    if 'palette' in img.info:
+        img = img.convert('RGB')
+        arr = np.array(img)
+
+    if img.mode == '1':
+        img = img.convert('L')
+        img = img.point(lambda p: 255 * p)
+        arr = np.array(img)
+
+    if arr.dtype in [np.uint16, np.int32, np.float32, np.float64]:
+        arr = arr.astype(np.float32)
+        min_val = arr.min()
+        max_val = arr.max()
+        if max_val > min_val:
+            arr = (arr - min_val) / (max_val - min_val) * 255
+        else:
+            arr = np.zeros_like(arr)
+        arr = arr.astype(np.uint8)
+        img = Image.fromarray(arr)
+
+    elif len(arr.shape) == 2 and np.unique(arr).size < 100:
+        unique_vals = np.unique(arr)
+        lut = np.zeros((256, 3), dtype=np.uint8)
+        np.random.seed(42)
+        for val in unique_vals:
+            if val > 0:
+                lut[val] = np.random.randint(0, 255, 3)
+        color_arr = lut[arr]
+        img = Image.fromarray(color_arr, mode="RGB")
+
+    elif img.mode in ['CMYK', 'P']:
+        img = img.convert('RGB')
+
+    preview_filename = f"vs_{uuid4().hex}.png"
+    output_path = os.path.join(CONVERTED_FOLDER, preview_filename)
+    img.save(output_path, "PNG")
+
+    return preview_filename
+
 
 def upload_cell_images(images):
     uploaded_cells_info = []
@@ -456,25 +498,6 @@ def revert_image(image_id):
     if not img_db:
         raise ValueError(f"Image with id {image_id} not found")
 
-    if getattr(img_db, "edited_filepath", None) and os.path.exists(img_db.edited_filepath):
-        try:
-            os.remove(img_db.edited_filepath)
-        except OSError as e:
-            print(f"Failed to remove edited file {img_db.edited_filepath}: {e}")
-
-    if hasattr(img_db, "edited_filename"):
-        img_db.edited_filename = None
-    if hasattr(img_db, "edited_filepath"):
-        img_db.edited_filepath = None
-
-    if img_db.filename:
-        img_db.status = "original"
-    elif img_db.mask_filename:
-        img_db.status = "mask_only"
-
-    img_db.last_edited_on = None
-    db.session.commit()
-
     converted_filename = None
     original_url = None
     edited_url = None
@@ -488,6 +511,14 @@ def revert_image(image_id):
             _external=True
         )
 
+    if img_db.edited_filepath and os.path.exists(img_db.edited_filepath):
+        edited_filename = os.path.basename(img_db.edited_filepath)
+        edited_url = url_for(
+            'image_bp.get_edited_image',
+            filename=edited_filename,
+            _external=True
+        )
+
     if img_db.mask_filename:
         mask_url = url_for(
             'image_bp.get_mask_image',
@@ -498,7 +529,10 @@ def revert_image(image_id):
     path_for_info = None
     final_url = None
 
-    if converted_filename and os.path.exists(os.path.join(CONVERTED_FOLDER, converted_filename)):
+    if edited_url and os.path.exists(img_db.edited_filepath):
+        path_for_info = img_db.edited_filepath
+        final_url = edited_url
+    elif converted_filename and os.path.exists(os.path.join(CONVERTED_FOLDER, converted_filename)):
         path_for_info = os.path.join(CONVERTED_FOLDER, converted_filename)
         final_url = original_url
     elif img_db.mask_filename and os.path.exists(os.path.join(MASK_FOLDER, img_db.mask_filename)):
@@ -518,7 +552,7 @@ def revert_image(image_id):
         "filename": img_db.filename,
         "url": final_url,
         "original_url": original_url,
-        "edited_url": edited_url,  
+        "edited_url": edited_url,
         "mask_filename": img_db.mask_filename,
         "mask_filepath": img_db.mask_filepath,
         "mask_url": mask_url,
@@ -530,6 +564,7 @@ def revert_image(image_id):
         "status": img_db.status,
         "last_edited_on": img_db.last_edited_on.isoformat() if img_db.last_edited_on else None,
     }
+
 
 def delete_image(image_id):
     img = ImageModel.query.get(image_id)

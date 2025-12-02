@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type React from 'react';
 import type { ImageInfo } from '../../../types/image';
+import Swal from 'sweetalert2';
 
 type UseMaskCreationParams = {
   imgRef: React.RefObject<HTMLImageElement | null>;
@@ -21,10 +22,19 @@ const useMaskCreation = ({
   setShowMask,
   setShowProperties,
 }: UseMaskCreationParams) => {
+  const showError = (title: string, text: string) => {
+    Swal.fire({
+      icon: 'error',
+      title,
+      text,
+      confirmButtonText: 'OK',
+    });
+  };
+
   useEffect(() => {
     const handleCreateMaskEvent = () => {
       if (!imgRef.current || !currentFile || !currentImageURL) {
-        alert('Không có ảnh hoặc nét vẽ để tạo mask.');
+        showError('Cannot Create Mask', 'No image or stroke data available.');
         return;
       }
 
@@ -32,7 +42,7 @@ const useMaskCreation = ({
       const width = imgEl.naturalWidth;
       const height = imgEl.naturalHeight;
       if (!width || !height) {
-        alert('Không lấy được kích thước ảnh.');
+        showError('Invalid Image Size', 'Unable to retrieve image dimensions.');
         return;
       }
 
@@ -57,21 +67,18 @@ const useMaskCreation = ({
         const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
 
-        // Mảng đánh dấu stroke & visited
         const stroke = new Uint8Array(width * height);
         const visited = new Uint8Array(width * height);
 
-        // 1) Detect pixel nét brush (màu đỏ)
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
           const a = data[i + 3];
 
-          // tuỳ brush của bạn, có thể nới threshold
           const isStroke =
             a > 0 &&
-            r > 150 && // đỏ tương đối sáng
+            r > 150 &&
             r > g + 40 &&
             r > b + 40;
 
@@ -81,7 +88,6 @@ const useMaskCreation = ({
           }
         }
 
-        // 2) Flood-fill từ mép ảnh để tìm background
         const q: number[] = [];
 
         const enqueue = (x: number, y: number) => {
@@ -91,12 +97,11 @@ const useMaskCreation = ({
           q.push(idx);
         };
 
-        // Mép trên & dưới
         for (let x = 0; x < width; x++) {
           enqueue(x, 0);
           enqueue(x, height - 1);
         }
-        // Mép trái & phải
+
         for (let y = 0; y < height; y++) {
           enqueue(0, y);
           enqueue(width - 1, y);
@@ -107,14 +112,12 @@ const useMaskCreation = ({
           const x = idx % width;
           const y = (idx / width) | 0;
 
-          // 4-neighbors
           if (x > 0) enqueue(x - 1, y);
           if (x < width - 1) enqueue(x + 1, y);
           if (y > 0) enqueue(x, y - 1);
           if (y < height - 1) enqueue(x, y + 1);
         }
 
-        // 3) Tạo mask: vùng tế bào = stroke || (không visited & không stroke)
         const maskCanvas = document.createElement('canvas');
         maskCanvas.width = width;
         maskCanvas.height = height;
@@ -123,14 +126,14 @@ const useMaskCreation = ({
 
         const maskImageData = mctx.createImageData(width, height);
         const md = maskImageData.data;
-        const grayVal = 220; // màu xám cho tế bào
+        const grayVal = 220;
 
         let hasRegion = false;
 
         for (let idx = 0; idx < stroke.length; idx++) {
-          const isStroke = stroke[idx] === 1;
+          const isStrokePixel = stroke[idx] === 1;
           const isBackground = visited[idx] === 1;
-          const isCell = isStroke || !isBackground; // bên trong vòng kín
+          const isCell = isStrokePixel || !isBackground;
 
           const j = idx * 4;
 
@@ -149,14 +152,13 @@ const useMaskCreation = ({
         }
 
         if (!hasRegion) {
-          alert('Không tìm thấy vùng nào được khoanh kín để tạo mask.');
+          showError('No Region Found', 'No enclosed area detected to generate a mask.');
           return;
         }
 
         mctx.putImageData(maskImageData, 0, 0);
         const maskDataUrl = maskCanvas.toDataURL('image/png');
 
-        // Lưu mask tạm lên current file (FE)
         setVisibleImages(prev => {
           const copy = [...prev];
           if (copy[currentIndex]) {
@@ -172,9 +174,11 @@ const useMaskCreation = ({
         setShowProperties(false);
       };
 
-      image.onerror = (e) => {
-        console.error('Create mask failed', e);
-        alert('Không thể đọc ảnh để tạo mask (CORS / lỗi tải ảnh).');
+      image.onerror = () => {
+        showError(
+          'Image Load Failed',
+          'Unable to read the image (CORS issue or image loading error).'
+        );
       };
     };
 

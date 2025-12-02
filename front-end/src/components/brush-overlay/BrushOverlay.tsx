@@ -1,4 +1,3 @@
-// BrushOverlay.tsx
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { BrushOverlayProps } from '../../types/brush';
 import './BrushOverlay.css';

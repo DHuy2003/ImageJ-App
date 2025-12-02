@@ -1,5 +1,5 @@
 export const TOOLBAR_EVENT_NAME = 'toolbar-action';
-export type ToolbarTool = 'pointer' | 'rect' | 'circle' | 'hand' | 'brush';
+export type ToolbarTool = 'pointer' | 'rect' | 'circle' | 'hand' | 'brush' | 'eraser';
 
 export type ToolbarAction =
   | { type: 'SET_TOOL'; tool: ToolbarTool }
@@ -51,4 +51,9 @@ export const handleHandClick = () => {
 export const handleBrushClick = () => {
   setPanModeInternal(false);
   emitToolbarAction({ type: 'SET_TOOL', tool: 'brush' });
+};
+
+export const handleEraserClick = () => {
+  setPanModeInternal(false);
+  emitToolbarAction({ type: 'SET_TOOL', tool: 'eraser' });
 };

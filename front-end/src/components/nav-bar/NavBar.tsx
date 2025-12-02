@@ -7,6 +7,7 @@ import {
     handleOpenFolder,
     handleOpenMaskFolder,
     handleCreateMask,
+    handleVirtualSequence,
     handleRevert,
     handleClose,
     handleCloseAll,
@@ -75,6 +76,7 @@ const NavBar = () => {
                         { label: "Open", onClick: () => handleOpen(navigate) },
                         { label: "Open Folder", onClick: () => handleOpenFolder(navigate) },
                         { label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate) },
+                        { label: "Virtual Sequence...", onClick: handleVirtualSequence },
                         { label: "Create Mask", onClick: handleCreateMask },
                         { label: "Revert", onClick: handleRevert },
                         { label: "Close", onClick: handleClose },
@@ -183,7 +185,15 @@ const NavBar = () => {
                                 { label: "Close", onClick: () => dispatchProcessEvent('close') },
                                 { label: "Watershed", onClick: () => dispatchProcessEvent('watershed') }
                             ]
-                        }
+                        },
+                        { label: "Noise", subItems:[
+                            { label: "Add Nosie" },
+                            {label: "Add Specified Noise.." },
+                            { label: "Salt and Pepper" },
+                            { label: "Despeckle"},
+                            { label: "Remove Outliers" },    
+                            { label: "Remove NaNs"}
+                        ]}
                     ]}
                 />
 
