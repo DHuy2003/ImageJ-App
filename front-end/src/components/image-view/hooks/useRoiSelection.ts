@@ -26,6 +26,7 @@ const useRoiSelection = () => {
         y: imageRect.y,
         width: imageRect.width,
         height: imageRect.height,
+        angle: 0,
       });
     };
 

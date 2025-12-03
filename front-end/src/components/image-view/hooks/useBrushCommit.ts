@@ -1,4 +1,4 @@
-import type React from 'react';
+import React, { useRef } from 'react';
 import type { ImageInfo } from '../../../types/image';
 import { base64ToBytes } from '../../../utils/common/formatFileSize';
 
@@ -21,56 +21,50 @@ const useBrushCommit = ({
   setVisibleImages,
   pushUndo,
 }: UseBrushCommitParams) => {
-  const handleBrushCommit = (brushCanvas: HTMLCanvasElement) => {
+  const brushBaseImageRef = useRef<string | null>(null);
+  const handleBrushCommit = (
+    brushCanvas: HTMLCanvasElement,
+    mode: 'brush' | 'eraser' = 'brush',
+    isNewStroke = false,
+  ) => {
     const img = imgRef.current;
     if (!img || !currentFile) return;
-
-    pushUndo();
-
+  
+    if (isNewStroke) {
+       pushUndo();
+    }
+  
     const naturalW = img.naturalWidth;
     const naturalH = img.naturalHeight;
-
-    if (naturalW === 0 || naturalH === 0) {
-      return;
-    }
-
+    if (naturalW === 0 || naturalH === 0) return;
+  
     const baseCanvas = document.createElement('canvas');
     baseCanvas.width = naturalW;
     baseCanvas.height = naturalH;
     const ctx = baseCanvas.getContext('2d');
     if (!ctx) return;
 
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.referrerPolicy = 'no-referrer';
-
-    let src = currentImageURL || img.currentSrc || img.src;
-    if (/^https?:\/\//i.test(src)) {
-      src += (src.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
+    let currentSrc = currentImageURL || img.currentSrc || img.src;
+    if (/^https?:\/\//i.test(currentSrc)) {
+      currentSrc += (currentSrc.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
     }
-    image.src = src;
 
-    image.onload = () => {
-      ctx.drawImage(image, 0, 0, naturalW, naturalH);
-
-      ctx.drawImage(
-        brushCanvas,
-        0,
-        0,
-        brushCanvas.width,
-        brushCanvas.height,
-        0,
-        0,
-        naturalW,
-        naturalH,
-      );
-
+    if (!brushBaseImageRef.current) {
+      brushBaseImageRef.current = currentSrc;
+    }
+  
+    const currentImage = new Image();
+    currentImage.crossOrigin = 'anonymous';
+    currentImage.referrerPolicy = 'no-referrer';
+    currentImage.src = currentSrc;
+  
+    const finalize = () => {
       const newSrc = baseCanvas.toDataURL('image/png');
       const base64 = newSrc.split(',')[1];
       const newSize = base64ToBytes(base64);
-
+  
       setCurrentImageURL(newSrc);
-
+  
       setVisibleImages(prev => {
         const copy = [...prev];
         if (copy[currentIndex]) {
@@ -85,17 +79,102 @@ const useBrushCommit = ({
         }
         return copy;
       });
-
+  
       const overlayCtx = brushCanvas.getContext('2d');
       overlayCtx?.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
     };
 
-    image.onerror = (e) => {
-      console.error('Brush commit failed (CORS?): ', e, src);
-      alert('Cannot apply brush strokes due to CORS/image load error.');
-    };
-  };
+    if (mode === 'brush') {
+      currentImage.onload = () => {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(currentImage, 0, 0, naturalW, naturalH);
+  
+        ctx.drawImage(
+          brushCanvas,
+          0,
+          0,
+          brushCanvas.width,
+          brushCanvas.height,
+          0,
+          0,
+          naturalW,
+          naturalH,
+        );
+  
+        finalize();
+      };
+  
+      currentImage.onerror = (e) => {
+        console.error('Brush commit failed (CORS?): ', e, currentSrc);
+        alert('Cannot apply brush strokes due to CORS/image load error.');
+      };
+  
+      return;
+    }
 
+    const baseSrcRaw = brushBaseImageRef.current || currentSrc;
+    let baseSrc = baseSrcRaw;
+    if (/^https?:\/\//i.test(baseSrc)) {
+      baseSrc += (baseSrc.includes('?') ? '&' : '?') + 'corsfix=' + Date.now();
+    }
+  
+    const baseImage = new Image();
+    baseImage.crossOrigin = 'anonymous';
+    baseImage.referrerPolicy = 'no-referrer';
+    baseImage.src = baseSrc;
+  
+    let loadedCount = 0;
+    const tryCompose = () => {
+      if (loadedCount < 2) return;
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0, 0, naturalW, naturalH);
+      ctx.drawImage(currentImage, 0, 0, naturalW, naturalH);
+
+      const patchCanvas = document.createElement('canvas');
+      patchCanvas.width = naturalW;
+      patchCanvas.height = naturalH;
+      const patchCtx = patchCanvas.getContext('2d');
+      if (!patchCtx) return;
+
+      patchCtx.globalCompositeOperation = 'source-over';
+      patchCtx.drawImage(baseImage, 0, 0, naturalW, naturalH);
+      patchCtx.globalCompositeOperation = 'destination-in';
+      patchCtx.drawImage(
+        brushCanvas,
+        0,
+        0,
+        brushCanvas.width,
+        brushCanvas.height,
+        0,
+        0,
+        naturalW,
+        naturalH,
+      );
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(patchCanvas, 0, 0, naturalW, naturalH);
+
+      finalize();
+    };
+  
+    currentImage.onload = () => {
+      loadedCount += 1;
+      tryCompose();
+    };
+    baseImage.onload = () => {
+      loadedCount += 1;
+      tryCompose();
+    };
+  
+    const onError = (e: any) => {
+      console.error('Eraser commit failed (CORS?): ', e, { currentSrc, baseSrc });
+      alert('Cannot apply eraser due to CORS/image load error.');
+    };
+  
+    currentImage.onerror = onError;
+    baseImage.onerror = onError;
+  };  
   return handleBrushCommit;
 };
 

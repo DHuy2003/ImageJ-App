@@ -76,11 +76,13 @@ const useMaskCreation = ({
           const b = data[i + 2];
           const a = data[i + 3];
 
-          const isStroke =
-            a > 0 &&
-            r > 150 &&
-            r > g + 40 &&
-            r > b + 40;
+          const maxRGB = Math.max(r, g, b);
+          const minRGB = Math.min(r, g, b);
+          // Pixel được coi là "màu" nếu chênh lệch giữa kênh lớn & nhỏ đủ lớn
+          // (ảnh gốc là grayscale nên R≈G≈B, rất ít khi > 40)
+          const isColored = maxRGB - minRGB > 40;
+          // Chỉ nhận stroke nếu pixel có alpha > 0 VÀ là pixel màu (nét vẽ brush)
+          const isStroke = a > 0 && isColored;
 
           if (isStroke) {
             const idx = i / 4;

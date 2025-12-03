@@ -25,6 +25,7 @@ const TOOL_COLORS = [
   '#ff99cc', '#ffcc99', '#ffff99', '#99ffcc', '#99ccff',
 ];
 const MAX_BRUSH_SIZE = 15;
+const MAX_ERASER_SIZE = 60; 
 
 const ToolBar = () => {
   const [activeTool, setActiveTool] = useState<ToolbarTool>(() => getCurrentToolbarTool());
@@ -38,6 +39,8 @@ const ToolBar = () => {
   const previewHeight = Math.max(brushSettings.size + 20, 40);
   const centerY = previewHeight / 2;
   const isWhite = brushSettings.color.toLowerCase() === '#ffffff';
+  const [showEraserSettings, setShowEraserSettings] = useState(false);
+  const [eraserSize, setEraserSize] = useState<number>(12);
 
   useEffect(() => {
     const listener = (e: Event) => {
@@ -48,6 +51,8 @@ const ToolBar = () => {
       }
 
       if (action.type === 'PAN_MODE') {
+        setShowBrushSettings(false);
+        setShowEraserSettings(false);
         setIsPanMode(action.enabled);
       }
     };
@@ -60,6 +65,10 @@ const ToolBar = () => {
     if (activeTool !== 'brush') {
       setShowBrushSettings(false);
     }
+
+    if (activeTool !== 'eraser') {
+      setShowEraserSettings(false);
+    }
   }, [activeTool]);
 
   const isToolActive = (tool: ToolbarTool) => !isPanMode && activeTool === tool;
@@ -69,13 +78,28 @@ const ToolBar = () => {
     emitToolbarAction({ type: 'BRUSH_SETTINGS', settings: next });
   };
 
+  const applyEraserSettings = (size: number) => {
+    const clamped = Math.max(5, Math.min(MAX_ERASER_SIZE, size));
+    setEraserSize(clamped);
+    emitToolbarAction({
+      type: 'ERASER_SETTINGS',
+      settings: { size: clamped },
+    });
+  };
+
   const handleBrushButtonClick = () => {
+    setShowEraserSettings(false);
     handleBrushClick();
     setShowBrushSettings(prev => !prev);
     emitToolbarAction({ type: 'BRUSH_SETTINGS', settings: brushSettings });
   };
 
-
+  const handleEraserButtonClick = () => {
+    setShowBrushSettings(false);     
+    handleEraserClick();
+    setShowEraserSettings(prev => !prev);
+    applyEraserSettings(eraserSize); 
+  };
 
   return (
     <div id="toolbar">
@@ -184,12 +208,40 @@ const ToolBar = () => {
           )}
         </div>
 
-        <button
-          className={`selection-btn ${isToolActive('eraser') ? 'selection-btn-active' : ''}`}
-          onClick={handleEraserClick}
-        >
-          <Eraser className="selection-item" />
-        </button>
+        <div className="eraser-wrapper">
+          <button
+            className={`selection-btn ${isToolActive('eraser') ? 'selection-btn-active' : ''}`}
+            onClick={handleEraserButtonClick}
+          >
+            <Eraser className="selection-item" />
+          </button>
+
+          {showEraserSettings && (
+            <div className="eraser-popup">
+              <div className="eraser-popup-header">
+                <div className="eraser-popup-title">Size</div>
+                <button
+                  className="eraser-popup-close"
+                  onClick={() => setShowEraserSettings(false)}
+                  aria-label="Close eraser settings"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="eraser-popup-section">
+                <input
+                  type="range"
+                  min={16}
+                  max={MAX_ERASER_SIZE}
+                  value={eraserSize}
+                  onChange={e => applyEraserSettings(Number(e.target.value))}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
       </ul>
     </div>
   );

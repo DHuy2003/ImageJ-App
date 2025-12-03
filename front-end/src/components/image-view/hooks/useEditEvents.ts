@@ -68,7 +68,6 @@ const useEditEvents = ({
     image.src = src;
 
     image.onload = () => {
-      // lưu undo trước khi thay ảnh
       pushUndo();
 
       ctx.drawImage(
@@ -427,22 +426,11 @@ const useEditEvents = ({
       applyRoiEdit('draw', selectedRoi);
     };
 
-    const onRotate = (e: Event) => {
-      if (!selectedRoi) {
-        showSelectionRequired();
-        return;
-      }
-      const ce = e as CustomEvent<{ angleDeg?: number }>;
-      const angleDeg = ce.detail?.angleDeg ?? 0;
-      applyRoiEdit('rotate', selectedRoi, undefined, angleDeg);
-    };
-
     window.addEventListener('editClear', onClear);
     window.addEventListener('editClearOutside', onClearOutside);
     window.addEventListener('editFill', onFill as EventListener);
     window.addEventListener('editInvert', onInvert);
     window.addEventListener('editDraw', onDraw);
-    window.addEventListener('editRotate', onRotate);
 
     return () => {
       window.removeEventListener('editClear', onClear);
@@ -450,7 +438,6 @@ const useEditEvents = ({
       window.removeEventListener('editFill', onFill as EventListener);
       window.removeEventListener('editInvert', onInvert);
       window.removeEventListener('editDraw', onDraw);
-      window.removeEventListener('editRotate', onRotate);
     };
   }, [selectedRoi, currentIndex, currentImageURL, currentFile, setVisibleImages, setCurrentImageURL, pushUndo]); 
 

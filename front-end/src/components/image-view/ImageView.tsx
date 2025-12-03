@@ -113,7 +113,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [showProperties, setShowProperties] = useState(true);
   const imgRef = useRef<HTMLImageElement>(null);
   const cropRef = useRef<CropOverlayHandle | null>(null);
-  const displayRef = useRef<HTMLDivElement>(null);
 
   // Resizable panel widths
   const [leftPanelWidth, setLeftPanelWidth] = useState(320);
