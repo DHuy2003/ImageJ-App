@@ -62,9 +62,23 @@ html {
     color: #4a90e2;
 }
 
+.eraser-wrapper,
 .brush-wrapper {
     position: relative;
     display: inline-block;
+}
+
+.eraser-popup{
+    position: absolute;
+    left: 48px;
+    top: 0;
+    z-index: 1000;
+    background: #ffffff;
+    border: 1px solid #ccc;
+    border-radius: 6px;                 
+    padding: 12px 16px;                 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    width: 200px;                       
 }
 
 .brush-popup {
@@ -80,10 +94,12 @@ html {
     width: 260px;                       
 }
 
-.brush-popup-section + .brush-popup-section {
+.brush-popup-section + .brush-popup-section,
+.eraser-popup-section + .eraser-popup-section {
     margin-top: 12px;
 }
 
+.eraser-popup-title,
 .brush-popup-title {
     font-size: 14px;
     margin-bottom: 6px;
@@ -91,6 +107,7 @@ html {
     color: #000;
 }
 
+.eraser-popup-header,
 .brush-popup-header {
     display: flex;
     align-items: center;
@@ -98,6 +115,7 @@ html {
     margin-bottom: 8px;
 }
 
+.eraser-popup-close,
 .brush-popup-close {
     border: none;
     background: transparent;
@@ -106,10 +124,6 @@ html {
     display: flex;
     align-items: center;
     justify-content: center;
-}
-
-.brush-popup-close:hover svg {
-    opacity: 0.7;
 }
 
 .brush-color-grid {

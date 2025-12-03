@@ -107,7 +107,6 @@ const NavBar = () => {
                                 { label: "Properties...", onClick: handleProperties },
                                 { label: "Scale...", onClick: handleScale },
                                 { label: "Rotate...", onClick: handleRotate },
-                                { label: "Translate..." }
                             ]
                         }
                     ]}
@@ -152,17 +151,6 @@ const NavBar = () => {
                                 { label: "Threshold...", onClick: handleOpenThreshold}
                             ]
                         }
-                    ]}
-                />
-
-                <DropdownMenu
-                    label="Analyze"
-                    items={[
-                        { label: "Measurements..." },
-                        { label: "Label" },
-                        { label: "Clear Results" },
-                        { label: "Set Measurements..." },
-                        { label: "Set Scale..." },
                     ]}
                 />
 

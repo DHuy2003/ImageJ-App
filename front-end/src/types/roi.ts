@@ -1,6 +1,6 @@
 import Swal from "sweetalert2";
 
-export type RoiTool = 'pointer' | 'rect' | 'circle' | 'brush';
+export type RoiTool = 'pointer' | 'rect' | 'circle' | 'brush' | 'eraser';
 
 export type RoiShape = {
   id: number;
@@ -9,6 +9,7 @@ export type RoiShape = {
   y: number;
   width: number;
   height: number;
+  angle?: number;
 };
 
 export type ResizeHandle =
@@ -34,6 +35,7 @@ export type SelectedRoiInfo = {
   y: number;
   width: number;
   height: number;
+  angle?: number;
 } | null;
 
 export const showSelectionRequired = () => {

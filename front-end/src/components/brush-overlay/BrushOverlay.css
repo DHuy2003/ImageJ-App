@@ -3,10 +3,17 @@
     inset: 0;
     pointer-events: none;
 }
-  
+
 .brush-canvas {
     position: absolute;
     pointer-events: auto;
-    cursor: url('/images/pencil.png') 4 20,crosshair;
 }
-  
+
+.brush-canvas.brush-mode {
+    cursor: url('/images/pencil.png') 4 20, crosshair;
+}
+
+
+.brush-canvas.eraser-mode {
+    cursor: crosshair;
+}

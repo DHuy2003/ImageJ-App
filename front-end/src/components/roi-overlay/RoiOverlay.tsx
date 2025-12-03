@@ -27,7 +27,7 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
   } | null>(null);
   const moveStartMouseRef = useRef<{ x: number; y: number } | null>(null);
   const lastRoiRef = useRef<RoiShape | null>(null);
-  const canDraw = !disabled && tool !== 'pointer' && tool !== 'brush';
+  const canDraw = !disabled && tool !== 'pointer' && tool !== 'brush' && tool !== 'eraser';
   const canInteract = !disabled;
   const getBounds = () => {
     const container = containerRef.current;
@@ -227,6 +227,29 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       window.removeEventListener('editSelectNone', onSelectNone);
     };
   }, []);
+
+  useEffect(() => {
+    const onRotate = (e: Event) => {
+      const ce = e as CustomEvent<{ angleDeg?: number }>;
+      const delta = ce.detail?.angleDeg ?? 0;
+      if (!delta) return;
+      if (selectedId === null) return;
+
+      setRois(prev =>
+        prev.map(roi =>
+          roi.id === selectedId
+            ? {
+                ...roi,
+                angle: (((roi.angle ?? 0) + delta) % 360 + 360) % 360, 
+              }
+            : roi
+        )
+      );
+    };
+
+    window.addEventListener('roiRotate', onRotate as EventListener);
+    return () => window.removeEventListener('roiRotate', onRotate as EventListener);
+  }, [selectedId]);
 
   useEffect(() => {
     if (!imgRef?.current || !containerRef.current) {
@@ -652,8 +675,8 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
     };
   }; 
 
-useEffect(() => {
-    if (tool === 'brush') {
+  useEffect(() => {
+    if (tool === 'brush' || tool === 'eraser') {
       setRois([]);
       setSelectedId(null);
       setIsDrawing(false);
@@ -678,7 +701,7 @@ useEffect(() => {
       onMouseMove={handleMouseMoveContainer}
       onMouseUp={handleMouseUpContainer}
     >
-      {tool !== 'brush' &&
+      {tool !== 'brush' && tool !== 'eraser' &&
         rois.map((roi) => {
           const isSelected = roi.id === selectedId;
           return (
@@ -692,6 +715,8 @@ useEffect(() => {
                 top: roi.y,
                 width: roi.width,
                 height: roi.height,
+                transform: roi.angle ? `rotate(${roi.angle}deg)` : undefined,
+                transformOrigin: 'center center',
               }}
               onMouseDown={(e) => startMove(e, roi.id)}
             >

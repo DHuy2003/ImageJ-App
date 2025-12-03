@@ -6,7 +6,8 @@ export type ToolbarTool = 'pointer' | 'rect' | 'circle' | 'hand' | 'brush' | 'er
 export type ToolbarAction =
   | { type: 'SET_TOOL'; tool: ToolbarTool }
   | { type: 'PAN_MODE'; enabled: boolean }
-  | { type: 'BRUSH_SETTINGS'; settings: BrushSettings };
+  | { type: 'BRUSH_SETTINGS'; settings: BrushSettings }
+  | { type: 'ERASER_SETTINGS'; settings: { size: number } };
 
 let currentTool: ToolbarTool = 'pointer';
 let isPanMode = false;

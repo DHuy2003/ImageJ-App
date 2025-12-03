@@ -199,40 +199,45 @@ export const handleScale = () => {
 };  
 
 export const handleRotate = () => {
+    if (!currentSelection) {
+      showSelectionRequired();
+      return;
+    }
+  
     Swal.fire({
-        title: 'Rotate Selection',
-        input: 'number',
-        inputLabel: 'Angle (degrees)',
-        inputValue: 0,
-        showCancelButton: true,
-        inputAttributes: {
-            min: '-360',
-            max: '360',
-            step: '1'
-        },
-        preConfirm: (value) => {
-            const v = parseFloat(value as any);
-            if (isNaN(v)) {
-                Swal.showValidationMessage('Please enter a valid angle.');
-                return;
-            }
-            if (v < -360 || v > 360) {
-                Swal.showValidationMessage('Angle must be between -360 and 360.');
-                return;
-            }
-            return v;
+      title: 'Rotate Selection',
+      input: 'number',
+      inputLabel: 'Angle (degrees)',
+      inputValue: 0,
+      showCancelButton: true,
+      inputAttributes: {
+        min: '-360',
+        max: '360',
+        step: '1',
+      },
+      preConfirm: (value) => {
+        const v = parseFloat(value as any);
+        if (isNaN(v)) {
+          Swal.showValidationMessage('Please enter a valid angle.');
+          return;
         }
+        if (v < -360 || v > 360) {
+          Swal.showValidationMessage('Angle must be between -360 and 360.');
+          return;
+        }
+        return v;
+      },
     }).then((result) => {
-        if (!result.isConfirmed || result.value == null) return;
+      if (!result.isConfirmed || result.value == null) return;
+  
+      const angleDeg = result.value as number;
 
-        const angleDeg = result.value as number;
-
-        const event = new CustomEvent('editRotate', {
-            detail: { angleDeg },
-        });
-        window.dispatchEvent(event);
+      const event = new CustomEvent('roiRotate', {
+        detail: { angleDeg },
+      });
+      window.dispatchEvent(event);
     });
-};
+};    
 
 export const handleProperties = () => {
     if (!currentSelection) {
