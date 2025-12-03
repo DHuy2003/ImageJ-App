@@ -1,0 +1,378 @@
+.filter-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.filter-dialog {
+    position: absolute;
+    width: 400px;
+    background: linear-gradient(135deg, #1e2530 0%, #252d3a 100%);
+    border: 1px solid #3a4556;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    pointer-events: auto;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    user-select: none;
+}
+
+.filter-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #2a3441 0%, #232b38 100%);
+    border-radius: 8px 8px 0 0;
+    border-bottom: 1px solid #3a4556;
+    cursor: move;
+}
+
+.filter-dialog-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e8ecf1;
+    letter-spacing: 0.3px;
+}
+
+.filter-close-btn {
+    background: transparent;
+    border: none;
+    color: #8b9aad;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.filter-close-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.filter-dialog-content {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Field containers */
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filter-field label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #9ca3af;
+}
+
+/* Input row with slider and number input */
+.filter-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Slider styling */
+.filter-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: linear-gradient(90deg, #2d3748 0%, #3a4556 100%);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.filter-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid #1e40af;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.filter-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.6);
+}
+
+.filter-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid #1e40af;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+}
+
+/* Number input styling */
+.filter-number-input {
+    width: 70px;
+    padding: 6px 8px;
+    background: #1a1f28;
+    border: 1px solid #3a4556;
+    border-radius: 4px;
+    color: #e8ecf1;
+    font-size: 12px;
+    font-family: 'Monaco', 'Consolas', monospace;
+    text-align: right;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.filter-number-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Select styling */
+.filter-select {
+    padding: 8px 12px;
+    background: #1a1f28;
+    border: 1px solid #3a4556;
+    border-radius: 4px;
+    color: #e8ecf1;
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.filter-select:hover {
+    border-color: #4b5563;
+}
+
+.filter-select:focus {
+    border-color: #3b82f6;
+}
+
+.filter-select option {
+    background: #1a1f28;
+    color: #e8ecf1;
+}
+
+/* Textarea for kernel input */
+.filter-textarea {
+    width: 100%;
+    min-height: 180px;
+    padding: 10px;
+    background: #1a1f28;
+    border: 1px solid #3a4556;
+    border-radius: 4px;
+    color: #e8ecf1;
+    font-size: 11px;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.filter-textarea:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.filter-textarea::placeholder {
+    color: #6b7280;
+}
+
+/* Kernel field specific styling */
+.kernel-field .filter-textarea {
+    tab-size: 4;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+/* Checkbox row */
+.filter-checkbox-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.filter-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #9ca3af;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.filter-checkbox-label:hover {
+    color: #e8ecf1;
+}
+
+.filter-checkbox-label input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #1a1f28;
+    border: 1px solid #3a4556;
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.filter-checkbox-label input[type="checkbox"]:checked {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    border-color: #3b82f6;
+}
+
+.filter-checkbox-label input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* Preview checkbox */
+.preview-checkbox {
+    padding-top: 8px;
+    border-top: 1px solid #2d3748;
+    margin-top: 4px;
+}
+
+/* Hint text */
+.filter-hint {
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.5;
+    margin: 0;
+    padding: 8px 0;
+}
+
+/* Buttons container */
+.filter-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-top: 12px;
+    border-top: 1px solid #2d3748;
+}
+
+.filter-btn {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #2d3748 0%, #374151 100%);
+    border: 1px solid #4b5563;
+    border-radius: 4px;
+    color: #e8ecf1;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 80px;
+}
+
+.filter-btn:hover {
+    background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+    border-color: #6b7280;
+}
+
+.filter-btn:active {
+    transform: translateY(1px);
+}
+
+/* Primary button style for OK */
+.filter-btn:first-child {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-color: #1d4ed8;
+}
+
+.filter-btn:first-child:hover {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+/* Circular Masks Preview Area */
+.circular-masks-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 12px;
+    padding: 12px;
+    background: #1a1f28;
+    border-radius: 6px;
+    border: 1px solid #2d3748;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.mask-preview-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.mask-preview-item canvas {
+    border: 1px solid #3a4556;
+    border-radius: 4px;
+    background: #000;
+}
+
+.mask-preview-item span {
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+/* Scrollbar styling */
+.filter-dialog-content::-webkit-scrollbar,
+.filter-textarea::-webkit-scrollbar,
+.circular-masks-preview::-webkit-scrollbar {
+    width: 6px;
+}
+
+.filter-dialog-content::-webkit-scrollbar-track,
+.filter-textarea::-webkit-scrollbar-track,
+.circular-masks-preview::-webkit-scrollbar-track {
+    background: #1a1f28;
+}
+
+.filter-dialog-content::-webkit-scrollbar-thumb,
+.filter-textarea::-webkit-scrollbar-thumb,
+.circular-masks-preview::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 3px;
+}
+
+.filter-dialog-content::-webkit-scrollbar-thumb:hover,
+.filter-textarea::-webkit-scrollbar-thumb:hover,
+.circular-masks-preview::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    .filter-dialog {
+        width: calc(100vw - 32px);
+        margin: 16px;
+    }
+}
