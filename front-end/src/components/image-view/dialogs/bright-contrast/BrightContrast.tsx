@@ -12,15 +12,34 @@ interface BCDialogProps {
     currentMin: number;
     currentMax: number;
     histogram: number[];
+    // New props for bit depth support
+    bitDepth?: 8 | 16 | 32;
+    dataRangeMin?: number;
+    dataRangeMax?: number;
 }
 
 const BrightnessContrastDialog: React.FC<BCDialogProps> = ({
-    isOpen, onClose, onApply, onChange, onReset, onAuto, currentMin, currentMax, histogram
+    isOpen, onClose, onApply, onChange, onReset, onAuto, currentMin, currentMax, histogram,
+    bitDepth = 8, dataRangeMin = 0, dataRangeMax = 255
 }) => {
+    // Calculate default range based on bit depth
+    const getDefaultRange = () => {
+        switch (bitDepth) {
+            case 16:
+                return { min: dataRangeMin, max: dataRangeMax };
+            case 32:
+                return { min: dataRangeMin, max: dataRangeMax };
+            default:
+                return { min: 0, max: 255 };
+        }
+    };
+
+    const defaultRange = getDefaultRange();
+    
     // --- STATE ---
     const [brightness, setBrightness] = useState(128);
     const [contrast, setContrast] = useState(128);
-    const [sliderBounds, setSliderBounds] = useState({ min: 0, max: 255 });
+    const [sliderBounds, setSliderBounds] = useState(defaultRange);
 
     // State for Draggable logic
     const [position, setPosition] = useState({ x: 100, y: 100 });
@@ -159,9 +178,16 @@ const BrightnessContrastDialog: React.FC<BCDialogProps> = ({
     }, [currentMin, currentMax, isOpen]);
 
     const handleReset = () => {
-        setSliderBounds({ min: 0, max: 255 });
+        setSliderBounds(defaultRange);
         onReset();
     };
+
+    // Update slider bounds when bit depth changes
+    useEffect(() => {
+        if (isOpen) {
+            setSliderBounds(getDefaultRange());
+        }
+    }, [bitDepth, dataRangeMin, dataRangeMax, isOpen]);
 
     // --- FIJI FORMULAS ---
     const calculateWidthFromContrast = (c: number) => {
@@ -213,9 +239,9 @@ const BrightnessContrastDialog: React.FC<BCDialogProps> = ({
 
     const handleConfirmSet = () => {
         // Update slider bounds if user typed numbers outside current range
-        setSliderBounds(prev => ({
-            min: Math.min(prev.min, Math.floor(setTempMin)),
-            max: Math.max(prev.max, Math.ceil(setTempMax))
+        setSliderBounds(({
+            min: setTempMin,
+            max: setTempMax
         }));
 
         // Update the actual image
@@ -245,8 +271,8 @@ const BrightnessContrastDialog: React.FC<BCDialogProps> = ({
             </div>
 
             <div className="bc-range-labels">
-                <span>{Math.round(currentMin)}</span>
-                <span>{Math.round(currentMax)}</span>
+                <span>{bitDepth === 32 ? currentMin.toFixed(2) : Math.round(currentMin)}</span>
+                <span>{bitDepth === 32 ? currentMax.toFixed(2) : Math.round(currentMax)}</span>
             </div>
 
             {/* --- SET MODAL OVERLAY --- */}
@@ -284,13 +310,13 @@ const BrightnessContrastDialog: React.FC<BCDialogProps> = ({
                     <input
                         type="range"
                         min={sliderBounds.min}
-                        max={Math.max(255, sliderBounds.max)}
-                        step="1"
+                        max={Math.max(defaultRange.max, sliderBounds.max)}
+                        step={bitDepth === 32 ? "0.1" : "1"}
                         value={currentMin}
                         onChange={(e) => onChange(Number(e.target.value), currentMax)}
                     />
                     <input type="number" className="bc-number-input"
-                        value={Math.round(currentMin)}
+                        value={bitDepth === 32 ? currentMin.toFixed(2) : Math.round(currentMin)}
                         onChange={(e) => onChange(Number(e.target.value), currentMax)}
                     />
                 </div>
@@ -299,14 +325,14 @@ const BrightnessContrastDialog: React.FC<BCDialogProps> = ({
                     <label>Maximum</label>
                     <input
                         type="range"
-                        min={Math.min(0, sliderBounds.min)}
+                        min={Math.min(defaultRange.min, sliderBounds.min)}
                         max={sliderBounds.max}
-                        step="1"
+                        step={bitDepth === 32 ? "0.1" : "1"}
                         value={currentMax}
                         onChange={(e) => onChange(currentMin, Number(e.target.value))}
                     />
                     <input type="number" className="bc-number-input"
-                        value={Math.round(currentMax)}
+                        value={bitDepth === 32 ? currentMax.toFixed(2) : Math.round(currentMax)}
                         onChange={(e) => onChange(currentMin, Number(e.target.value))}
                     />
                 </div>

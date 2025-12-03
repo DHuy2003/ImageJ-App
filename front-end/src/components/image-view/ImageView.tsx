@@ -16,7 +16,10 @@ import {
   flipHorizontal,
   flipVertical,
   rotateLeft90,
-  rotateRight90
+  rotateRight90,
+  getHistogram,
+  getAutoThreshold,
+  applyThresholdMask
 } from '../../utils/nav-bar/imageUtils';
 import {
   processClose,
@@ -36,7 +39,9 @@ import RoiOverlay from '../roi-overlay/RoiOverlay';
 import './ImageView.css';
 import BrightnessContrastDialog from './dialogs/bright-contrast/BrightContrast';
 import ImageSizeDialog from './dialogs/image-size/ImageSizeDialog';
+import ThresholdDialog from './dialogs/threshold/ThresholdDialog';
 import NotificationBar, { type NotificationType } from './dialogs/notifications/NotificationBar';
+import useBitDepthEvents from './hooks/useBitDepthEvents';
 import useBrushCommit from './hooks/useBrushCommit';
 import useEditEvents from './hooks/useEditEvents';
 import useFileEvents from './hooks/useFileEvents';
@@ -94,56 +99,6 @@ const CLUSTER_COLORS = [
   { color: 'rgba(20, 184, 166, 0.5)', border: '#14b8a6', name: 'Cyan' },
 ];
 
-// Hàm zoom giữ tâm cố định
-const zoomWithCenter = (
-  displayEl: HTMLDivElement,
-  imgEl: HTMLImageElement,
-  oldZoom: number,
-  newZoom: number,
-  wasScaleToFit: boolean
-) => {
-  const containerWidth = displayEl.clientWidth;
-  const containerHeight = displayEl.clientHeight;
-  const padding = 20; // padding trong zoom-mode
-
-  // Kích thước ảnh mới sau zoom
-  const newImgWidth = imgEl.naturalWidth * newZoom;
-  const newImgHeight = imgEl.naturalHeight * newZoom;
-
-  // Nếu đang từ chế độ fit -> zoom: căn giữa ảnh
-  if (wasScaleToFit) {
-    requestAnimationFrame(() => {
-      // Scroll để tâm ảnh ở tâm container
-      const scrollLeft = (newImgWidth + padding * 2 - containerWidth) / 2;
-      const scrollTop = (newImgHeight + padding * 2 - containerHeight) / 2;
-      displayEl.scrollLeft = Math.max(0, scrollLeft);
-      displayEl.scrollTop = Math.max(0, scrollTop);
-    });
-    return;
-  }
-
-  // Kích thước ảnh cũ
-  const oldImgWidth = imgEl.naturalWidth * oldZoom;
-  const oldImgHeight = imgEl.naturalHeight * oldZoom;
-
-  // Tâm hiện tại của viewport (tính từ góc ảnh, trừ padding)
-  const viewCenterX = displayEl.scrollLeft + containerWidth / 2 - padding;
-  const viewCenterY = displayEl.scrollTop + containerHeight / 2 - padding;
-
-  // Tính vị trí tương đối trên ảnh (0-1), clamp để không vượt quá
-  const relX = Math.max(0, Math.min(1, viewCenterX / oldImgWidth));
-  const relY = Math.max(0, Math.min(1, viewCenterY / oldImgHeight));
-
-  // Tính scroll position mới để giữ cùng điểm ở tâm viewport
-  const newScrollLeft = relX * newImgWidth + padding - containerWidth / 2;
-  const newScrollTop = relY * newImgHeight + padding - containerHeight / 2;
-
-  // Đợi render xong rồi scroll
-  requestAnimationFrame(() => {
-    displayEl.scrollLeft = Math.max(0, newScrollLeft);
-    displayEl.scrollTop = Math.max(0, newScrollTop);
-  });
-};
 
 const ZOOM_FACTOR = 1.25; // Tỉ lệ phóng to/thu nhỏ
 const DEFAULT_ZOOM_LEVEL = 1.0;
@@ -179,9 +134,15 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showBC, setShowBC] = useState(false);
   const [displayRange, setDisplayRange] = useState({ min: 0, max: 255 });
+  const [_appliedDisplayRange, setAppliedDisplayRange] = useState<{ min: number; max: number; bitDepth: number } | null>(null);
   const [originalImageData, setOriginalImageData] = useState<ImageData | null>(null);
   const [histogramData, setHistogramData] = useState<number[]>([]);
   const [showSizeDialog, setShowSizeDialog] = useState(false);
+  const [showThresholdDialog, setShowThresholdDialog] = useState(false);
+  const [thresholdMin, setThresholdMin] = useState(0);
+  const [thresholdMax, setThresholdMax] = useState(255);
+  const [thresholdHistogram, setThresholdHistogram] = useState<number[]>([]);
+  const [thresholdOriginalImageData, setThresholdOriginalImageData] = useState<ImageData | null>(null);
   const [notification, setNotification] = useState<{ message: string, type: NotificationType, isVisible: boolean }>({
     message: '',
     type: 'info',
@@ -234,26 +195,22 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
   useEffect(() => {
     const handleZoomInEvent = () => {
-      setZoomLevel(prev => {
-        const nextZoom = Math.min(prev * ZOOM_FACTOR, 32.0);
-        if (displayRef.current && imgRef.current) {
-          zoomWithCenter(displayRef.current, imgRef.current, prev, nextZoom, scaleToFit);
-        }
-        return nextZoom;
-      });
       setScaleToFit(false);
+      setZoomLevel(prev => {
+        const nextZoom = prev * ZOOM_FACTOR;
+        return Math.min(nextZoom, 32.0);
+      });
     };
 
+
     const handleZoomOutEvent = () => {
-      setZoomLevel(prev => {
-        const nextZoom = Math.max(prev / ZOOM_FACTOR, 0.1);
-        if (displayRef.current && imgRef.current) {
-          zoomWithCenter(displayRef.current, imgRef.current, prev, nextZoom, scaleToFit);
-        }
-        return nextZoom;
-      });
       setScaleToFit(false);
+      setZoomLevel(prev => {
+        const nextZoom = prev / ZOOM_FACTOR;
+        return Math.max(nextZoom, 0.1);
+      });
     };
+
 
     const handleScaleToFitEvent = () => {
       setScaleToFit(prev => {
@@ -263,17 +220,18 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         return !prev;
       });
     };
-
     window.addEventListener('imageZoomIn', handleZoomInEvent);
     window.addEventListener('imageZoomOut', handleZoomOutEvent);
     window.addEventListener('imageScaleToFit', handleScaleToFitEvent);
+
 
     return () => {
       window.removeEventListener('imageZoomIn', handleZoomInEvent);
       window.removeEventListener('imageZoomOut', handleZoomOutEvent);
       window.removeEventListener('imageScaleToFit', handleScaleToFitEvent);
     };
-  }, [scaleToFit]);
+  }, []);
+
 
   const { cropImage } = useEditEvents({
     imgRef,
@@ -472,39 +430,66 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     });
   };
 
+  // Bit depth conversion events - returns functions to work with raw data
+  const { applyDisplayRangeToRawData, getCurrentBitDepthRange } = useBitDepthEvents({
+    currentFile,
+    currentIndex,
+    setVisibleImages,
+    setDisplayRange,
+    setAppliedDisplayRange,
+    getImageData,
+    updateImageFromCanvas,
+    setOriginalImageData,
+    pushUndo,
+  });
+
   const handleOpenBCEvent = () => {
     const dataObj = getImageData();
     if (dataObj) {
       setOriginalImageData(dataObj.imageData);
       const { bins } = analyzeImageHistogram(dataObj.imageData);
       setHistogramData(bins);
+      
+      // Get the current bit depth range and set it as initial display range
+      const { min, max } = getCurrentBitDepthRange();
+      setDisplayRange({ min, max });
+      
       setShowBC(true);
     }
   };
 
   // 2. Preview thay đổi (Vẽ lên Canvas nhưng không lưu History)
+  // Now uses the bit-depth aware function from useBitDepthEvents
   const applyVisualChanges = (min: number, max: number) => {
-    if (!originalImageData) return;
+    const bitDepth = currentFile?.bitDepth || 8;
+    
+    if (bitDepth === 8) {
+      // For 8-bit, use original logic with processBrightnessContrast
+      if (!originalImageData) return;
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = originalImageData.width;
-    tempCanvas.height = originalImageData.height;
-    const ctx = tempCanvas.getContext('2d');
-    if (!ctx) return;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = originalImageData.width;
+      tempCanvas.height = originalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx) return;
 
-    // Clone dữ liệu gốc
-    const freshData = new ImageData(
-      new Uint8ClampedArray(originalImageData.data),
-      originalImageData.width,
-      originalImageData.height
-    );
+      // Clone dữ liệu gốc
+      const freshData = new ImageData(
+        new Uint8ClampedArray(originalImageData.data),
+        originalImageData.width,
+        originalImageData.height
+      );
 
-    // Tính toán pixel mới
-    const processed = processBrightnessContrast(freshData, min, max);
-    ctx.putImageData(processed, 0, 0);
+      // Tính toán pixel mới
+      const processed = processBrightnessContrast(freshData, min, max);
+      ctx.putImageData(processed, 0, 0);
 
-    // Update lên màn hình (tham số false = không push Undo)
-    updateImageFromCanvas(tempCanvas, false);
+      // Update lên màn hình (tham số false = không push Undo)
+      updateImageFromCanvas(tempCanvas, false);
+    } else {
+      // For 16-bit and 32-bit, use the bit-depth aware function
+      applyDisplayRangeToRawData(min, max);
+    }
   };
 
   // 3. Khi người dùng thay đổi Slider (Bất kỳ slider nào từ Dialog)
@@ -515,17 +500,40 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     applyVisualChanges(newMin, newMax);
   };
 
-  // 4. Auto
+  // 4. Auto - detect optimal min/max based on current bit depth
   const handleBCAuto = () => {
     if (!originalImageData) return;
-    // Dùng hàm phân tích mới để lấy min/max thực tế
-    const { min, max } = analyzeImageHistogram(originalImageData);
-    handleBCChange(min, max);
+    
+    const bitDepth = currentFile?.bitDepth || 8;
+    const { min: rangeMin, max: rangeMax } = getCurrentBitDepthRange();
+    
+    // For 8-bit, use histogram analysis
+    if (bitDepth === 8) {
+      const { min, max } = analyzeImageHistogram(originalImageData);
+      handleBCChange(min, max);
+    } else {
+      // For 16/32-bit, use the actual data range
+      handleBCChange(rangeMin, rangeMax);
+    }
   };
 
-  // 5. Reset (Về 0-255)
+  // 5. Reset - reset to full range based on current bit depth
   const handleBCReset = () => {
-    handleBCChange(0, 255);
+    const bitDepth = currentFile?.bitDepth || 8;
+    let defaultMin = 0;
+    let defaultMax = 255;
+    
+    if (bitDepth === 16) {
+      const { min, max } = getCurrentBitDepthRange();
+      defaultMin = min;
+      defaultMax = max;
+    } else if (bitDepth === 32) {
+      const { min, max } = getCurrentBitDepthRange();
+      defaultMin = min;
+      defaultMax = max;
+    }
+    
+    handleBCChange(defaultMin, defaultMax);
   };
 
   // 6. Apply (Chốt đơn)
@@ -536,8 +544,15 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     // Lưu vào Undo History (Lúc này ảnh trên màn hình đã thành ảnh gốc mới)
     pushUndo();
 
-    // Reset thông số hiển thị về mặc định vì pixel đã bị thay đổi vĩnh viễn
-    setDisplayRange({ min: 0, max: 255 });
+    // Reset thông số hiển thị về mặc định based on bit depth
+    const bitDepth = currentFile?.bitDepth || 8;
+    if (bitDepth === 8) {
+      setDisplayRange({ min: 0, max: 255 });
+    } else {
+      const { min, max } = getCurrentBitDepthRange();
+      setDisplayRange({ min, max });
+    }
+    
     setOriginalImageData(null);
     setShowBC(false);
   };
@@ -555,6 +570,164 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener('openBrightnessContrast', handleOpenBCEvent);
     };
   }, [currentImageURL]); // Re-bind khi URL đổi
+
+  // ============================================
+  // THRESHOLD DIALOG HANDLERS
+  // ============================================
+
+  const handleOpenThresholdEvent = () => {
+    const dataObj = getImageData();
+    if (dataObj) {
+      setThresholdOriginalImageData(dataObj.imageData);
+      const histogram = getHistogram(dataObj.imageData);
+      setThresholdHistogram(histogram);
+      
+      // Get the current bit depth range and set initial thresholds
+      const { min, max } = getCurrentBitDepthRange();
+      setThresholdMin(min);
+      setThresholdMax(max);
+      
+      setShowThresholdDialog(true);
+    }
+  };
+
+  // Handle threshold slider changes - preview mode
+  const handleThresholdChange = (newMin: number, newMax: number) => {
+    setThresholdMin(newMin);
+    setThresholdMax(newMax);
+    
+    // Preview threshold overlay on original image
+    if (thresholdOriginalImageData) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = thresholdOriginalImageData.width;
+      tempCanvas.height = thresholdOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx) return;
+
+      // Create preview with threshold overlay
+      const previewData = new ImageData(
+        new Uint8ClampedArray(thresholdOriginalImageData.data),
+        thresholdOriginalImageData.width,
+        thresholdOriginalImageData.height
+      );
+      
+      // Apply threshold preview (red overlay for in-range pixels)
+      const data = previewData.data;
+      const minVal = Math.round(newMin);
+      const maxVal = Math.round(newMax);
+      
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+        if (gray >= minVal && gray <= maxVal) {
+          // Apply red tint for threshold preview
+          data[i] = Math.min(255, data[i] + 100);     // R
+          data[i + 1] = Math.max(0, data[i + 1] - 50); // G
+          data[i + 2] = Math.max(0, data[i + 2] - 50); // B
+        }
+      }
+      
+      ctx.putImageData(previewData, 0, 0);
+      updateImageFromCanvas(tempCanvas, false);
+    }
+  };
+
+  // Handle auto threshold
+  // Matches ImageJ's autoSetLevels logic
+  const handleThresholdAuto = (method: string, darkBackground: boolean) => {
+    if (!thresholdHistogram || thresholdHistogram.length === 0) return;
+    
+    const threshold = getAutoThreshold(thresholdHistogram, method);
+    
+    let newMin: number, newMax: number;
+    if (darkBackground) {
+      // Dark background: threshold high values (thresholdHigh = true)
+      // From Java: minThreshold=threshold+1; maxThreshold=255;
+      newMin = threshold + 1;
+      newMax = 255;
+    } else {
+      // Light background: threshold low values (thresholdHigh = false)
+      // From Java: minThreshold=0; maxThreshold=threshold;
+      newMin = 0;
+      newMax = threshold;
+    }
+    
+    // From Java: if (minThreshold>255) minThreshold = 255;
+    if (newMin > 255) newMin = 255;
+    
+    setThresholdMin(newMin);
+    setThresholdMax(newMax);
+    handleThresholdChange(newMin, newMax);
+  };
+
+  // Handle threshold reset
+  const handleThresholdReset = () => {
+    // Restore original image
+    if (thresholdOriginalImageData) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = thresholdOriginalImageData.width;
+      tempCanvas.height = thresholdOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(thresholdOriginalImageData, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+    }
+    
+    const { min, max } = getCurrentBitDepthRange();
+    setThresholdMin(min);
+    setThresholdMax(max);
+  };
+
+  // Handle threshold apply - create binary mask
+  const handleThresholdApply = () => {
+    if (!thresholdOriginalImageData) return;
+    
+    pushUndo();
+    
+    const maskedData = applyThresholdMask(
+      thresholdOriginalImageData,
+      Math.round(thresholdMin),
+      Math.round(thresholdMax)
+    );
+    
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = maskedData.width;
+    tempCanvas.height = maskedData.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (ctx) {
+      ctx.putImageData(maskedData, 0, 0);
+      updateImageFromCanvas(tempCanvas, false);
+    }
+    
+    setThresholdOriginalImageData(null);
+    setShowThresholdDialog(false);
+    showNotification('Threshold applied - image converted to binary mask', 'success');
+  };
+
+  // Handle threshold dialog close
+  const handleThresholdClose = () => {
+    // Restore original image when closing without applying
+    if (thresholdOriginalImageData) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = thresholdOriginalImageData.width;
+      tempCanvas.height = thresholdOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(thresholdOriginalImageData, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+    }
+    
+    setThresholdOriginalImageData(null);
+    setShowThresholdDialog(false);
+  };
+
+  useEffect(() => {
+    window.addEventListener('openThreshold', handleOpenThresholdEvent);
+    return () => {
+      window.removeEventListener('openThreshold', handleOpenThresholdEvent);
+    };
+  }, [currentImageURL]);
 
   const formatValue = (value: number | null | undefined, decimals: number = 2): string => {
     if (value === null || value === undefined) return '-';
@@ -668,7 +841,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   }, []); // dependencies
 
   // 4. Hàm xử lý khi bấm OK trong dialog
-  const handleSizeApply = (w: number, h: number, d: number, interp: string) => {
+  const handleSizeApply = (w: number, h: number, _d: number, interp: string) => {
     const dataObj = getImageData();
     if (!dataObj) return;
 
@@ -845,6 +1018,24 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         currentMin={displayRange.min}
         currentMax={displayRange.max}
         histogram={histogramData}
+        bitDepth={(currentFile?.bitDepth || 8) as 8 | 16 | 32}
+        dataRangeMin={getCurrentBitDepthRange().min}
+        dataRangeMax={getCurrentBitDepthRange().max}
+      />
+
+      <ThresholdDialog
+        isOpen={showThresholdDialog}
+        onClose={handleThresholdClose}
+        onApply={handleThresholdApply}
+        onChange={handleThresholdChange}
+        onReset={handleThresholdReset}
+        onAuto={handleThresholdAuto}
+        currentMin={thresholdMin}
+        currentMax={thresholdMax}
+        histogram={thresholdHistogram}
+        bitDepth={(currentFile?.bitDepth || 8) as 8 | 16 | 32}
+        dataRangeMin={getCurrentBitDepthRange().min}
+        dataRangeMax={getCurrentBitDepthRange().max}
       />
 
       {/* Left Resize Handle */}
