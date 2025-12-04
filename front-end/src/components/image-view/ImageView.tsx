@@ -66,6 +66,8 @@ import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
 import useToolbarToolSelection from './hooks/useToolbarToolSelection';
 import useUndoStack from './hooks/useUndoStack';
+import useNoiseEvents from './hooks/useNoiseEvents';
+
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
 interface CellFeature {
@@ -467,6 +469,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       setCurrentImageURL(newUrl);
     });
   };
+
+  useNoiseEvents(
+    getImageData,
+    updateImageFromCanvas,
+    () => currentFile?.bitDepth
+  );  
 
   // Bit depth conversion events - returns functions to work with raw data
   const { applyDisplayRangeToRawData, getCurrentBitDepthRange } = useBitDepthEvents({

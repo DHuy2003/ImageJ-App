@@ -192,13 +192,13 @@ const NavBar = () => {
                                 { label: "Watershed", onClick: () => dispatchProcessEvent('watershed') }
                             ]
                         },
-                        { label: "Noise", subItems:[
-                            { label: "Add Nosie" },
-                            {label: "Add Specified Noise.." },
-                            { label: "Salt and Pepper" },
-                            { label: "Despeckle"},
-                            { label: "Remove Outliers" },    
-                            { label: "Remove NaNs"}
+                        { label: "Noise", subItems: [
+                            { label: "Add Noise", onClick: () => dispatchProcessEvent('add-noise') },
+                            { label: "Add Specified Noise...", onClick: () => dispatchProcessEvent('add-specified-noise') },
+                            { label: "Salt and Pepper", onClick: () => dispatchProcessEvent('salt-and-pepper') },
+                            { label: "Despeckle", onClick: () => dispatchProcessEvent('despeckle') },
+                            { label: "Remove Outliers", onClick: () => dispatchProcessEvent('remove-outliers') },
+                            { label: "Remove NaNs", onClick: () => dispatchProcessEvent('remove-nans') },
                         ]}
                     ]}
                 />
