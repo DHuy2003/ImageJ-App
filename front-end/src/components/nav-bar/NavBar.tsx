@@ -54,8 +54,15 @@ import {
     handleTracking,
 } from "../../utils/nav-bar/toolUtils";
 
+import { dispatchFilterDialogEvent } from "../image-view/hooks/useFilterEvents";
+import type { FilterType } from "../image-view/dialogs/filters/FiltersDialog";
+
 const dispatchProcessEvent = (action: string) => {
     window.dispatchEvent(new CustomEvent('process-image', { detail: { action } }));
+};
+
+const handleOpenFilterDialog = (filterType: FilterType) => {
+    dispatchFilterDialogEvent(filterType);
 };
 
 const NavBar = () => {
@@ -160,9 +167,19 @@ const NavBar = () => {
                         { label: "Smooth", onClick: () => dispatchProcessEvent('smooth') },
                         { label: "Sharpen", onClick: () => dispatchProcessEvent('sharpen') },
                         { label: "Find Edges", onClick: () => dispatchProcessEvent('find-edges') },
-                        // { label: "Enhance Contrast..." },
-                        // { label: "Subtract Background..." },
-                        // { label: "Filters" },
+                        { label: "Enhance Contrast..." },
+                        { label: "Subtract Background..." },
+                        { label: "Filters", subItems: [
+                            {label: "Convolve...", onClick: () => handleOpenFilterDialog('convolve')},
+                            {label: "Gaussian Blur...", onClick: () => handleOpenFilterDialog('gaussian-blur')},
+                            {label: "Median...", onClick: () => handleOpenFilterDialog('median')},
+                            {label: "Mean...", onClick: () => handleOpenFilterDialog('mean')},
+                            {label: "Minimum...", onClick: () => handleOpenFilterDialog('minimum')},
+                            {label: "Maximum...", onClick: () => handleOpenFilterDialog('maximum')},
+                            {label: "Unsharp Mask...", onClick: () => handleOpenFilterDialog('unsharp-mask')},
+                            {label: "Variance...", onClick: () => handleOpenFilterDialog('variance')},
+                            {label: "Show Circular Masks", onClick: () => handleOpenFilterDialog('circular-masks')}
+                        ] },
                         {
                             label: "Binary", subItems: [
                                 { label: "Make Binary", onClick: () => dispatchProcessEvent('make-binary') },

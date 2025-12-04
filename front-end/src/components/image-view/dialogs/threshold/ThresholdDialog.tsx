@@ -33,7 +33,7 @@ interface ThresholdDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onApply: () => void;
-  onChange: (min: number, max: number) => void;
+  onChange: (min: number, max: number, mode: number) => void;
   onReset: () => void;
   onAuto: (method: string, darkBackground: boolean) => void;
   currentMin: number;
@@ -243,7 +243,7 @@ const ThresholdDialog = ({
     }
 
     setMinThreshold(actualValue);
-    onChange(actualValue, newMax);
+    onChange(actualValue, newMax, mode);
   };
 
   // Handle max slider change
@@ -257,7 +257,7 @@ const ThresholdDialog = ({
     }
 
     setMaxThreshold(actualValue);
-    onChange(newMin, actualValue);
+    onChange(newMin, actualValue, mode);
   };
 
   // Handle input field changes
@@ -268,9 +268,9 @@ const ThresholdDialog = ({
       setMinThreshold(clampedValue);
       if (clampedValue > maxThreshold) {
         setMaxThreshold(clampedValue);
-        onChange(clampedValue, clampedValue);
+        onChange(clampedValue, clampedValue, mode);
       } else {
-        onChange(clampedValue, maxThreshold);
+        onChange(clampedValue, maxThreshold, mode);
       }
     }
   };
@@ -282,9 +282,9 @@ const ThresholdDialog = ({
       setMaxThreshold(clampedValue);
       if (clampedValue < minThreshold) {
         setMinThreshold(clampedValue);
-        onChange(clampedValue, clampedValue);
+        onChange(clampedValue, clampedValue, mode);
       } else {
-        onChange(minThreshold, clampedValue);
+        onChange(minThreshold, clampedValue, mode);
       }
     }
   };
@@ -308,7 +308,7 @@ const ThresholdDialog = ({
 
   // Handle Set button (opens dialog in ImageJ, here we just apply current values)
   const handleSet = () => {
-    onChange(minThreshold, maxThreshold);
+    onChange(minThreshold, maxThreshold, mode);
   };
 
   // Handle method change
@@ -318,9 +318,12 @@ const ThresholdDialog = ({
     onAuto(newMethod, darkBackground);
   };
 
-  // Handle mode change
+  // Handle mode change - notify parent to update display
   const handleModeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setMode(parseInt(e.target.value));
+    const newMode = parseInt(e.target.value);
+    setMode(newMode);
+    // Trigger onChange with current thresholds and new mode to update display
+    onChange(minThreshold, maxThreshold, newMode);
   };
 
   // Handle dark background change

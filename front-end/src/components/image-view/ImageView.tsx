@@ -8,29 +8,38 @@ import { formatFileSize } from '../../utils/common/formatFileSize';
 import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
 import {
   analyzeImageHistogram,
+  applyThresholdMask,
+  flipHorizontal,
+  flipVertical,
+  getAutoThreshold,
+  getHistogram,
   handleScaleToFit,
   handleZoomIn,
   handleZoomOut,
   processBrightnessContrast,
   processImageResize,
-  flipHorizontal,
-  flipVertical,
   rotateLeft90,
-  rotateRight90,
-  getHistogram,
-  getAutoThreshold,
-  applyThresholdMask
+  rotateRight90
 } from '../../utils/nav-bar/imageUtils';
 import {
+  generateCircularMasksStack,
   processClose,
   processConvertToMask,
+  processConvolve,
   processDilate,
   processErode,
   processFindEdges,
+  processGaussianBlur,
   processMakeBinary,
+  processMaximumFilter,
+  processMean,
+  processMedian,
+  processMinimumFilter,
   processOpen,
   processSharpen,
   processSmooth,
+  processUnsharpMask,
+  processVariance,
   processWatershed
 } from '../../utils/nav-bar/processUtils';
 import BrushOverlay from '../brush-overlay/BrushOverlay';
@@ -38,13 +47,15 @@ import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
 import './ImageView.css';
 import BrightnessContrastDialog from './dialogs/bright-contrast/BrightContrast';
+import FiltersDialog, { type FilterParams, type FilterType } from './dialogs/filters/FiltersDialog';
 import ImageSizeDialog from './dialogs/image-size/ImageSizeDialog';
-import ThresholdDialog from './dialogs/threshold/ThresholdDialog';
 import NotificationBar, { type NotificationType } from './dialogs/notifications/NotificationBar';
+import ThresholdDialog, { MODE_BLACK_AND_WHITE, MODE_OVER_UNDER, MODE_RED } from './dialogs/threshold/ThresholdDialog';
 import useBitDepthEvents from './hooks/useBitDepthEvents';
 import useBrushCommit from './hooks/useBrushCommit';
 import useEditEvents from './hooks/useEditEvents';
 import useFileEvents from './hooks/useFileEvents';
+import useFilterEvents from './hooks/useFilterEvents';
 import useMaskCreation from './hooks/useMaskCreation';
 import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
@@ -140,6 +151,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [showThresholdDialog, setShowThresholdDialog] = useState(false);
   const [thresholdMin, setThresholdMin] = useState(0);
   const [thresholdMax, setThresholdMax] = useState(255);
+  const [thresholdMode, setThresholdMode] = useState(MODE_RED);
   const [thresholdHistogram, setThresholdHistogram] = useState<number[]>([]);
   const [thresholdOriginalImageData, setThresholdOriginalImageData] = useState<ImageData | null>(null);
   const [notification, setNotification] = useState<{ message: string, type: NotificationType, isVisible: boolean }>({
@@ -148,6 +160,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     isVisible: false
   });
 
+  const [showFilterDialog, setShowFilterDialog] = useState(false);
+  const [currentFilterType, setCurrentFilterType] = useState<FilterType | null>(null);
+  const [filterOriginalImageData, setFilterOriginalImageData] = useState<ImageData | null>(null);
   const showNotification = (message: string, type: NotificationType = 'info') => {
     setNotification({ message, type, isVisible: true });
   };
@@ -275,6 +290,17 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   });
 
   useToolbarToolSelection(setActiveTool, setPanMode);
+
+  useFilterEvents({
+    onOpenFilterDialog: (filterType: FilterType) => {
+      const dataObj = getImageData();
+      if (dataObj) {
+        setFilterOriginalImageData(dataObj.imageData);
+        setCurrentFilterType(filterType);
+        setShowFilterDialog(true);
+      }
+    }
+  });
 
   useEffect(() => {
     const onImagesAppended = (e: Event) => {
@@ -448,11 +474,11 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       setOriginalImageData(dataObj.imageData);
       const { bins } = analyzeImageHistogram(dataObj.imageData);
       setHistogramData(bins);
-      
+
       // Get the current bit depth range and set it as initial display range
       const { min, max } = getCurrentBitDepthRange();
       setDisplayRange({ min, max });
-      
+
       setShowBC(true);
     }
   };
@@ -461,7 +487,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // Now uses the bit-depth aware function from useBitDepthEvents
   const applyVisualChanges = (min: number, max: number) => {
     const bitDepth = currentFile?.bitDepth || 8;
-    
+
     if (bitDepth === 8) {
       // For 8-bit, use original logic with processBrightnessContrast
       if (!originalImageData) return;
@@ -502,10 +528,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // 4. Auto - detect optimal min/max based on current bit depth
   const handleBCAuto = () => {
     if (!originalImageData) return;
-    
+
     const bitDepth = currentFile?.bitDepth || 8;
     const { min: rangeMin, max: rangeMax } = getCurrentBitDepthRange();
-    
+
     // For 8-bit, use histogram analysis
     if (bitDepth === 8) {
       const { min, max } = analyzeImageHistogram(originalImageData);
@@ -521,7 +547,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     const bitDepth = currentFile?.bitDepth || 8;
     let defaultMin = 0;
     let defaultMax = 255;
-    
+
     if (bitDepth === 16) {
       const { min, max } = getCurrentBitDepthRange();
       defaultMin = min;
@@ -531,7 +557,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       defaultMin = min;
       defaultMax = max;
     }
-    
+
     handleBCChange(defaultMin, defaultMax);
   };
 
@@ -551,7 +577,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       const { min, max } = getCurrentBitDepthRange();
       setDisplayRange({ min, max });
     }
-    
+
     setOriginalImageData(null);
     setShowBC(false);
   };
@@ -580,21 +606,26 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       setThresholdOriginalImageData(dataObj.imageData);
       const histogram = getHistogram(dataObj.imageData);
       setThresholdHistogram(histogram);
-      
+
       // Get the current bit depth range and set initial thresholds
       const { min, max } = getCurrentBitDepthRange();
       setThresholdMin(min);
       setThresholdMax(max);
-      
+
       setShowThresholdDialog(true);
     }
   };
 
   // Handle threshold slider changes - preview mode
-  const handleThresholdChange = (newMin: number, newMax: number) => {
+  // Implements ImageJ threshold display modes:
+  // - Red: thresholded features in red, background in grayscale
+  // - B&W: features in black, background in white
+  // - Over/Under: below lower in blue, thresholded in grayscale, above upper in green
+  const handleThresholdChange = (newMin: number, newMax: number, mode: number) => {
     setThresholdMin(newMin);
     setThresholdMax(newMax);
-    
+    setThresholdMode(mode);
+
     // Preview threshold overlay on original image
     if (thresholdOriginalImageData) {
       const tempCanvas = document.createElement('canvas');
@@ -609,22 +640,66 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         thresholdOriginalImageData.width,
         thresholdOriginalImageData.height
       );
-      
-      // Apply threshold preview (red overlay for in-range pixels)
+
       const data = previewData.data;
+      const originalData = thresholdOriginalImageData.data;
       const minVal = Math.round(newMin);
       const maxVal = Math.round(newMax);
-      
+
       for (let i = 0; i < data.length; i += 4) {
-        const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-        if (gray >= minVal && gray <= maxVal) {
-          // Apply red tint for threshold preview
-          data[i] = Math.min(255, data[i] + 100);     // R
-          data[i + 1] = Math.max(0, data[i + 1] - 50); // G
-          data[i + 2] = Math.max(0, data[i + 2] - 50); // B
+        // Calculate grayscale value from original image
+        const gray = Math.round(0.299 * originalData[i] + 0.587 * originalData[i + 1] + 0.114 * originalData[i + 2]);
+        const isWithinThreshold = gray >= minVal && gray <= maxVal;
+        const isBelowThreshold = gray < minVal;
+        const isAboveThreshold = gray > maxVal;
+
+        if (mode === MODE_RED) {
+          // Red mode: thresholded features in red, background in grayscale
+          if (isWithinThreshold) {
+            // Features shown in red
+            data[i] = 255;     // R
+            data[i + 1] = 0;   // G
+            data[i + 2] = 0;   // B
+          } else {
+            // Background shown in grayscale
+            data[i] = gray;
+            data[i + 1] = gray;
+            data[i + 2] = gray;
+          }
+        } else if (mode === MODE_BLACK_AND_WHITE) {
+          // B&W mode: features in black, background in white
+          if (isWithinThreshold) {
+            // Features shown in black
+            data[i] = 0;
+            data[i + 1] = 0;
+            data[i + 2] = 0;
+          } else {
+            // Background shown in white
+            data[i] = 255;
+            data[i + 1] = 255;
+            data[i + 2] = 255;
+          }
+        } else if (mode === MODE_OVER_UNDER) {
+          // Over/Under mode: below in blue, thresholded in grayscale, above in green
+          if (isBelowThreshold) {
+            // Below lower threshold: shown in blue
+            data[i] = 0;       // R
+            data[i + 1] = 0;   // G
+            data[i + 2] = 255; // B
+          } else if (isAboveThreshold) {
+            // Above upper threshold: shown in green
+            data[i] = 0;       // R
+            data[i + 1] = 255; // G
+            data[i + 2] = 0;   // B
+          } else {
+            // Within threshold: shown in grayscale (original)
+            data[i] = gray;
+            data[i + 1] = gray;
+            data[i + 2] = gray;
+          }
         }
       }
-      
+
       ctx.putImageData(previewData, 0, 0);
       updateImageFromCanvas(tempCanvas, false);
     }
@@ -634,9 +709,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // Matches ImageJ's autoSetLevels logic
   const handleThresholdAuto = (method: string, darkBackground: boolean) => {
     if (!thresholdHistogram || thresholdHistogram.length === 0) return;
-    
+
     const threshold = getAutoThreshold(thresholdHistogram, method);
-    
+
     let newMin: number, newMax: number;
     if (darkBackground) {
       // Dark background: threshold high values (thresholdHigh = true)
@@ -649,13 +724,13 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       newMin = 0;
       newMax = threshold;
     }
-    
+
     // From Java: if (minThreshold>255) minThreshold = 255;
     if (newMin > 255) newMin = 255;
-    
+
     setThresholdMin(newMin);
     setThresholdMax(newMax);
-    handleThresholdChange(newMin, newMax);
+    // handleThresholdChange(newMin, newMax, thresholdMode);
   };
 
   // Handle threshold reset
@@ -671,7 +746,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         updateImageFromCanvas(tempCanvas, false);
       }
     }
-    
+
     const { min, max } = getCurrentBitDepthRange();
     setThresholdMin(min);
     setThresholdMax(max);
@@ -680,15 +755,15 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // Handle threshold apply - create binary mask
   const handleThresholdApply = () => {
     if (!thresholdOriginalImageData) return;
-    
+
     pushUndo();
-    
+
     const maskedData = applyThresholdMask(
       thresholdOriginalImageData,
       Math.round(thresholdMin),
       Math.round(thresholdMax)
     );
-    
+
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = maskedData.width;
     tempCanvas.height = maskedData.height;
@@ -697,7 +772,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       ctx.putImageData(maskedData, 0, 0);
       updateImageFromCanvas(tempCanvas, false);
     }
-    
+
     setThresholdOriginalImageData(null);
     setShowThresholdDialog(false);
     showNotification('Threshold applied - image converted to binary mask', 'success');
@@ -716,7 +791,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         updateImageFromCanvas(tempCanvas, false);
       }
     }
-    
+
     setThresholdOriginalImageData(null);
     setShowThresholdDialog(false);
   };
@@ -728,10 +803,149 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     };
   }, [currentImageURL]);
 
+  // ============================================
+  // FILTER DIALOG HANDLERS
+  // ============================================
+
+  // Apply filter to image data and return the result
+  const applyFilter = (filterType: FilterType, params: FilterParams, imageData: ImageData): ImageData | null => {
+    switch (filterType) {
+      case 'convolve':
+        if (params.kernel && params.normalize !== undefined) {
+          return processConvolve(imageData, params.kernel, params.normalize);
+        }
+        return null;
+      case 'gaussian-blur':
+        if (params.sigma !== undefined) {
+          return processGaussianBlur(imageData, params.sigma);
+        }
+        return null;
+      case 'median':
+        if (params.radius !== undefined) {
+          return processMedian(imageData, params.radius);
+        }
+        return null;
+      case 'mean':
+        if (params.radius !== undefined) {
+          return processMean(imageData, params.radius);
+        }
+        return null;
+      case 'minimum':
+        if (params.radius !== undefined) {
+          return processMinimumFilter(imageData, params.radius);
+        }
+        return null;
+      case 'maximum':
+        if (params.radius !== undefined) {
+          return processMaximumFilter(imageData, params.radius);
+        }
+        return null;
+      case 'unsharp-mask':
+        if (params.sigma !== undefined && params.maskWeight !== undefined) {
+          return processUnsharpMask(imageData, params.sigma, params.maskWeight);
+        }
+        return null;
+      case 'variance':
+        if (params.radius !== undefined) {
+          return processVariance(imageData, params.radius);
+        }
+        return null;
+      case 'circular-masks':
+        // Special case: generate and show circular masks stack
+        handleShowCircularMasks();
+        return null;
+      default:
+        return null;
+    }
+  };
+
+  // Handle showing circular masks (generates a stack)
+  const handleShowCircularMasks = () => {
+    const masks = generateCircularMasksStack();
+    showNotification(`Generated ${masks.length} circular masks for radii: 1, 2, 3, 4, 5, 10, 15, 20`, 'info');
+    setShowFilterDialog(false);
+  };
+
+  // Handle filter preview
+  const handleFilterPreview = (filterType: FilterType, params: FilterParams) => {
+    if (!filterOriginalImageData) return;
+
+    const result = applyFilter(filterType, params, filterOriginalImageData);
+    if (result) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = result.width;
+      tempCanvas.height = result.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(result, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+    }
+  };
+
+  // Handle filter apply
+  const handleFilterApply = (filterType: FilterType, params: FilterParams) => {
+    if (!filterOriginalImageData) return;
+
+    pushUndo();
+
+    const result = applyFilter(filterType, params, filterOriginalImageData);
+    if (result) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = result.width;
+      tempCanvas.height = result.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(result, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+
+      // Get filter name for notification
+      const filterNames: Record<FilterType, string> = {
+        'convolve': 'Convolution',
+        'gaussian-blur': 'Gaussian Blur',
+        'median': 'Median Filter',
+        'mean': 'Mean Filter',
+        'minimum': 'Minimum Filter',
+        'maximum': 'Maximum Filter',
+        'unsharp-mask': 'Unsharp Mask',
+        'variance': 'Variance Filter',
+        'circular-masks': 'Circular Masks',
+      };
+      showNotification(`${filterNames[filterType]} applied successfully`, 'success');
+    }
+
+    setFilterOriginalImageData(null);
+    setShowFilterDialog(false);
+  };
+
+  // Handle filter reset (restore original image)
+  const handleFilterReset = () => {
+    if (filterOriginalImageData) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = filterOriginalImageData.width;
+      tempCanvas.height = filterOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(filterOriginalImageData, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+    }
+  };
+
+  // Handle filter dialog close
+  const handleFilterClose = () => {
+    // Restore original image when closing without applying
+    handleFilterReset();
+    setFilterOriginalImageData(null);
+    setShowFilterDialog(false);
+  };
+
   const formatValue = (value: number | null | undefined, decimals: number = 2): string => {
     if (value === null || value === undefined) return '-';
     return value.toFixed(decimals);
   };
+
 
   // Handle panel resizing
   useEffect(() => {
@@ -865,7 +1079,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setShowSizeDialog(false);
   };
 
-    useEffect(() => {
+  useEffect(() => {
     const transformImage = (
       transformFn: (
         img: HTMLImageElement | null,
@@ -873,9 +1087,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       ) => void
     ) => {
       if (!imgRef.current || !currentFile) return;
-      
+
       pushUndo();
-      
+
       transformFn(imgRef.current, (dataUrl, width, height, size) => {
         setCurrentImageURL(dataUrl);
         setVisibleImages(prev => {
@@ -1037,6 +1251,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         dataRangeMax={getCurrentBitDepthRange().max}
       />
 
+      <FiltersDialog
+        isOpen={showFilterDialog}
+        filterType={currentFilterType}
+        onClose={handleFilterClose}
+        onApply={handleFilterApply}
+        onPreview={handleFilterPreview}
+        onReset={handleFilterReset}
+      />
       {/* Left Resize Handle */}
       {showProperties && (
         <div
@@ -1218,7 +1440,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
             onCommit={handleBrushCommit}
           />
         </div>
-        
+
         {isCropping && (
           <div className="crop-controls">
             <button

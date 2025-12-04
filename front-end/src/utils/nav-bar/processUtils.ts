@@ -589,3 +589,515 @@ export const processWatershed = (imageData: ImageData): ImageData | null => {
     }
     return output;
 };
+
+// ============================================
+// FILTER FUNCTIONS (Process > Filters submenu)
+// ============================================
+
+/**
+ * Convolve: Applies spatial convolution using a custom kernel.
+ * The kernel must be square with odd dimensions.
+ * @param imageData Source image data
+ * @param kernel Flat array representing the kernel coefficients (row-major order)
+ * @param normalize If true, divide by the sum of coefficients to preserve brightness
+ */
+export const processConvolve = (
+    imageData: ImageData,
+    kernel: number[],
+    normalize: boolean = true
+): ImageData => {
+    const size = Math.sqrt(kernel.length);
+    if (size !== Math.floor(size) || size % 2 === 0) {
+        dispatchNotification('Kernel must be square with odd dimensions', 'error');
+        return imageData;
+    }
+
+    let divisor = 1;
+    if (normalize) {
+        const sum = kernel.reduce((a, b) => a + b, 0);
+        divisor = sum !== 0 ? sum : 1;
+    }
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+    const halfSize = Math.floor(size / 2);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let r = 0, g = 0, b = 0;
+
+            for (let ky = -halfSize; ky <= halfSize; ky++) {
+                for (let kx = -halfSize; kx <= halfSize; kx++) {
+                    // Edge handling: duplicate edge pixels
+                    const py = Math.min(Math.max(y + ky, 0), height - 1);
+                    const px = Math.min(Math.max(x + kx, 0), width - 1);
+                    const idx = (py * width + px) * 4;
+                    const weight = kernel[(ky + halfSize) * size + (kx + halfSize)];
+
+                    r += src[idx] * weight;
+                    g += src[idx + 1] * weight;
+                    b += src[idx + 2] * weight;
+                }
+            }
+
+            const dstIdx = (y * width + x) * 4;
+            dst[dstIdx] = clamp(r / divisor);
+            dst[dstIdx + 1] = clamp(g / divisor);
+            dst[dstIdx + 2] = clamp(b / divisor);
+            dst[dstIdx + 3] = src[dstIdx + 3];
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Gaussian Blur: Smooths image using convolution with a Gaussian function.
+ * @param imageData Source image data
+ * @param sigma Standard deviation (radius of decay to exp(-0.5) ~ 61%)
+ */
+export const processGaussianBlur = (imageData: ImageData, sigma: number): ImageData => {
+    if (sigma <= 0) return imageData;
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+
+    // Calculate kernel size: 6*sigma is a common rule (3 sigma on each side)
+    const kernelRadius = Math.ceil(sigma * 3);
+    const kernelSize = kernelRadius * 2 + 1;
+
+    // Generate 1D Gaussian kernel
+    const kernel1D: number[] = [];
+    let sum = 0;
+    for (let i = -kernelRadius; i <= kernelRadius; i++) {
+        const val = Math.exp(-(i * i) / (2 * sigma * sigma));
+        kernel1D.push(val);
+        sum += val;
+    }
+    // Normalize
+    for (let i = 0; i < kernel1D.length; i++) {
+        kernel1D[i] /= sum;
+    }
+
+    // Apply separable Gaussian: horizontal pass then vertical pass
+    const temp = new Float32Array(width * height * 4);
+
+    // Horizontal pass
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let r = 0, g = 0, b = 0, a = 0;
+            for (let k = -kernelRadius; k <= kernelRadius; k++) {
+                const px = Math.min(Math.max(x + k, 0), width - 1);
+                const idx = (y * width + px) * 4;
+                const weight = kernel1D[k + kernelRadius];
+                r += src[idx] * weight;
+                g += src[idx + 1] * weight;
+                b += src[idx + 2] * weight;
+                a += src[idx + 3] * weight;
+            }
+            const tempIdx = (y * width + x) * 4;
+            temp[tempIdx] = r;
+            temp[tempIdx + 1] = g;
+            temp[tempIdx + 2] = b;
+            temp[tempIdx + 3] = a;
+        }
+    }
+
+    // Vertical pass
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let r = 0, g = 0, b = 0, a = 0;
+            for (let k = -kernelRadius; k <= kernelRadius; k++) {
+                const py = Math.min(Math.max(y + k, 0), height - 1);
+                const tempIdx = (py * width + x) * 4;
+                const weight = kernel1D[k + kernelRadius];
+                r += temp[tempIdx] * weight;
+                g += temp[tempIdx + 1] * weight;
+                b += temp[tempIdx + 2] * weight;
+                a += temp[tempIdx + 3] * weight;
+            }
+            const dstIdx = (y * width + x) * 4;
+            dst[dstIdx] = clamp(Math.round(r));
+            dst[dstIdx + 1] = clamp(Math.round(g));
+            dst[dstIdx + 2] = clamp(Math.round(b));
+            dst[dstIdx + 3] = clamp(Math.round(a));
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Generate a circular mask for a given radius.
+ * Used by Median, Mean, Minimum, Maximum, and Variance filters.
+ */
+const generateCircularMask = (radius: number): { offsets: [number, number][], size: number } => {
+    const offsets: [number, number][] = [];
+    const r2 = radius * radius;
+
+    for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+            if (dx * dx + dy * dy <= r2) {
+                offsets.push([dx, dy]);
+            }
+        }
+    }
+
+    return { offsets, size: offsets.length };
+};
+
+/**
+ * Median Filter: Reduces noise by replacing each pixel with the median of neighboring values.
+ * @param imageData Source image data
+ * @param radius Neighborhood radius
+ */
+export const processMedian = (imageData: ImageData, radius: number): ImageData => {
+    if (radius < 1) return imageData;
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    const { offsets } = generateCircularMask(radius);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const rValues: number[] = [];
+            const gValues: number[] = [];
+            const bValues: number[] = [];
+
+            for (const [dx, dy] of offsets) {
+                const px = Math.min(Math.max(x + dx, 0), width - 1);
+                const py = Math.min(Math.max(y + dy, 0), height - 1);
+                const idx = (py * width + px) * 4;
+                rValues.push(src[idx]);
+                gValues.push(src[idx + 1]);
+                bValues.push(src[idx + 2]);
+            }
+
+            // Sort and get median
+            rValues.sort((a, b) => a - b);
+            gValues.sort((a, b) => a - b);
+            bValues.sort((a, b) => a - b);
+
+            const medianIdx = Math.floor(rValues.length / 2);
+            const dstIdx = (y * width + x) * 4;
+            dst[dstIdx] = rValues[medianIdx];
+            dst[dstIdx + 1] = gValues[medianIdx];
+            dst[dstIdx + 2] = bValues[medianIdx];
+            dst[dstIdx + 3] = src[dstIdx + 3];
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Mean Filter: Smooths the image by replacing each pixel with the neighborhood mean.
+ * @param imageData Source image data
+ * @param radius Neighborhood radius
+ */
+export const processMean = (imageData: ImageData, radius: number): ImageData => {
+    if (radius < 1) return imageData;
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    const { offsets, size } = generateCircularMask(radius);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let rSum = 0, gSum = 0, bSum = 0;
+
+            for (const [dx, dy] of offsets) {
+                const px = Math.min(Math.max(x + dx, 0), width - 1);
+                const py = Math.min(Math.max(y + dy, 0), height - 1);
+                const idx = (py * width + px) * 4;
+                rSum += src[idx];
+                gSum += src[idx + 1];
+                bSum += src[idx + 2];
+            }
+
+            const dstIdx = (y * width + x) * 4;
+            dst[dstIdx] = clamp(Math.round(rSum / size));
+            dst[dstIdx + 1] = clamp(Math.round(gSum / size));
+            dst[dstIdx + 2] = clamp(Math.round(bSum / size));
+            dst[dstIdx + 3] = src[dstIdx + 3];
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Minimum Filter (Grayscale Erosion): Replaces each pixel with the smallest value in the neighborhood.
+ * @param imageData Source image data
+ * @param radius Neighborhood radius
+ */
+export const processMinimumFilter = (imageData: ImageData, radius: number): ImageData => {
+    if (radius < 1) return imageData;
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    const { offsets } = generateCircularMask(radius);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let rMin = 255, gMin = 255, bMin = 255;
+
+            for (const [dx, dy] of offsets) {
+                const px = Math.min(Math.max(x + dx, 0), width - 1);
+                const py = Math.min(Math.max(y + dy, 0), height - 1);
+                const idx = (py * width + px) * 4;
+                rMin = Math.min(rMin, src[idx]);
+                gMin = Math.min(gMin, src[idx + 1]);
+                bMin = Math.min(bMin, src[idx + 2]);
+            }
+
+            const dstIdx = (y * width + x) * 4;
+            dst[dstIdx] = rMin;
+            dst[dstIdx + 1] = gMin;
+            dst[dstIdx + 2] = bMin;
+            dst[dstIdx + 3] = src[dstIdx + 3];
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Maximum Filter (Grayscale Dilation): Replaces each pixel with the largest value in the neighborhood.
+ * @param imageData Source image data
+ * @param radius Neighborhood radius
+ */
+export const processMaximumFilter = (imageData: ImageData, radius: number): ImageData => {
+    if (radius < 1) return imageData;
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    const { offsets } = generateCircularMask(radius);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let rMax = 0, gMax = 0, bMax = 0;
+
+            for (const [dx, dy] of offsets) {
+                const px = Math.min(Math.max(x + dx, 0), width - 1);
+                const py = Math.min(Math.max(y + dy, 0), height - 1);
+                const idx = (py * width + px) * 4;
+                rMax = Math.max(rMax, src[idx]);
+                gMax = Math.max(gMax, src[idx + 1]);
+                bMax = Math.max(bMax, src[idx + 2]);
+            }
+
+            const dstIdx = (y * width + x) * 4;
+            dst[dstIdx] = rMax;
+            dst[dstIdx + 1] = gMax;
+            dst[dstIdx + 2] = bMax;
+            dst[dstIdx + 3] = src[dstIdx + 3];
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Unsharp Mask: Sharpens image by subtracting a blurred version and rescaling.
+ * @param imageData Source image data
+ * @param sigma Standard deviation (blur radius) of the Gaussian blur to subtract
+ * @param maskWeight Strength of filtering (0 to 0.9, where 0.9 is very strong)
+ */
+export const processUnsharpMask = (
+    imageData: ImageData,
+    sigma: number,
+    maskWeight: number
+): ImageData => {
+    if (sigma <= 0 || maskWeight <= 0) return imageData;
+
+    // Clamp mask weight to valid range
+    const weight = Math.min(0.9, Math.max(0, maskWeight));
+
+    // Get blurred version
+    const blurred = processGaussianBlur(imageData, sigma);
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const blurData = blurred.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    // Unsharp mask formula: output = (original + weight * (original - blurred)) / (1 + weight)
+    // This can be simplified to: output = original + weight * (original - blurred)
+    // when we want to preserve the contrast of large structures
+
+    for (let i = 0; i < src.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+            const original = src[i + c];
+            const blur = blurData[i + c];
+            const diff = original - blur;
+            // Apply unsharp mask: add weighted high-pass filtered version
+            const val = original + (weight / (1 - weight)) * diff;
+            dst[i + c] = clamp(Math.round(val));
+        }
+        dst[i + 3] = src[i + 3]; // Preserve alpha
+    }
+
+    return output;
+};
+
+/**
+ * Variance Filter: Highlights edges by replacing each pixel with the neighborhood variance.
+ * @param imageData Source image data
+ * @param radius Neighborhood radius
+ */
+export const processVariance = (imageData: ImageData, radius: number): ImageData => {
+    if (radius < 1) return imageData;
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    const { offsets, size } = generateCircularMask(radius);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            // Calculate mean first
+            let rSum = 0, gSum = 0, bSum = 0;
+            const rValues: number[] = [];
+            const gValues: number[] = [];
+            const bValues: number[] = [];
+
+            for (const [dx, dy] of offsets) {
+                const px = Math.min(Math.max(x + dx, 0), width - 1);
+                const py = Math.min(Math.max(y + dy, 0), height - 1);
+                const idx = (py * width + px) * 4;
+                rValues.push(src[idx]);
+                gValues.push(src[idx + 1]);
+                bValues.push(src[idx + 2]);
+                rSum += src[idx];
+                gSum += src[idx + 1];
+                bSum += src[idx + 2];
+            }
+
+            const rMean = rSum / size;
+            const gMean = gSum / size;
+            const bMean = bSum / size;
+
+            // Calculate variance
+            let rVar = 0, gVar = 0, bVar = 0;
+            for (let i = 0; i < size; i++) {
+                rVar += (rValues[i] - rMean) ** 2;
+                gVar += (gValues[i] - gMean) ** 2;
+                bVar += (bValues[i] - bMean) ** 2;
+            }
+            rVar /= size;
+            gVar /= size;
+            bVar /= size;
+
+            // Scale variance to 0-255 range (sqrt for better visualization)
+            const dstIdx = (y * width + x) * 4;
+            dst[dstIdx] = clamp(Math.round(Math.sqrt(rVar)));
+            dst[dstIdx + 1] = clamp(Math.round(Math.sqrt(gVar)));
+            dst[dstIdx + 2] = clamp(Math.round(Math.sqrt(bVar)));
+            dst[dstIdx + 3] = src[dstIdx + 3];
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Generate circular masks stack for visualization.
+ * Creates ImageData objects showing the circular masks used for various radii.
+ * Returns an array of { radius, imageData } objects.
+ */
+export const generateCircularMasksStack = (): { radius: number; imageData: ImageData }[] => {
+    const masks: { radius: number; imageData: ImageData }[] = [];
+    const radii = [1, 2, 3, 4, 5, 10, 15, 20];
+
+    for (const radius of radii) {
+        const size = radius * 2 + 1;
+        const imageData = new ImageData(size, size);
+        const data = imageData.data;
+
+        const { offsets } = generateCircularMask(radius);
+        const offsetSet = new Set(offsets.map(([dx, dy]) => `${dx + radius},${dy + radius}`));
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = (y * size + x) * 4;
+                const isInMask = offsetSet.has(`${x},${y}`);
+
+                if (isInMask) {
+                    // White pixel for mask
+                    data[idx] = 255;
+                    data[idx + 1] = 255;
+                    data[idx + 2] = 255;
+                } else {
+                    // Black pixel for background
+                    data[idx] = 0;
+                    data[idx + 1] = 0;
+                    data[idx + 2] = 0;
+                }
+                data[idx + 3] = 255; // Full opacity
+            }
+        }
+
+        masks.push({ radius, imageData });
+    }
+
+    return masks;
+};
+
+/**
+ * Parse kernel text input into a flat array of numbers.
+ * Validates that the kernel is square with odd dimensions.
+ */
+export const parseKernelText = (text: string): { kernel: number[]; size: number } | null => {
+    const lines = text.trim().split('\n').filter(line => line.trim() !== '');
+    if (lines.length === 0) return null;
+
+    const rows: number[][] = [];
+    for (const line of lines) {
+        const values = line.trim().split(/\s+/).map(v => parseFloat(v));
+        if (values.some(isNaN)) return null;
+        rows.push(values);
+    }
+
+    // Check all rows have same length
+    const width = rows[0].length;
+    if (rows.some(row => row.length !== width)) return null;
+
+    // Check it's square
+    if (rows.length !== width) return null;
+
+    // Check it's odd
+    if (width % 2 === 0) return null;
+
+    // Flatten to 1D array
+    const kernel = rows.flat();
+    return { kernel, size: width };
+};
