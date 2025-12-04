@@ -7,22 +7,26 @@ import { type RoiTool } from '../../types/roi';
 import { formatFileSize } from '../../utils/common/formatFileSize';
 import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
 import {
+  analyzeColorChannelHistogram,
   analyzeImageHistogram,
   applyThresholdMask,
+  type ColorChannel,
   flipHorizontal,
   flipVertical,
   getAutoThreshold,
+  getColorChannelHistogram,
   getHistogram,
   handleScaleToFit,
   handleZoomIn,
   handleZoomOut,
   processBrightnessContrast,
+  processColorBalance,
   processImageResize,
   rotateLeft90,
   rotateRight90
 } from '../../utils/nav-bar/imageUtils';
 import {
-  generateCircularMasksStack,
+  generateCircularMasksComposite,
   processClose,
   processConvertToMask,
   processConvolve,
@@ -47,6 +51,7 @@ import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
 import './ImageView.css';
 import BrightnessContrastDialog from './dialogs/bright-contrast/BrightContrast';
+import ColorBalanceDialog from './dialogs/color-balance/ColorBalanceDialog';
 import FiltersDialog, { type FilterParams, type FilterType } from './dialogs/filters/FiltersDialog';
 import ImageSizeDialog from './dialogs/image-size/ImageSizeDialog';
 import NotificationBar, { type NotificationType } from './dialogs/notifications/NotificationBar';
@@ -163,6 +168,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [showFilterDialog, setShowFilterDialog] = useState(false);
   const [currentFilterType, setCurrentFilterType] = useState<FilterType | null>(null);
   const [filterOriginalImageData, setFilterOriginalImageData] = useState<ImageData | null>(null);
+
+  // Color Balance Dialog state
+  const [showColorBalance, setShowColorBalance] = useState(false);
+  const [colorBalanceMin, setColorBalanceMin] = useState(0);
+  const [colorBalanceMax, setColorBalanceMax] = useState(255);
+  const [colorBalanceChannel, setColorBalanceChannel] = useState<ColorChannel>('All');
+  const [colorBalanceHistogram, setColorBalanceHistogram] = useState<number[]>([]);
+  const [colorBalanceOriginalImageData, setColorBalanceOriginalImageData] = useState<ImageData | null>(null);
   const showNotification = (message: string, type: NotificationType = 'info') => {
     setNotification({ message, type, isVisible: true });
   };
@@ -597,6 +610,233 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   }, [currentImageURL]); // Re-bind khi URL đổi
 
   // ============================================
+  // COLOR BALANCE DIALOG HANDLERS
+  // ============================================
+
+  // Helper function to check if a specific color exists in the image
+  const hasColorInImage = (imageData: ImageData, channel: ColorChannel): boolean => {
+    if (channel === 'All') return true; // 'All' always works
+    
+    const data = imageData.data;
+    const threshold = 30; // Minimum difference to consider as "having" that color
+    const sampleSize = Math.min(2000, data.length / 4);
+    const step = Math.max(1, Math.floor(data.length / 4 / sampleSize));
+    
+    let colorPixelCount = 0;
+    const minPixelsRequired = sampleSize * 0.005; // At least 0.5% of pixels should have this color
+    
+    for (let i = 0; i < data.length / 4; i += step) {
+      const idx = i * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      
+      let hasColor = false;
+      
+      switch (channel) {
+        case 'Red':
+          // Red: R is significantly higher than G and B
+          hasColor = r > g + threshold && r > b + threshold;
+          break;
+        case 'Green':
+          // Green: G is significantly higher than R and B
+          hasColor = g > r + threshold && g > b + threshold;
+          break;
+        case 'Blue':
+          // Blue: B is significantly higher than R and G
+          hasColor = b > r + threshold && b > g + threshold;
+          break;
+        case 'Cyan':
+          // Cyan: G and B are high, R is low (opposite of Red)
+          hasColor = g > r + threshold && b > r + threshold;
+          break;
+        case 'Magenta':
+          // Magenta: R and B are high, G is low (opposite of Green)
+          hasColor = r > g + threshold && b > g + threshold;
+          break;
+        case 'Yellow':
+          // Yellow: R and G are high, B is low (opposite of Blue)
+          hasColor = r > b + threshold && g > b + threshold;
+          break;
+      }
+      
+      if (hasColor) {
+        colorPixelCount++;
+        if (colorPixelCount >= minPixelsRequired) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  };
+
+  const handleOpenColorBalanceEvent = () => {
+    const dataObj = getImageData();
+    if (dataObj) {
+      setColorBalanceOriginalImageData(dataObj.imageData);
+      const histogram = getColorChannelHistogram(dataObj.imageData, colorBalanceChannel);
+      setColorBalanceHistogram(histogram);
+      setColorBalanceMin(0);
+      setColorBalanceMax(255);
+      setShowColorBalance(true);
+    }
+  };
+
+  // Handle color channel change - update histogram for new channel
+  const handleColorChannelChange = (channel: ColorChannel) => {
+    if (colorBalanceOriginalImageData && channel !== 'All') {
+      // Check if the selected color exists in the image
+      if (!hasColorInImage(colorBalanceOriginalImageData, channel)) {
+        showNotification(`No ${channel.toLowerCase()} pixels detected in the image. Adjustment will have no effect.`, 'warning');
+      }
+    }
+    
+    setColorBalanceChannel(channel);
+    if (colorBalanceOriginalImageData) {
+      const histogram = getColorChannelHistogram(colorBalanceOriginalImageData, channel);
+      setColorBalanceHistogram(histogram);
+      // Reset min/max when changing channel
+      setColorBalanceMin(0);
+      setColorBalanceMax(255);
+      // Also restore original image when changing channel
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = colorBalanceOriginalImageData.width;
+      tempCanvas.height = colorBalanceOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(colorBalanceOriginalImageData, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+    }
+  };
+
+  // Handle color balance slider changes - preview mode
+  const handleColorBalanceChange = (newMin: number, newMax: number, channel: ColorChannel) => {
+    setColorBalanceMin(newMin);
+    setColorBalanceMax(newMax);
+
+    // Skip processing if channel color doesn't exist in image (except 'All')
+    if (colorBalanceOriginalImageData && channel !== 'All') {
+      if (!hasColorInImage(colorBalanceOriginalImageData, channel)) {
+        return; // Don't apply changes if color doesn't exist
+      }
+    }
+
+    // Preview color balance on original image
+    if (colorBalanceOriginalImageData) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = colorBalanceOriginalImageData.width;
+      tempCanvas.height = colorBalanceOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx) return;
+
+      // Clone original data
+      const previewData = new ImageData(
+        new Uint8ClampedArray(colorBalanceOriginalImageData.data),
+        colorBalanceOriginalImageData.width,
+        colorBalanceOriginalImageData.height
+      );
+
+      // Apply color balance
+      processColorBalance(previewData, newMin, newMax, channel);
+      ctx.putImageData(previewData, 0, 0);
+      updateImageFromCanvas(tempCanvas, false);
+    }
+  };
+
+  // Handle auto color balance
+  const handleColorBalanceAuto = () => {
+    if (!colorBalanceOriginalImageData) return;
+
+    // Check if the selected color exists in the image
+    if (colorBalanceChannel !== 'All' && !hasColorInImage(colorBalanceOriginalImageData, colorBalanceChannel)) {
+      showNotification(`No ${colorBalanceChannel.toLowerCase()} pixels detected. Auto adjustment skipped.`, 'warning');
+      return;
+    }
+
+    const { min, max } = analyzeColorChannelHistogram(colorBalanceOriginalImageData, colorBalanceChannel);
+    handleColorBalanceChange(min, max, colorBalanceChannel);
+  };
+
+  // Handle color balance reset
+  const handleColorBalanceReset = () => {
+    // Restore original image
+    if (colorBalanceOriginalImageData) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = colorBalanceOriginalImageData.width;
+      tempCanvas.height = colorBalanceOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(colorBalanceOriginalImageData, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+    }
+
+    setColorBalanceMin(0);
+    setColorBalanceMax(255);
+  };
+
+  // Handle color balance apply
+  const handleColorBalanceApply = () => {
+    if (!colorBalanceOriginalImageData) return;
+
+    // Check if the selected color exists in the image
+    if (colorBalanceChannel !== 'All' && !hasColorInImage(colorBalanceOriginalImageData, colorBalanceChannel)) {
+      showNotification(`No ${colorBalanceChannel.toLowerCase()} pixels in the image. No changes applied.`, 'warning');
+      setColorBalanceOriginalImageData(null);
+      setShowColorBalance(false);
+      return;
+    }
+
+    pushUndo();
+
+    const resultCanvas = document.createElement('canvas');
+    resultCanvas.width = colorBalanceOriginalImageData.width;
+    resultCanvas.height = colorBalanceOriginalImageData.height;
+    const ctx = resultCanvas.getContext('2d');
+    if (ctx) {
+      const processedData = new ImageData(
+        new Uint8ClampedArray(colorBalanceOriginalImageData.data),
+        colorBalanceOriginalImageData.width,
+        colorBalanceOriginalImageData.height
+      );
+      processColorBalance(processedData, colorBalanceMin, colorBalanceMax, colorBalanceChannel);
+      ctx.putImageData(processedData, 0, 0);
+      updateImageFromCanvas(resultCanvas, false);
+    }
+
+    setColorBalanceOriginalImageData(null);
+    setShowColorBalance(false);
+    showNotification('Color balance applied successfully', 'success');
+  };
+
+  // Handle color balance dialog close
+  const handleColorBalanceClose = () => {
+    // Restore original image when closing without applying
+    if (colorBalanceOriginalImageData) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = colorBalanceOriginalImageData.width;
+      tempCanvas.height = colorBalanceOriginalImageData.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(colorBalanceOriginalImageData, 0, 0);
+        updateImageFromCanvas(tempCanvas, false);
+      }
+    }
+
+    setColorBalanceOriginalImageData(null);
+    setShowColorBalance(false);
+  };
+
+  useEffect(() => {
+    window.addEventListener('openColorBalance', handleOpenColorBalanceEvent);
+    return () => {
+      window.removeEventListener('openColorBalance', handleOpenColorBalanceEvent);
+    };
+  }, [currentImageURL, colorBalanceChannel]);
+
+  // ============================================
   // THRESHOLD DIALOG HANDLERS
   // ============================================
 
@@ -730,7 +970,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
     setThresholdMin(newMin);
     setThresholdMax(newMax);
-    // handleThresholdChange(newMin, newMax, thresholdMode);
+    handleThresholdChange(newMin, newMax, thresholdMode);
   };
 
   // Handle threshold reset
@@ -859,10 +1099,30 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     }
   };
 
-  // Handle showing circular masks (generates a stack)
+  // Handle showing circular masks (generates a composite image and adds to stack)
   const handleShowCircularMasks = () => {
-    const masks = generateCircularMasksStack();
-    showNotification(`Generated ${masks.length} circular masks for radii: 1, 2, 3, 4, 5, 10, 15, 20`, 'info');
+    const { dataUrl, width, height } = generateCircularMasksComposite();
+    
+    // Create a new image entry for the circular masks visualization
+    const masksImage: ImageInfo = {
+      id: Date.now(), // Unique ID
+      filename: 'Circular_Masks.png',
+      url: dataUrl,
+      width: width,
+      height: height,
+      size: 0, // Size not applicable for generated image
+      bitDepth: 8,
+      uploaded_on: new Date().toISOString(),
+      mask_filename: null,
+      mask_filepath: null,
+      status: 'generated',
+    };
+    
+    // Add to visible images and navigate to it
+    setVisibleImages(prev => [...prev, masksImage]);
+    setCurrentIndex(visibleImages.length); // Navigate to the new image
+    
+    showNotification('Generated circular masks visualization for radii: 1, 2, 3, 4, 5, 10, 15, 20', 'success');
     setShowFilterDialog(false);
   };
 
@@ -935,8 +1195,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
   // Handle filter dialog close
   const handleFilterClose = () => {
-    // Restore original image when closing without applying
-    handleFilterReset();
+    // Just close the dialog - reset is handled by handleCancel in FiltersDialog
+    // which calls onReset() when needed (when preview was enabled)
     setFilterOriginalImageData(null);
     setShowFilterDialog(false);
   };
@@ -1234,6 +1494,20 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         bitDepth={(currentFile?.bitDepth || 8) as 8 | 16 | 32}
         dataRangeMin={getCurrentBitDepthRange().min}
         dataRangeMax={getCurrentBitDepthRange().max}
+      />
+
+      <ColorBalanceDialog
+        isOpen={showColorBalance}
+        onClose={handleColorBalanceClose}
+        onApply={handleColorBalanceApply}
+        onChange={handleColorBalanceChange}
+        onReset={handleColorBalanceReset}
+        onAuto={handleColorBalanceAuto}
+        currentMin={colorBalanceMin}
+        currentMax={colorBalanceMax}
+        histogram={colorBalanceHistogram}
+        selectedChannel={colorBalanceChannel}
+        onChannelChange={handleColorChannelChange}
       />
 
       <ThresholdDialog

@@ -320,26 +320,15 @@ const FiltersDialog = ({
         <>
             <div className="filter-field">
                 <label>Sigma (Radius):</label>
-                <div className="filter-input-row">
-                    <input
-                        type="range"
-                        min={0.1}
-                        max={20}
-                        step={0.1}
-                        value={sigma}
-                        onChange={(e) => setSigma(parseFloat(e.target.value))}
-                        className="filter-slider"
-                    />
-                    <input
-                        type="number"
-                        value={sigma}
-                        min={0.1}
-                        max={100}
-                        step={0.1}
-                        onChange={(e) => setSigma(parseFloat(e.target.value) || 0.1)}
-                        className="filter-number-input"
-                    />
-                </div>
+                <input
+                    type="number"
+                    value={sigma}
+                    min={0.1}
+                    max={100}
+                    step={0.1}
+                    onChange={(e) => setSigma(parseFloat(e.target.value) || 0.1)}
+                    className="filter-number-input"
+                />
             </div>
             <p className="filter-hint">
                 Sigma is the standard deviation of the Gaussian function.
@@ -353,26 +342,15 @@ const FiltersDialog = ({
         <>
             <div className="filter-field">
                 <label>Radius:</label>
-                <div className="filter-input-row">
-                    <input
-                        type="range"
-                        min={1}
-                        max={20}
-                        step={1}
-                        value={radius}
-                        onChange={(e) => setRadius(parseInt(e.target.value))}
-                        className="filter-slider"
-                    />
-                    <input
-                        type="number"
-                        value={radius}
-                        min={1}
-                        max={100}
-                        step={1}
-                        onChange={(e) => setRadius(parseInt(e.target.value) || 1)}
-                        className="filter-number-input"
-                    />
-                </div>
+                <input
+                    type="number"
+                    value={radius}
+                    min={1}
+                    max={100}
+                    step={1}
+                    onChange={(e) => setRadius(parseInt(e.target.value) || 1)}
+                    className="filter-number-input"
+                />
             </div>
             <p className="filter-hint">
                 Larger radius values produce stronger effects but take longer to process.
@@ -385,49 +363,27 @@ const FiltersDialog = ({
         <>
             <div className="filter-field">
                 <label>Radius (Sigma):</label>
-                <div className="filter-input-row">
-                    <input
-                        type="range"
-                        min={0.1}
-                        max={20}
-                        step={0.1}
-                        value={unsharpSigma}
-                        onChange={(e) => setUnsharpSigma(parseFloat(e.target.value))}
-                        className="filter-slider"
-                    />
-                    <input
-                        type="number"
-                        value={unsharpSigma}
-                        min={0.1}
-                        max={100}
-                        step={0.1}
-                        onChange={(e) => setUnsharpSigma(parseFloat(e.target.value) || 0.1)}
-                        className="filter-number-input"
-                    />
-                </div>
+                <input
+                    type="number"
+                    value={unsharpSigma}
+                    min={0.1}
+                    max={100}
+                    step={0.1}
+                    onChange={(e) => setUnsharpSigma(parseFloat(e.target.value) || 0.1)}
+                    className="filter-number-input"
+                />
             </div>
             <div className="filter-field">
                 <label>Mask Weight:</label>
-                <div className="filter-input-row">
-                    <input
-                        type="range"
-                        min={0.1}
-                        max={0.9}
-                        step={0.05}
-                        value={maskWeight}
-                        onChange={(e) => setMaskWeight(parseFloat(e.target.value))}
-                        className="filter-slider"
-                    />
-                    <input
-                        type="number"
-                        value={maskWeight}
-                        min={0.1}
-                        max={0.9}
-                        step={0.05}
-                        onChange={(e) => setMaskWeight(parseFloat(e.target.value) || 0.1)}
-                        className="filter-number-input"
-                    />
-                </div>
+                <input
+                    type="number"
+                    value={maskWeight}
+                    min={0.1}
+                    max={0.9}
+                    step={0.05}
+                    onChange={(e) => setMaskWeight(parseFloat(e.target.value) || 0.1)}
+                    className="filter-number-input"
+                />
             </div>
             <p className="filter-hint">
                 Radius is the blur amount to subtract. Mask Weight determines sharpening strength.

@@ -35,6 +35,7 @@ import {
 import {
     handleConvertBitDepth,
     handleOpenBrightnessContrast,
+    handleOpenColorBalance,
     handleScaleToFit,
     handleZoomIn,
     handleZoomOut,
@@ -154,7 +155,7 @@ const NavBar = () => {
                             label: "Adjust", subItems: [
                                 { label: "Brightness/Contrast...", onClick: handleOpenBrightnessContrast },
                                 { label: "Size", onClick: handleOpenImageSize },
-                                { label: "Color Balance..." },
+                                { label: "Color Balance...", onClick: handleOpenColorBalance },
                                 { label: "Threshold...", onClick: handleOpenThreshold}
                             ]
                         }
