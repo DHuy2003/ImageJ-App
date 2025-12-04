@@ -15,5 +15,5 @@
 
 
 .brush-canvas.eraser-mode {
-    cursor: crosshair;
+    cursor: url('/images/eraser.png') 8 16, crosshair;
 }

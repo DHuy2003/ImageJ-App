@@ -466,13 +466,6 @@ html {
   overflow: hidden;
 }
 
-#image-container #image-display.zoom-mode {
-  overflow: auto;
-  justify-content: flex-start;
-  align-items: flex-start;
-  padding: 20px;
-}
-
 #image-display.show-mask-layout {
   display: flex;
   flex-direction: row;
@@ -482,37 +475,12 @@ html {
   padding: 20px;
 }
 
-#image-display.show-mask-layout #image-wrapper,
-#image-display.show-mask-layout .mask-wrapper {
-  flex: 1;
-  max-width: calc(50% - 10px);
-  max-height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-#image-display.show-mask-layout #image-wrapper img,
-#image-display.show-mask-layout .mask-wrapper img {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  /* Giữ độ sắc nét */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-}
-
 #image-display .small-image {
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
-  /* Giữ độ sắc nét */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
 }
 
 #image-display #image-wrapper {
@@ -523,17 +491,7 @@ html {
   max-width: 100%;
   max-height: 100%;
   overflow: hidden;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges; 
 }
-
-#image-display #image-wrapper.zoom-wrapper {
-  max-width: none;
-  max-height: none;
-  overflow: visible;
-  display: inline-block;
-}
-
 
 #image-wrapper img {
   max-width: 100%; 
@@ -541,6 +499,9 @@ html {
   width: auto;       
   height: auto;      
   object-fit: contain; 
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 
 #image-wrapper.pan-mode {
@@ -558,48 +519,6 @@ html {
   font-weight: 500;
   color: black;
   margin-top: 10px;
-}
-
-/* ============ Mask Wrapper ============ */
-.mask-wrapper {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  max-width: 100%;
-  max-height: 100%;
-  overflow: hidden;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.mask-wrapper.zoom-wrapper {
-  max-width: none;
-  max-height: none;
-  overflow: visible;
-  display: inline-block;
-}
-
-.mask-wrapper img {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  border-radius: 8px;
-  display: block;
-  /* Giữ độ sắc nét khi zoom */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-}
-
-.mask-wrapper.zoom-wrapper img {
-  max-width: none;
-  max-height: none;
-  display: block;
-  /* Giữ độ sắc nét khi zoom */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
 }
 
 /* ============ Crop Controls ============ */

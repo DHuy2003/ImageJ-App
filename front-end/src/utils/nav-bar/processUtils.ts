@@ -1265,3 +1265,212 @@ export const parseKernelText = (text: string): { kernel: number[]; size: number 
     const kernel = rows.flat();
     return { kernel, size: width };
 };
+
+// ============================================
+// NOISE FUNCTIONS (Process > Noise submenu)
+// ============================================
+
+/** Gaussian random (Box–Muller), ~ N(0, 1) */
+const gaussianRandom = (): number => {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+};
+
+/**
+ * Add Noise (ImageJ-like):
+ *  - Gaussian noise, mean = 0, sigma ≈ 25.
+ *  - Không notification.
+ */
+export const processAddNoise = (imageData: ImageData): ImageData => {
+    const stdDev = 25; // nếu muốn mạnh hơn nữa thì tăng lên 30–35
+
+    const output = createOutputImage(imageData);
+    const src = imageData.data;
+    const dst = output.data;
+
+    for (let i = 0; i < src.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+            const noise = gaussianRandom() * stdDev;
+            dst[i + c] = clamp(src[i + c] + noise);
+        }
+        dst[i + 3] = src[i + 3];
+    }
+
+    return output;
+};
+
+/**
+ * Add Specified Noise:
+ * Thêm Gaussian noise với stdDev do user nhập (mean = 0).
+ * Popup sẽ hỏi stdDev, ở đây chỉ nhận giá trị truyền xuống.
+ * Không notification.
+ */
+export const processAddSpecifiedNoise = (
+    imageData: ImageData,
+    options?: { stdDev?: number }
+): ImageData => {
+    const stdDev = options?.stdDev ?? 25;
+
+    const output = createOutputImage(imageData);
+    const src = imageData.data;
+    const dst = output.data;
+
+    for (let i = 0; i < src.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+            const noise = gaussianRandom() * stdDev;
+            dst[i + c] = clamp(src[i + c] + noise);
+        }
+        dst[i + 3] = src[i + 3];
+    }
+
+    return output;
+};
+
+/**
+ * Salt and Pepper Noise:
+ * Với xác suất density, pixel sẽ thành 0 hoặc 255.
+ * Không notification.
+ */
+export const processSaltAndPepperNoise = (
+    imageData: ImageData,
+    density: number = 0.05
+): ImageData => {
+    const output = createOutputImage(imageData);
+    const src = imageData.data;
+    const dst = output.data;
+
+    const p = Math.max(0, Math.min(1, density));
+
+    for (let i = 0; i < src.length; i += 4) {
+        const r = Math.random();
+        if (r < p) {
+            const val = r < p / 2 ? 0 : 255;
+            dst[i] = val;
+            dst[i + 1] = val;
+            dst[i + 2] = val;
+        } else {
+            dst[i] = src[i];
+            dst[i + 1] = src[i + 1];
+            dst[i + 2] = src[i + 2];
+        }
+        dst[i + 3] = src[i + 3];
+    }
+
+    return output;
+};
+
+/**
+ * Despeckle:
+ * Median filter radius 1 (như ImageJ).
+ * Không notification.
+ */
+export const processDespeckle = (imageData: ImageData): ImageData => {
+    const result = processMedian(imageData, 1);
+    return result;
+};
+
+/**
+ * Remove Outliers:
+ * Nếu pixel lệch khỏi mean lân cận > threshold
+ *   - mode 'bright': pixel > mean + threshold
+ *   - mode 'dark'  : pixel < mean - threshold
+ *   - mode 'both'  : bright hoặc dark
+ * Không notification.
+ */
+export const processRemoveOutliers = (
+    imageData: ImageData,
+    radius: number = 1,
+    threshold: number = 50,
+    mode: 'bright' | 'dark' | 'both' = 'both'
+): ImageData => {
+    const width = imageData.width;
+    const height = imageData.height;
+    const src = imageData.data;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+
+    const { offsets, size } = generateCircularMask(radius);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let rSum = 0, gSum = 0, bSum = 0;
+
+            for (const [dx, dy] of offsets) {
+            const px = Math.min(Math.max(x + dx, 0), width - 1);
+            const py = Math.min(Math.max(y + dy, 0), height - 1);
+            const idx = (py * width + px) * 4;
+            rSum += src[idx];
+            gSum += src[idx + 1];
+            bSum += src[idx + 2];
+            }
+
+            const rMean = rSum / size;
+            const gMean = gSum / size;
+            const bMean = bSum / size;
+
+            const idxCenter = (y * width + x) * 4;
+            const r = src[idxCenter];
+            const g = src[idxCenter + 1];
+            const b = src[idxCenter + 2];
+
+            const brightOutlier =
+            (r - rMean) > threshold ||
+            (g - gMean) > threshold ||
+            (b - bMean) > threshold;
+
+            const darkOutlier =
+            (rMean - r) > threshold ||
+            (gMean - g) > threshold ||
+            (bMean - b) > threshold;
+
+            const isOutlier =
+            mode === 'bright'
+                ? brightOutlier
+                : mode === 'dark'
+                ? darkOutlier
+                : (brightOutlier || darkOutlier);
+
+            if (isOutlier) {
+            dst[idxCenter] = clamp(Math.round(rMean));
+            dst[idxCenter + 1] = clamp(Math.round(gMean));
+            dst[idxCenter + 2] = clamp(Math.round(bMean));
+            } else {
+            dst[idxCenter] = r;
+            dst[idxCenter + 1] = g;
+            dst[idxCenter + 2] = b;
+            }
+
+            dst[idxCenter + 3] = src[idxCenter + 3];
+        }
+    }
+
+    return output;
+};
+
+/**
+ * Remove NaNs:
+ * Nếu value không finite (NaN / ±Inf) → set về 0, alpha 255.
+ * Không notification. Việc check 32-bit làm ở hook.
+ */
+export const processRemoveNaNs = (imageData: ImageData): ImageData => {
+    const output = createOutputImage(imageData);
+    const src = imageData.data;
+    const dst = output.data;
+
+    for (let i = 0; i < src.length; i += 4) {
+        for (let c = 0; c < 4; c++) {
+            const v = src[i + c];
+            if (!Number.isFinite(v) || Number.isNaN(v)) {
+            dst[i + c] = c === 3 ? 255 : 0;
+            } else {
+            dst[i + c] = c === 3 ? v : clamp(v);
+            }
+        }
+    }
+
+    return output;
+};
+
+  
