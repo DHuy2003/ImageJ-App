@@ -730,7 +730,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
     setThresholdMin(newMin);
     setThresholdMax(newMax);
-    // handleThresholdChange(newMin, newMax, thresholdMode);
+    handleThresholdChange(newMin, newMax, thresholdMode);
   };
 
   // Handle threshold reset
