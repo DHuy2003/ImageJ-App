@@ -755,6 +755,7 @@ const generateCircularMask = (radius: number): { offsets: [number, number][], si
 
 /**
  * Median Filter: Reduces noise by replacing each pixel with the median of neighboring values.
+ * Uses histogram-based approach for O(1) median finding per pixel (much faster than sorting).
  * @param imageData Source image data
  * @param radius Neighborhood radius
  */
@@ -767,33 +768,77 @@ export const processMedian = (imageData: ImageData, radius: number): ImageData =
     const output = createOutputImage(imageData);
     const dst = output.data;
 
-    const { offsets } = generateCircularMask(radius);
+    const { offsets, size } = generateCircularMask(radius);
+    const medianPos = Math.floor(size / 2);
+
+    // Use histogram-based median for each channel (O(256) = O(1) per pixel)
+    const rHist = new Uint32Array(256);
+    const gHist = new Uint32Array(256);
+    const bHist = new Uint32Array(256);
+
+    // Helper to find median from histogram
+    const findMedian = (hist: Uint32Array, targetPos: number): number => {
+        let count = 0;
+        for (let i = 0; i < 256; i++) {
+            count += hist[i];
+            if (count > targetPos) return i;
+        }
+        return 255;
+    };
 
     for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const rValues: number[] = [];
-            const gValues: number[] = [];
-            const bValues: number[] = [];
+        // Reset histograms for each row
+        rHist.fill(0);
+        gHist.fill(0);
+        bHist.fill(0);
 
+        // Initialize histogram for first pixel in row
+        for (const [dx, dy] of offsets) {
+            const px = Math.min(Math.max(dx, 0), width - 1);
+            const py = Math.min(Math.max(y + dy, 0), height - 1);
+            const idx = (py * width + px) * 4;
+            rHist[src[idx]]++;
+            gHist[src[idx + 1]]++;
+            bHist[src[idx + 2]]++;
+        }
+
+        // Process first pixel
+        const dstIdx0 = y * width * 4;
+        dst[dstIdx0] = findMedian(rHist, medianPos);
+        dst[dstIdx0 + 1] = findMedian(gHist, medianPos);
+        dst[dstIdx0 + 2] = findMedian(bHist, medianPos);
+        dst[dstIdx0 + 3] = src[dstIdx0 + 3];
+
+        // Slide window across the row
+        for (let x = 1; x < width; x++) {
+            // Remove pixels from left edge, add pixels from right edge
             for (const [dx, dy] of offsets) {
-                const px = Math.min(Math.max(x + dx, 0), width - 1);
-                const py = Math.min(Math.max(y + dy, 0), height - 1);
-                const idx = (py * width + px) * 4;
-                rValues.push(src[idx]);
-                gValues.push(src[idx + 1]);
-                bValues.push(src[idx + 2]);
+                // Remove old pixel (x-1 + dx)
+                const oldPx = Math.min(Math.max(x - 1 + dx, 0), width - 1);
+                const oldPy = Math.min(Math.max(y + dy, 0), height - 1);
+                const oldIdx = (oldPy * width + oldPx) * 4;
+
+                // Add new pixel (x + dx)
+                const newPx = Math.min(Math.max(x + dx, 0), width - 1);
+                const newPy = Math.min(Math.max(y + dy, 0), height - 1);
+                const newIdx = (newPy * width + newPx) * 4;
+
+                // Only update if the pixel positions actually changed
+                if (oldPx !== newPx || oldPy !== newPy) {
+                    rHist[src[oldIdx]]--;
+                    gHist[src[oldIdx + 1]]--;
+                    bHist[src[oldIdx + 2]]--;
+
+                    rHist[src[newIdx]]++;
+                    gHist[src[newIdx + 1]]++;
+                    bHist[src[newIdx + 2]]++;
+                }
             }
 
-            // Sort and get median
-            rValues.sort((a, b) => a - b);
-            gValues.sort((a, b) => a - b);
-            bValues.sort((a, b) => a - b);
-
-            const medianIdx = Math.floor(rValues.length / 2);
             const dstIdx = (y * width + x) * 4;
-            dst[dstIdx] = rValues[medianIdx];
-            dst[dstIdx + 1] = gValues[medianIdx];
-            dst[dstIdx + 2] = bValues[medianIdx];
+            dst[dstIdx] = findMedian(rHist, medianPos);
+            dst[dstIdx + 1] = findMedian(gHist, medianPos);
+            dst[dstIdx + 2] = findMedian(bHist, medianPos);
             dst[dstIdx + 3] = src[dstIdx + 3];
         }
     }
@@ -968,6 +1013,7 @@ export const processUnsharpMask = (
 
 /**
  * Variance Filter: Highlights edges by replacing each pixel with the neighborhood variance.
+ * Two-pass approach: first calculates all variances, then normalizes to 0-255 range.
  * @param imageData Source image data
  * @param radius Neighborhood radius
  */
@@ -982,46 +1028,59 @@ export const processVariance = (imageData: ImageData, radius: number): ImageData
 
     const { offsets, size } = generateCircularMask(radius);
 
+    // First pass: calculate all variance values and find max for normalization
+    const variances = new Float32Array(width * height * 3);
+    let maxVar = 0;
+
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-            // Calculate mean first
+            // Calculate mean first using running sum (more efficient)
             let rSum = 0, gSum = 0, bSum = 0;
-            const rValues: number[] = [];
-            const gValues: number[] = [];
-            const bValues: number[] = [];
+            let rSumSq = 0, gSumSq = 0, bSumSq = 0;
 
             for (const [dx, dy] of offsets) {
                 const px = Math.min(Math.max(x + dx, 0), width - 1);
                 const py = Math.min(Math.max(y + dy, 0), height - 1);
                 const idx = (py * width + px) * 4;
-                rValues.push(src[idx]);
-                gValues.push(src[idx + 1]);
-                bValues.push(src[idx + 2]);
-                rSum += src[idx];
-                gSum += src[idx + 1];
-                bSum += src[idx + 2];
+                const r = src[idx];
+                const g = src[idx + 1];
+                const b = src[idx + 2];
+                rSum += r;
+                gSum += g;
+                bSum += b;
+                rSumSq += r * r;
+                gSumSq += g * g;
+                bSumSq += b * b;
             }
 
-            const rMean = rSum / size;
-            const gMean = gSum / size;
-            const bMean = bSum / size;
+            // Variance = E[X²] - E[X]² (more efficient formula)
+            const rVar = (rSumSq / size) - (rSum / size) ** 2;
+            const gVar = (gSumSq / size) - (gSum / size) ** 2;
+            const bVar = (bSumSq / size) - (bSum / size) ** 2;
 
-            // Calculate variance
-            let rVar = 0, gVar = 0, bVar = 0;
-            for (let i = 0; i < size; i++) {
-                rVar += (rValues[i] - rMean) ** 2;
-                gVar += (gValues[i] - gMean) ** 2;
-                bVar += (bValues[i] - bMean) ** 2;
-            }
-            rVar /= size;
-            gVar /= size;
-            bVar /= size;
+            const varIdx = (y * width + x) * 3;
+            variances[varIdx] = Math.max(0, rVar); // Clamp to avoid tiny negative due to floating point
+            variances[varIdx + 1] = Math.max(0, gVar);
+            variances[varIdx + 2] = Math.max(0, bVar);
 
-            // Scale variance to 0-255 range (sqrt for better visualization)
+            maxVar = Math.max(maxVar, rVar, gVar, bVar);
+        }
+    }
+
+    // Second pass: normalize and output
+    // Use sqrt for better visualization (standard deviation), then scale to 0-255
+    const maxStd = Math.sqrt(maxVar);
+    const scale = maxStd > 0 ? 255 / maxStd : 1;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const varIdx = (y * width + x) * 3;
             const dstIdx = (y * width + x) * 4;
-            dst[dstIdx] = clamp(Math.round(Math.sqrt(rVar)));
-            dst[dstIdx + 1] = clamp(Math.round(Math.sqrt(gVar)));
-            dst[dstIdx + 2] = clamp(Math.round(Math.sqrt(bVar)));
+
+            // Output standard deviation scaled to 0-255
+            dst[dstIdx] = clamp(Math.round(Math.sqrt(variances[varIdx]) * scale));
+            dst[dstIdx + 1] = clamp(Math.round(Math.sqrt(variances[varIdx + 1]) * scale));
+            dst[dstIdx + 2] = clamp(Math.round(Math.sqrt(variances[varIdx + 2]) * scale));
             dst[dstIdx + 3] = src[dstIdx + 3];
         }
     }
@@ -1070,6 +1129,111 @@ export const generateCircularMasksStack = (): { radius: number; imageData: Image
     }
 
     return masks;
+};
+
+/**
+ * Generate a composite image showing all circular masks with labels.
+ * Creates a single image with all masks arranged in a grid with radius labels.
+ * Returns a data URL that can be displayed.
+ */
+export const generateCircularMasksComposite = (): { dataUrl: string; width: number; height: number } => {
+    const radii = [1, 2, 3, 4, 5, 10, 15, 20];
+    const padding = 20;
+    const labelHeight = 25;
+    const cellPadding = 10;
+    
+    // Calculate dimensions for each mask cell
+    const maskSizes = radii.map(r => r * 2 + 1);
+    const maxMaskSize = Math.max(...maskSizes);
+    
+    // Arrange in 2 rows of 4
+    const cols = 4;
+    const rows = 2;
+    const cellWidth = maxMaskSize + cellPadding * 2;
+    const cellHeight = maxMaskSize + labelHeight + cellPadding * 2;
+    
+    const canvasWidth = cols * cellWidth + padding * 2;
+    const canvasHeight = rows * cellHeight + padding * 2;
+    
+    // Create canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d')!;
+    
+    // Fill background with dark gray
+    ctx.fillStyle = '#1a1f28';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    
+    // Draw each mask
+    radii.forEach((radius, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        
+        const cellX = padding + col * cellWidth;
+        const cellY = padding + row * cellHeight;
+        
+        const maskSize = radius * 2 + 1;
+        const { offsets } = generateCircularMask(radius);
+        const offsetSet = new Set(offsets.map(([dx, dy]) => `${dx + radius},${dy + radius}`));
+        
+        // Center the mask in the cell
+        const maskX = cellX + cellPadding + (maxMaskSize - maskSize) / 2;
+        const maskY = cellY + cellPadding + (maxMaskSize - maskSize) / 2;
+        
+        // Draw mask background (dark)
+        ctx.fillStyle = '#2d3748';
+        ctx.fillRect(maskX - 2, maskY - 2, maskSize + 4, maskSize + 4);
+        
+        // Draw each pixel of the mask (scaled up for visibility)
+        const pixelSize = Math.max(1, Math.floor(40 / maskSize)); // Scale small masks
+        const scaledSize = maskSize * pixelSize;
+        const scaledMaskX = cellX + cellPadding + (maxMaskSize * pixelSize - scaledSize) / 2 / pixelSize + (maxMaskSize - scaledSize / pixelSize) / 2;
+        const scaledMaskY = cellY + cellPadding + (maxMaskSize - maskSize) / 2;
+        
+        for (let y = 0; y < maskSize; y++) {
+            for (let x = 0; x < maskSize; x++) {
+                const isInMask = offsetSet.has(`${x},${y}`);
+                ctx.fillStyle = isInMask ? '#ffffff' : '#000000';
+                ctx.fillRect(
+                    maskX + x,
+                    maskY + y,
+                    1,
+                    1
+                );
+            }
+        }
+        
+        // Draw border around mask
+        ctx.strokeStyle = '#4b5563';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(maskX - 1, maskY - 1, maskSize + 2, maskSize + 2);
+        
+        // Draw label
+        ctx.fillStyle = '#e8ecf1';
+        ctx.font = '12px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        const labelX = cellX + cellWidth / 2;
+        const labelY = cellY + cellPadding + maxMaskSize + labelHeight - 5;
+        ctx.fillText(`r=${radius} (${maskSize}×${maskSize})`, labelX, labelY);
+        
+        // Draw pixel count
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '10px "Segoe UI", sans-serif';
+        ctx.fillText(`${offsets.length} pixels`, labelX, labelY + 12);
+    });
+    
+    // Add title
+    ctx.fillStyle = '#e8ecf1';
+    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('Circular Masks for Rank Filters', padding, 15);
+    
+    return {
+        dataUrl: canvas.toDataURL('image/png'),
+        width: canvasWidth,
+        height: canvasHeight
+    };
 };
 
 /**

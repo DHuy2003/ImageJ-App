@@ -15,6 +15,199 @@ export const handleOpenBrightnessContrast = (): void => {
     window.dispatchEvent(new CustomEvent('openBrightnessContrast'));
 };
 
+export const handleOpenColorBalance = (): void => {
+    window.dispatchEvent(new CustomEvent('openColorBalance'));
+};
+
+// ============================================
+// COLOR BALANCE PROCESSING
+// ============================================
+
+export type ColorChannel = 'Red' | 'Green' | 'Blue' | 'Cyan' | 'Magenta' | 'Yellow' | 'All';
+
+/**
+ * Check if a pixel has the specified color characteristic
+ * @param r - Red value
+ * @param g - Green value
+ * @param b - Blue value
+ * @param channel - Color channel to check
+ * @param threshold - Minimum difference to consider as "having" that color
+ * @returns true if pixel has the specified color
+ */
+const pixelHasColor = (r: number, g: number, b: number, channel: ColorChannel, threshold: number = 15): boolean => {
+    switch (channel) {
+        case 'Red':
+            // Red: R is higher than G and B
+            return r > g + threshold && r > b + threshold;
+        case 'Green':
+            // Green: G is higher than R and B
+            return g > r + threshold && g > b + threshold;
+        case 'Blue':
+            // Blue: B is higher than R and G
+            return b > r + threshold && b > g + threshold;
+        case 'Cyan':
+            // Cyan: G and B are high, R is low (opposite of Red)
+            return g > r + threshold && b > r + threshold;
+        case 'Magenta':
+            // Magenta: R and B are high, G is low (opposite of Green)
+            return r > g + threshold && b > g + threshold;
+        case 'Yellow':
+            // Yellow: R and G are high, B is low (opposite of Blue)
+            return r > b + threshold && g > b + threshold;
+        case 'All':
+            return true; // All pixels
+        default:
+            return false;
+    }
+};
+
+/**
+ * Process color balance adjustment for a specific color channel
+ * Only affects pixels that actually contain the selected color
+ * @param imageData - Source image data
+ * @param min - Minimum display value (0-255)
+ * @param max - Maximum display value (0-255)
+ * @param channel - Color channel to adjust
+ * @returns Processed ImageData
+ */
+export const processColorBalance = (
+    imageData: ImageData,
+    min: number,
+    max: number,
+    channel: ColorChannel
+): ImageData => {
+    const data = imageData.data;
+    const range = max - min;
+    const factor = 255 / (range === 0 ? 1 : range);
+
+    // Helper function to apply adjustment to a single value
+    const adjust = (value: number): number => {
+        const adjusted = (value - min) * factor;
+        return Math.max(0, Math.min(255, adjusted));
+    };
+
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        // Skip pixels that don't have the selected color (except for 'All')
+        if (channel !== 'All' && !pixelHasColor(r, g, b, channel)) {
+            continue;
+        }
+
+        switch (channel) {
+            case 'Red':
+                // Adjust only red channel for red pixels
+                data[i] = adjust(r);
+                break;
+            case 'Green':
+                // Adjust only green channel for green pixels
+                data[i + 1] = adjust(g);
+                break;
+            case 'Blue':
+                // Adjust only blue channel for blue pixels
+                data[i + 2] = adjust(b);
+                break;
+            case 'Cyan':
+                // Cyan affects Red channel inversely for cyan pixels
+                data[i] = 255 - adjust(255 - r);
+                break;
+            case 'Magenta':
+                // Magenta affects Green channel inversely for magenta pixels
+                data[i + 1] = 255 - adjust(255 - g);
+                break;
+            case 'Yellow':
+                // Yellow affects Blue channel inversely for yellow pixels
+                data[i + 2] = 255 - adjust(255 - b);
+                break;
+            case 'All':
+                // Adjust all channels equally (like standard brightness/contrast)
+                data[i] = adjust(r);
+                data[i + 1] = adjust(g);
+                data[i + 2] = adjust(b);
+                break;
+        }
+    }
+
+    return imageData;
+};
+
+/**
+ * Get histogram for a specific color channel
+ * @param imageData - Source image data
+ * @param channel - Color channel to analyze
+ * @returns 256-bin histogram array
+ */
+export const getColorChannelHistogram = (
+    imageData: ImageData,
+    channel: ColorChannel
+): number[] => {
+    const histogram = new Array(256).fill(0);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+        let value: number;
+
+        switch (channel) {
+            case 'Red':
+                value = data[i];
+                break;
+            case 'Green':
+                value = data[i + 1];
+                break;
+            case 'Blue':
+                value = data[i + 2];
+                break;
+            case 'Cyan':
+                // Cyan = 255 - Red
+                value = 255 - data[i];
+                break;
+            case 'Magenta':
+                // Magenta = 255 - Green
+                value = 255 - data[i + 1];
+                break;
+            case 'Yellow':
+                // Yellow = 255 - Blue
+                value = 255 - data[i + 2];
+                break;
+            case 'All':
+            default:
+                // Grayscale luminance
+                value = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+                break;
+        }
+
+        histogram[value]++;
+    }
+
+    return histogram;
+};
+
+/**
+ * Analyze histogram for a specific color channel and find min/max values
+ * @param imageData - Source image data
+ * @param channel - Color channel to analyze
+ * @returns Object with histogram bins and min/max values
+ */
+export const analyzeColorChannelHistogram = (
+    imageData: ImageData,
+    channel: ColorChannel
+): { bins: number[]; min: number; max: number } => {
+    const bins = getColorChannelHistogram(imageData, channel);
+    let min = 255;
+    let max = 0;
+
+    for (let i = 0; i < 256; i++) {
+        if (bins[i] > 0) {
+            if (i < min) min = i;
+            if (i > max) max = i;
+        }
+    }
+
+    return { bins, min, max };
+};
+
 interface BitDepthConversionDetail {
     bitDepth: number; // Bit Depth mục tiêu (8, 16, 32)
     currentBitDepth: number; // Bit Depth hiện tại của ảnh (từ NavBar)
