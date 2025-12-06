@@ -75,6 +75,7 @@ interface CellFeature {
   cell_id: number;
   frame_num: number;
   area: number;
+  aspect_ratio: number | null;
   centroid_row: number;
   centroid_col: number;
   major_axis_length: number;
@@ -1437,7 +1438,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                         <tr key={feature.id}>
                           <td className="cell-id">{feature.cell_id}</td>
                           <td>{formatValue(feature.area, 0)}</td>
-                          {/* <td>{formatValue(feature.aspect_ratio, 2)}</td> */}
+                          <td>{formatValue(feature.aspect_ratio, 2)}</td>
                         </tr>
                       ))}
                     </tbody>
