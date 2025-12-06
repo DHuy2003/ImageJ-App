@@ -473,7 +473,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   useNoiseEvents(
     getImageData,
     updateImageFromCanvas,
-    () => currentFile?.bitDepth
+    () => currentFile?.bitDepth || 8
   );  
 
   // Bit depth conversion events - returns functions to work with raw data

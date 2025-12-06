@@ -1269,191 +1269,218 @@ export const parseKernelText = (text: string): { kernel: number[]; size: number 
 // ============================================
 // NOISE FUNCTIONS (Process > Noise submenu)
 // ============================================
-
-/** Gaussian random (Box–Muller), ~ N(0, 1) */
-const gaussianRandom = (): number => {
+const gaussianRandom = (mean = 0, stdDev = 1) => {
     let u = 0, v = 0;
     while (u === 0) u = Math.random();
     while (v === 0) v = Math.random();
-    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-};
-
-/**
- * Add Noise (ImageJ-like):
- *  - Gaussian noise, mean = 0, sigma ≈ 25.
- *  - Không notification.
- */
-export const processAddNoise = (imageData: ImageData): ImageData => {
-    const stdDev = 25; // nếu muốn mạnh hơn nữa thì tăng lên 30–35
-
+    const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    return mean + z * stdDev;
+  };
+  
+  export const processAddNoise = (
+    imageData: ImageData,
+    stdDev: number = 25
+  ): ImageData => {
     const output = createOutputImage(imageData);
     const src = imageData.data;
     const dst = output.data;
-
+  
     for (let i = 0; i < src.length; i += 4) {
-        for (let c = 0; c < 3; c++) {
-            const noise = gaussianRandom() * stdDev;
-            dst[i + c] = clamp(src[i + c] + noise);
-        }
-        dst[i + 3] = src[i + 3];
+      const noise = gaussianRandom(0, stdDev);
+  
+      const r = src[i];
+      const g = src[i + 1];
+      const b = src[i + 2];
+  
+      const nr = clamp(Math.round(r + noise));
+      const ng = clamp(Math.round(g + noise));
+      const nb = clamp(Math.round(b + noise));
+  
+      dst[i] = nr;
+      dst[i + 1] = ng;
+      dst[i + 2] = nb;
+      dst[i + 3] = src[i + 3]; 
     }
-
+  
     return output;
 };
 
-/**
- * Add Specified Noise:
- * Thêm Gaussian noise với stdDev do user nhập (mean = 0).
- * Popup sẽ hỏi stdDev, ở đây chỉ nhận giá trị truyền xuống.
- * Không notification.
- */
 export const processAddSpecifiedNoise = (
     imageData: ImageData,
-    options?: { stdDev?: number }
-): ImageData => {
-    const stdDev = options?.stdDev ?? 25;
-
+    options: { stdDev: number }
+  ): ImageData | null => {
+    const { stdDev } = options;
+    if (!isFinite(stdDev) || stdDev <= 0) return null;
+  
     const output = createOutputImage(imageData);
     const src = imageData.data;
     const dst = output.data;
-
+  
     for (let i = 0; i < src.length; i += 4) {
-        for (let c = 0; c < 3; c++) {
-            const noise = gaussianRandom() * stdDev;
-            dst[i + c] = clamp(src[i + c] + noise);
-        }
-        dst[i + 3] = src[i + 3];
+      const noise = gaussianRandom(0, stdDev);
+  
+      const r = src[i];
+      const g = src[i + 1];
+      const b = src[i + 2];
+  
+      const nr = clamp(Math.round(r + noise));
+      const ng = clamp(Math.round(g + noise));
+      const nb = clamp(Math.round(b + noise));
+  
+      dst[i] = nr;
+      dst[i + 1] = ng;
+      dst[i + 2] = nb;
+      dst[i + 3] = src[i + 3];
     }
-
+  
     return output;
-};
+};  
 
-/**
- * Salt and Pepper Noise:
- * Với xác suất density, pixel sẽ thành 0 hoặc 255.
- * Không notification.
- */
 export const processSaltAndPepperNoise = (
     imageData: ImageData,
-    density: number = 0.05
-): ImageData => {
+    density: number = 0.05 
+  ): ImageData => {
     const output = createOutputImage(imageData);
     const src = imageData.data;
     const dst = output.data;
-
+  
     const p = Math.max(0, Math.min(1, density));
-
+  
     for (let i = 0; i < src.length; i += 4) {
-        const r = Math.random();
-        if (r < p) {
-            const val = r < p / 2 ? 0 : 255;
-            dst[i] = val;
-            dst[i + 1] = val;
-            dst[i + 2] = val;
-        } else {
-            dst[i] = src[i];
-            dst[i + 1] = src[i + 1];
-            dst[i + 2] = src[i + 2];
-        }
+      const r = Math.random();
+  
+      if (r < p) {
+        const salt = r < p / 2 ? 0 : 255;
+        dst[i] = salt;
+        dst[i + 1] = salt;
+        dst[i + 2] = salt;
         dst[i + 3] = src[i + 3];
+      } else {
+        dst[i] = src[i];
+        dst[i + 1] = src[i + 1];
+        dst[i + 2] = src[i + 2];
+        dst[i + 3] = src[i + 3];
+      }
     }
-
+  
     return output;
 };
 
-/**
- * Despeckle:
- * Median filter radius 1 (như ImageJ).
- * Không notification.
- */
 export const processDespeckle = (imageData: ImageData): ImageData => {
-    const result = processMedian(imageData, 1);
-    return result;
+    const { width, height, data: src } = imageData;
+    const output = createOutputImage(imageData);
+    const dst = output.data;
+  
+    const w1 = width - 1;
+    const h1 = height - 1;
+  
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const intensities: number[] = [];
+  
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = Math.min(h1, Math.max(0, y + dy));
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = Math.min(w1, Math.max(0, x + dx));
+            const idx = (yy * width + xx) * 4;
+            const r = src[idx];
+            const g = src[idx + 1];
+            const b = src[idx + 2];
+            const intensity = 0.299 * r + 0.587 * g + 0.114 * b; 
+            intensities.push(intensity);
+          }
+        }
+  
+        intensities.sort((a, b) => a - b);
+        const median = intensities[4];
+        const val = clamp(Math.round(median));
+  
+        const centerIdx = (y * width + x) * 4;
+        dst[centerIdx] = val;
+        dst[centerIdx + 1] = val;
+        dst[centerIdx + 2] = val;
+        dst[centerIdx + 3] = src[centerIdx + 3];
+      }
+    }
+  
+    return output;
 };
 
-/**
- * Remove Outliers:
- * Nếu pixel lệch khỏi mean lân cận > threshold
- *   - mode 'bright': pixel > mean + threshold
- *   - mode 'dark'  : pixel < mean - threshold
- *   - mode 'both'  : bright hoặc dark
- * Không notification.
- */
 export const processRemoveOutliers = (
     imageData: ImageData,
     radius: number = 1,
     threshold: number = 50,
-    mode: 'bright' | 'dark' | 'both' = 'both'
-): ImageData => {
-    const width = imageData.width;
-    const height = imageData.height;
-    const src = imageData.data;
+    mode: 'bright' | 'dark' | 'both' = 'bright'
+  ): ImageData => {
+    const { width, height, data: src } = imageData;
     const output = createOutputImage(imageData);
     const dst = output.data;
-
-    const { offsets, size } = generateCircularMask(radius);
-
+  
+    const r = Math.max(1, Math.round(radius));
+    const { offsets } = generateCircularMask(r);
+  
+    const w1 = width - 1;
+    const h1 = height - 1;
+  
     for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            let rSum = 0, gSum = 0, bSum = 0;
+      for (let x = 0; x < width; x++) {
+        const intensities: number[] = [];
 
-            for (const [dx, dy] of offsets) {
-            const px = Math.min(Math.max(x + dx, 0), width - 1);
-            const py = Math.min(Math.max(y + dy, 0), height - 1);
-            const idx = (py * width + px) * 4;
-            rSum += src[idx];
-            gSum += src[idx + 1];
-            bSum += src[idx + 2];
-            }
-
-            const rMean = rSum / size;
-            const gMean = gSum / size;
-            const bMean = bSum / size;
-
-            const idxCenter = (y * width + x) * 4;
-            const r = src[idxCenter];
-            const g = src[idxCenter + 1];
-            const b = src[idxCenter + 2];
-
-            const brightOutlier =
-            (r - rMean) > threshold ||
-            (g - gMean) > threshold ||
-            (b - bMean) > threshold;
-
-            const darkOutlier =
-            (rMean - r) > threshold ||
-            (gMean - g) > threshold ||
-            (bMean - b) > threshold;
-
-            const isOutlier =
-            mode === 'bright'
-                ? brightOutlier
-                : mode === 'dark'
-                ? darkOutlier
-                : (brightOutlier || darkOutlier);
-
-            if (isOutlier) {
-            dst[idxCenter] = clamp(Math.round(rMean));
-            dst[idxCenter + 1] = clamp(Math.round(gMean));
-            dst[idxCenter + 2] = clamp(Math.round(bMean));
-            } else {
-            dst[idxCenter] = r;
-            dst[idxCenter + 1] = g;
-            dst[idxCenter + 2] = b;
-            }
-
-            dst[idxCenter + 3] = src[idxCenter + 3];
+        for (const [dx, dy] of offsets) {
+          const xx = Math.min(w1, Math.max(0, x + dx));
+          const yy = Math.min(h1, Math.max(0, y + dy));
+          const idx = (yy * width + xx) * 4;
+          const rN = src[idx];
+          const gN = src[idx + 1];
+          const bN = src[idx + 2];
+          const intensity = (rN + gN + bN) / 3;
+          intensities.push(intensity);
         }
+  
+        intensities.sort((a, b) => a - b);
+        const median = intensities[Math.floor(intensities.length / 2)];
+  
+        const centerIdx = (y * width + x) * 4;
+        const rC = src[centerIdx];
+        const gC = src[centerIdx + 1];
+        const bC = src[centerIdx + 2];
+        const centerIntensity = (rC + gC + bC) / 3;
+  
+        const delta = centerIntensity - median;
+        const isBrightOutlier = delta > threshold;
+        const isDarkOutlier = -delta > threshold;
+  
+        let replace = false;
+        switch (mode) {
+          case 'bright':
+            replace = isBrightOutlier;
+            break;
+          case 'dark':
+            replace = isDarkOutlier;
+            break;
+          case 'both':
+            replace = isBrightOutlier || isDarkOutlier;
+            break;
+        }
+  
+        if (replace) {
+          const val = clamp(Math.round(median));
+          dst[centerIdx] = val;
+          dst[centerIdx + 1] = val;
+          dst[centerIdx + 2] = val;
+          dst[centerIdx + 3] = src[centerIdx + 3];
+        } else {
+          dst[centerIdx] = rC;
+          dst[centerIdx + 1] = gC;
+          dst[centerIdx + 2] = bC;
+          dst[centerIdx + 3] = src[centerIdx + 3];
+        }
+      }
     }
-
+  
     return output;
-};
+};  
 
-/**
- * Remove NaNs:
- * Nếu value không finite (NaN / ±Inf) → set về 0, alpha 255.
- * Không notification. Việc check 32-bit làm ở hook.
- */
 export const processRemoveNaNs = (imageData: ImageData): ImageData => {
     const output = createOutputImage(imageData);
     const src = imageData.data;
