@@ -80,7 +80,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         requestData.image_url = imageUrl;
       }
   
-      const response = await axios.post(`${API_BASE_URL}/save`, requestData, {
+      const response = await axios.post(`${API_BASE_URL}/export`, requestData, {
         responseType: 'blob',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -123,10 +123,10 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return false;
       }
-    
+
       const unsavedImage = hasUnsavedImageChanges();
       const unsavedMask = hasUnsavedMaskChanges();
-    
+
       if (!unsavedImage && !unsavedMask) {
         await Swal.fire({
           title: 'Notice',
@@ -137,31 +137,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return false;
       }
-    
-      if (!(window as any).showDirectoryPicker) {
-        await Swal.fire({
-          title: 'Notification',
-          text: 'Your browser does not support choosing a folder (File System Access API).',
-          icon: 'info',
-          confirmButtonText: 'OK',
-          confirmButtonColor: '#3085d6',
-        });
-        return false;
-      }
-    
-      let dirHandle: any;
-      try {
-        dirHandle = await (window as any).showDirectoryPicker({
-          mode: 'readwrite',
-        });
-      } catch (err: any) {
-        if (err?.name === 'AbortError' || err?.name === 'NotAllowedError') {
-          return false;
-        }
-        console.error('Error choosing folder:', err);
-        return false;
-      }
-    
+
       try {
         let updatedImageInfo: ImageInfo & { edited_url?: string | null } = currentFile as any;
         let editedUrl: string | null = null;
@@ -169,38 +145,30 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         if (unsavedImage && currentImageURL) {
           const res = await fetch(currentImageURL);
           const blob = await res.blob();
-    
+
           const formData = new FormData();
           formData.append(
             'edited',
             blob,
             `${currentFile.filename || 'image'}_edited.png`,
           );
-    
+
           const response = await axios.post(
             `${API_BASE_URL}/update/${currentFile.id}`,
             formData,
-            {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            },
+            { headers: { 'Content-Type': 'multipart/form-data' } },
           );
-    
-          const updated = response.data
-            .image as ImageInfo & {
+
+          const updated = response.data.image as ImageInfo & {
             edited_filepath?: string;
             edited_url?: string;
           };
-    
-          editedUrl = (updated as any).edited_url || null;
-    
-          if (!editedUrl && updated.edited_filepath) {
-            const filename = updated.edited_filepath
-              .split(/[/\\]/)
-              .pop();
-            if (filename) {
-              editedUrl = `${API_BASE_URL}/edited/${filename}`;
-            }
-          }
+
+          editedUrl =
+            (updated as any).edited_url ||
+            (updated.edited_filepath
+              ? `${API_BASE_URL}/edited/${updated.edited_filepath.split(/[/\\]/).pop()}`
+              : null);
 
           updatedImageInfo = {
             ...updatedImageInfo,
@@ -213,15 +181,15 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
                 }
               : {}),
           } as any;
-    
-          setImageArray((prev) => {
+
+          setImageArray(prev => {
             const copy = [...prev];
             if (copy[currentIndex]) {
               copy[currentIndex] = updatedImageInfo;
             }
             return copy;
           });
-    
+
           if (editedUrl) {
             setCurrentImageURL(editedUrl);
           }
@@ -231,32 +199,32 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           try {
             const maskRes = await fetch(currentFile.mask_url);
             const maskBlob = await maskRes.blob();
-    
+
             const maskForm = new FormData();
             maskForm.append(
               'mask',
               maskBlob,
               `${currentFile.filename || 'image'}_mask.png`,
             );
-    
+
             const maskResponse = await axios.post(
               `${API_BASE_URL}/update-mask/${currentFile.id}`,
               maskForm,
               { headers: { 'Content-Type': 'multipart/form-data' } },
             );
-    
+
             const maskUpdated = maskResponse.data.image as {
               mask_filepath: string;
               mask_url: string;
               mask_filename: string;
             };
-    
+
             updatedImageInfo = {
               ...updatedImageInfo,
               ...maskUpdated,
             } as any;
-    
-            setImageArray((prev) => {
+
+            setImageArray(prev => {
               const copy = [...prev];
               if (copy[currentIndex]) {
                 copy[currentIndex] = {
@@ -271,43 +239,14 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           }
         }
 
-        try {
-          const imageForTiff: ImageInfo = {
-            ...(updatedImageInfo as any),
-            ...(editedUrl ? { url: editedUrl } : {}),
-          } as ImageInfo;
-    
-          const tiffBlob = await convertImageToTIFF(imageForTiff);
-          const saveFilename = generateSaveFilename(imageForTiff);
-    
-          const fileHandle = await dirHandle.getFileHandle(
-            saveFilename,
-            { create: true },
-          );
-          const writable = await fileHandle.createWritable();
-          await writable.write(tiffBlob);
-          await writable.close();
-        } catch (err: any) {
-          console.error('Error saving TIFF:', err);
-          await Swal.fire({
-            title: 'Warning',
-            text:
-              'Image/mask was saved to database but failed to save TIFF file to the selected folder.',
-            icon: 'warning',
-            confirmButtonText: 'OK',
-            confirmButtonTextColor: '#fff',
-            confirmButtonColor: '#3085d6',
-          } as any);
-        }
-    
         await Swal.fire({
           title: 'Saved',
-          text: 'Image and mask have been saved to the selected folder and updated in the database.',
+          text: 'Image and mask have been saved to database.',
           icon: 'success',
           confirmButtonText: 'OK',
           confirmButtonColor: '#3085d6',
         });
-    
+
         return true;
       } catch (err: any) {
         console.error('Error saving image/mask:', err);
@@ -320,7 +259,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
         });
         return false;
       }
-    };    
+    };
 
     const saveAllImages = async () => {
       if (!imageArray || imageArray.length === 0) {
@@ -331,24 +270,6 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           confirmButtonText: 'OK',
           confirmButtonColor: '#3085d6',
         });
-        return;
-      }
-    
-      if (!(window as any).showDirectoryPicker) {
-        await Swal.fire({
-          title: 'Error',
-          text: 'Your browser does not support folder selection.',
-          icon: 'error',
-          confirmButtonText: 'OK',
-          confirmButtonColor: '#3085d6',
-        });
-        return;
-      }
-    
-      let dirHandle;
-      try {
-        dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
-      } catch {
         return;
       }
     
@@ -369,7 +290,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           try {
             const cropped = (img as any).cropped_url as string | undefined;
             let sourceUrl: string | null = null;
-
+    
             if (cropped && cropped.startsWith('data:')) {
               sourceUrl = cropped;
             } else if (img.url && img.url.startsWith('data:')) {
@@ -379,12 +300,12 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
             } else if (img.url) {
               sourceUrl = img.url;
             }
-
+    
             if (!sourceUrl) {
               console.error('No source URL for saving image id =', img.id);
               continue;
             }
-
+    
             const res = await fetch(sourceUrl);
             const blob = await res.blob();
     
@@ -420,7 +341,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
               cropped_url: null as any,
             };
     
-            setImageArray((prev) => {
+            setImageArray(prev => {
               const copy = [...prev];
               copy[i] = finalImage;
               return copy;
@@ -460,7 +381,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
               ...maskUpdated,
             };
     
-            setImageArray((prev) => {
+            setImageArray(prev => {
               const copy = [...prev];
               copy[i] = {
                 ...copy[i],
@@ -472,33 +393,17 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
             console.error('Save mask fail: ', err);
           }
         }
-
-        try {
-          const tiffBlob = await convertImageToTIFF(finalImage);
-    
-          const saveFilename = generateSaveFilename(finalImage);
-    
-          const fileHandle = await dirHandle.getFileHandle(saveFilename, {
-            create: true,
-          });
-    
-          const writable = await fileHandle.createWritable();
-          await writable.write(tiffBlob);
-          await writable.close();
-        } catch (err) {
-          console.error('TIFF conversion failed: ', err);
-        }
       }
     
       await Swal.fire({
         title: 'Saved',
-        text: 'All images have been saved to the selected folder.',
+        text: 'All images have been saved to database.',
         icon: 'success',
         confirmButtonText: 'OK',
         confirmButtonColor: '#3085d6',
       });
-    };        
-  
+    };    
+    
     const revertCurrentImage = async () => {
       if (!currentFile) {
         await Swal.fire({
@@ -692,6 +597,63 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
   
       window.dispatchEvent(new Event('datasetCleared'));
     };
+
+    const exportAllImages = async () => {
+      if (!imageArray || imageArray.length === 0) {
+        await Swal.fire({
+          title: 'Notice',
+          text: 'No images available to export.',
+          icon: 'info',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#3085d6',
+        });
+        return;
+      }
+    
+      if (!(window as any).showDirectoryPicker) {
+        await Swal.fire({
+          title: 'Error',
+          text: 'Your browser does not support folder selection.',
+          icon: 'error',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#3085d6',
+        });
+        return;
+      }
+    
+      let dirHandle: any;
+      try {
+        dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+      } catch {
+        return;
+      }
+    
+      for (let i = 0; i < imageArray.length; i++) {
+        const img = imageArray[i];
+    
+        try {
+          const tiffBlob = await convertImageToTIFF(img);
+          const saveFilename = generateSaveFilename(img);
+    
+          const fileHandle = await dirHandle.getFileHandle(saveFilename, {
+            create: true,
+          });
+          const writable = await fileHandle.createWritable();
+          await writable.write(tiffBlob);
+          await writable.close();
+        } catch (err) {
+          console.error('TIFF export failed: ', err);
+        }
+      }
+    
+      await Swal.fire({
+        title: 'Exported',
+        text: 'All images have been exported to the selected folder.',
+        icon: 'success',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#3085d6',
+      });
+    };    
   
     const handler = async (e: Event) => {
       const { type } = (e as CustomEvent<FileMenuActionPayload>).detail;
@@ -711,6 +673,9 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           break;
         case 'SAVE_ALL':
           await saveAllImages();
+          break;
+        case 'EXPORT_ALL':
+          await exportAllImages();      
           break;          
         default:
           break;

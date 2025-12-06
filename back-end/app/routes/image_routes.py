@@ -4,7 +4,7 @@ from app.services.image_services import (
     get_all_images,
     upload_cell_images,
     upload_mask_images,
-    save_image,
+    convert_image_to_tiff,
     update_edited_image,
     update_mask_image,
     convert_image_for_preview,
@@ -115,10 +115,6 @@ def upload_masks():
 @image_bp.route('/virtual-sequence/preview', methods=['POST'])
 @cross_origin()
 def virtual_sequence_preview():
-    """
-    Convert uploaded images (e.g. TIFF) to PNGs for virtual sequence preview.
-    Does not modify the image database.
-    """
     if "files" not in request.files:
         return jsonify({"error": "No image files uploaded"}), 400
 
@@ -145,9 +141,9 @@ def virtual_sequence_preview():
 
     return jsonify({"frames": frames}), 200
 
-@image_bp.route('/save', methods=['POST'])
+@image_bp.route('/export', methods=['POST'])
 @cross_origin()
-def save_images():
+def export_images():
     try:
         data = request.get_json()     
         if not data:
@@ -160,7 +156,7 @@ def save_images():
         if not image_data and not image_url:
             return jsonify({"error": "Either image_data or image_url must be provided"}), 400
         
-        tiff_buffer = save_image(
+        tiff_buffer = convert_image_to_tiff(
             image_data=image_data,
             image_url=image_url,
             filename=filename

@@ -105,7 +105,6 @@ export const handleScale = () => {
         html: `
             <div style="display:flex;flex-direction:column;gap:16px;text-align:left;font-size:16px;">
 
-                <!-- Current size box -->
                 <div style="
                     padding:12px 14px;
                     border-radius:10px;
@@ -205,39 +204,86 @@ export const handleRotate = () => {
     }
   
     Swal.fire({
-      title: 'Rotate Selection',
-      input: 'number',
-      inputLabel: 'Angle (degrees)',
-      inputValue: 0,
+      title: "Rotate Selection",
+      html: `
+        <div style="
+          display:flex;
+          flex-direction:column;
+          gap:14px;
+          text-align:left;
+          font-size:15px;
+        ">
+          <div style="
+            padding:10px 12px;
+            border-radius:10px;
+            background:#f1f3f5;
+          ">
+            <div style="font-weight:600;margin-bottom:6px;font-size:16px;">
+              Angle
+            </div>
+            <div style="
+              display:flex;
+              align-items:center;
+              justify-content:space-between;
+              gap:12px;
+            ">
+              <span>Degrees</span>
+              <input
+                id="rotate-angle"
+                type="number"
+                step="1"
+                value="0"
+                style="
+                  width:100px;
+                  padding:6px 10px;
+                  border-radius:8px;
+                  border:1px solid #ccc;
+                  font-size:15px;
+                "
+              />
+            </div>
+          </div>
+
+          <div style="font-size:13px;color:#555;line-height:1.5;">
+            Examples: <b>90</b>, <b>-90</b>, <b>180</b>.<br/>
+            Allowed range: <b>-360°</b> to <b>360°</b>.
+          </div>
+        </div>
+      `,
       showCancelButton: true,
-      inputAttributes: {
-        min: '-360',
-        max: '360',
-        step: '1',
-      },
-      preConfirm: (value) => {
-        const v = parseFloat(value as any);
-        if (isNaN(v)) {
-          Swal.showValidationMessage('Please enter a valid angle.');
-          return;
+      confirmButtonText: "Rotate",
+      cancelButtonText: "Cancel",
+      focusConfirm: false,
+      preConfirm: () => {
+        const input = document.getElementById("rotate-angle") as HTMLInputElement | null;
+        if (!input) {
+          Swal.showValidationMessage("Internal error: angle input not found.");
+          return null;
+        }
+  
+        const v = parseFloat(input.value);
+        if (!isFinite(v)) {
+          Swal.showValidationMessage("Please enter a valid angle.");
+          return null;
         }
         if (v < -360 || v > 360) {
-          Swal.showValidationMessage('Angle must be between -360 and 360.');
-          return;
+          Swal.showValidationMessage("Angle must be between -360 and 360 degrees.");
+          return null;
         }
+  
         return v;
       },
     }).then((result) => {
       if (!result.isConfirmed || result.value == null) return;
   
       const angleDeg = result.value as number;
-
-      const event = new CustomEvent('roiRotate', {
+  
+      const event = new CustomEvent("roiRotate", {
         detail: { angleDeg },
       });
       window.dispatchEvent(event);
     });
-};    
+};      
 
 export const handleProperties = () => {
     if (!currentSelection) {
