@@ -455,7 +455,7 @@ def get_all_images():
 
     return image_list
 
-def save_image(image_data=None, image_url=None, filename=None):
+def convert_image_to_tiff(image_data=None, image_url=None, filename=None):
     try:
         img = None
         

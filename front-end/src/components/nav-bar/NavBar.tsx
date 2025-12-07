@@ -13,6 +13,7 @@ import {
     handleCloseAll,
     handleSave,
     handleSaveAll,
+    handleExportAll,
     handleQuit
 } from "../../utils/nav-bar/fileUtils";
 import {
@@ -91,6 +92,7 @@ const NavBar = () => {
                         { label: "Close All", onClick: handleCloseAll },
                         { label: "Save", onClick: handleSave },
                         { label: "Save All", onClick: handleSaveAll },
+                        { label: "Export...", onClick: handleExportAll },
                         { label: "Quit", onClick: () => handleQuit(navigate) }
                     ]}
                 />

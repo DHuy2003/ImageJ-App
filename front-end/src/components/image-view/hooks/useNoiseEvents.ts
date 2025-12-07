@@ -96,7 +96,7 @@ const useNoiseEvents = (
         threshold: string;
         which: 'Bright' | 'Dark' | 'Both';
       }>({
-        title: 'Remove Outliers...',
+        title: 'Remove Outliers',
         html: `
           <div style="display:flex; flex-direction:column; gap:8px; text-align:left; font-size:13px;">
             <label style="display:flex; align-items:center; justify-content:space-between;">
@@ -109,7 +109,7 @@ const useNoiseEvents = (
             </label>
             <label style="display:flex; align-items:center; justify-content:space-between;">
               <span style="margin-right:8px;">Which outliers:</span>
-              <select id="remove-outliers-which" style="width:100px; padding:2px 4px;">
+              <select id="remove-outliers-which" style="width:110px; padding:2px 4px;">
                 <option value="Bright">Bright</option>
                 <option value="Dark">Dark</option>
                 <option value="Both">Both</option>
@@ -120,7 +120,7 @@ const useNoiseEvents = (
         width: 360,
         padding: '0.75rem 0.75rem 0.9rem',
         showCancelButton: true,
-        focusConfirm: false,
+        focusConfirm: true,
         confirmButtonText: 'OK',
         cancelButtonText: 'Cancel',
         preConfirm: () => {
@@ -192,6 +192,71 @@ const useNoiseEvents = (
       applyAndUpdate(imageData, ctx, canvas, (img) => processRemoveNaNs(img));
     };
 
+    const handleSaltAndPepper = async () => {
+      const { value, isConfirmed, dismiss } = await Swal.fire<string>({
+        title: 'Salt and Pepper Noise',
+        html: `
+          <div style="display:flex; flex-direction:column; gap:8px; text-align:left; font-size:13px;">
+            <label style="display:flex; align-items:center; justify-content:space-between;">
+              <span style="margin-right:8px;">Density (%):</span>
+              <input id="salt-pepper-density" type="number" value="5.0" step="0.1" style="width:90px; padding:2px 4px;" />
+            </label>
+            <div style="font-size:11px; opacity:0.7;">
+              Replaces 2.5% of pixels with black and 2.5% with white when density = 5%.
+            </div>
+          </div>
+        `,
+        width: 360,
+        padding: '0.75rem 0.75rem 0.9rem',
+        showCancelButton: true,
+        confirmButtonText: 'OK',
+        cancelButtonText: 'Cancel',
+        preConfirm: () => {
+          const input = document.getElementById('salt-pepper-density') as HTMLInputElement | null;
+          if (!input) {
+            Swal.showValidationMessage('Invalid input');
+            return null;
+          }
+          const v = parseFloat(input.value);
+          if (!isFinite(v) || v <= 0) {
+            Swal.showValidationMessage('Density must be > 0');
+            return null;
+          }
+          if (v > 100) {
+            Swal.showValidationMessage('Density must be ≤ 100');
+            return null;
+          }
+          return input.value;
+        },
+      });
+
+      if (!isConfirmed || dismiss || !value) return;
+
+      const densityPercent = parseFloat(value);
+      const density = densityPercent / 100;
+
+      const data = getImageData();
+      if (!data) return;
+      const { ctx, imageData, canvas } = data;
+
+      applyAndUpdate(imageData, ctx, canvas, (img) =>
+        processSaltAndPepperNoise(img, density)
+      );
+    };
+
+    const handleAddNoise = () => {
+      const bitDepth = getCurrentBitDepth?.() ?? 8;
+      const stdDev = 25 * (bitDepth / 8);
+
+      const data = getImageData();
+      if (!data) return;
+      const { ctx, imageData, canvas } = data;
+
+      applyAndUpdate(imageData, ctx, canvas, (img) =>
+        processAddNoise(img, stdDev)
+      );
+    };
+
     const handleNoiseProcess = (e: Event) => {
       const customEvent = e as CustomEvent<{ action: string }>;
       const { action } = customEvent.detail;
@@ -209,6 +274,14 @@ const useNoiseEvents = (
         void handleRemoveNaNs();
         return;
       }
+      if (action === 'salt-and-pepper') {
+        void handleSaltAndPepper();
+        return;
+      }
+      if (action === 'add-noise') {
+        handleAddNoise();
+        return;
+      }
 
       const data = getImageData();
       if (!data) return;
@@ -217,12 +290,6 @@ const useNoiseEvents = (
       let fn: ((img: ImageData) => ImageData | null) | null = null;
 
       switch (action) {
-        case 'add-noise':
-          fn = processAddNoise;
-          break;
-        case 'salt-and-pepper':
-          fn = processSaltAndPepperNoise;
-          break;
         case 'despeckle':
           fn = processDespeckle;
           break;

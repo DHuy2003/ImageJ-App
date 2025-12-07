@@ -12,7 +12,13 @@ const naturalSort = (a: File, b: File): number => {
 export const FILE_MENU_EVENT_NAME = 'fileMenuAction';
 export const IMAGES_APPENDED_EVENT = 'imagesAppended';
 export const VIRTUAL_SEQUENCE_IMPORT_EVENT = 'openVirtualSequenceImport';
-export type FileMenuActionType = 'REVERT' | 'CLOSE' | 'CLOSE_ALL' | 'SAVE' | 'SAVE_ALL';
+export type FileMenuActionType =
+  | 'REVERT'
+  | 'CLOSE'
+  | 'CLOSE_ALL'
+  | 'SAVE'
+  | 'SAVE_ALL'
+  | 'EXPORT_ALL';
 export type FileMenuActionPayload = {
   type: FileMenuActionType;
 };
@@ -206,3 +212,6 @@ export const handleQuit = async (navigate: NavigateFunction) => {
     navigate('/');
 };
 
+export const handleExportAll = () => {
+  dispatchFileMenuAction('EXPORT_ALL');
+};
