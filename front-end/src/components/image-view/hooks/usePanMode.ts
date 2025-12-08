@@ -30,21 +30,23 @@ const usePanMode = ({
       const wrapper = wrapperRef.current;
       const img = imgRef.current;
       if (!wrapper || !img) return;
+  
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const imgRect = img.getBoundingClientRect();
+      const isOverflow =
+        imgRect.width > wrapperRect.width || imgRect.height > wrapperRect.height;
 
-      if (scaleToFit || zoomLevel <= 1) {
+      if (scaleToFit || (!isOverflow && zoomLevel <= 1)) {
         boundsRef.current = { maxX: 0, maxY: 0 };
         setPan({ x: 0, y: 0 });
         return;
       }
-
-      const wrapperRect = wrapper.getBoundingClientRect();
-      const imgRect = img.getBoundingClientRect();
-
+  
       const maxX = Math.max(0, (imgRect.width - wrapperRect.width) / 2);
       const maxY = Math.max(0, (imgRect.height - wrapperRect.height) / 2);
-
+  
       boundsRef.current = { maxX, maxY };
-
+  
       setPan(prev => ({
         x: Math.max(-maxX, Math.min(maxX, prev.x)),
         y: Math.max(-maxY, Math.min(maxY, prev.y)),
@@ -52,12 +54,35 @@ const usePanMode = ({
     };
 
     updateBounds();
-    window.addEventListener('resize', updateBounds);
-    return () => window.removeEventListener('resize', updateBounds);
-  }, [wrapperRef, imgRef, scaleToFit, zoomLevel]);
+
+    const handleResize = () => updateBounds();
+    window.addEventListener('resize', handleResize);
+
+    const img = imgRef.current;
+    if (img) {
+      img.addEventListener('load', updateBounds);
+    }
+  
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (img) {
+        img.removeEventListener('load', updateBounds);
+      }
+    };
+  }, [wrapperRef, imgRef, scaleToFit, zoomLevel]);    
 
   const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    if (!panMode || scaleToFit || zoomLevel <= 1) return;
+    const wrapper = wrapperRef.current;
+    const img = imgRef.current;
+
+    if (!wrapper || !img) return;
+
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const imgRect = img.getBoundingClientRect();
+    const isOverflow = imgRect.width > wrapperRect.width || imgRect.height > wrapperRect.height;
+
+    if (!panMode || scaleToFit || (!isOverflow && zoomLevel <= 1)) return;
+
     e.preventDefault();
     lastPosRef.current = { x: e.clientX, y: e.clientY };
     setIsPanning(true);
@@ -92,7 +117,7 @@ const usePanMode = ({
   };
 
   const cursor =
-    panMode && !scaleToFit && zoomLevel > 1
+    panMode && !scaleToFit && (zoomLevel > 1 || boundsRef.current.maxX > 0 || boundsRef.current.maxY > 0)
       ? isPanning
         ? 'grabbing'
         : 'url("/images/hand.png"), grab'

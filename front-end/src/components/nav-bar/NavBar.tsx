@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import DropdownMenu from "../dropdown-menu/DropdownMenu";
 import "./NavBar.css";
 import {
-    handleOpen,
+    handleNewFile,
     handleOpenFolder,
     handleOpenMaskFolder,
     handleCreateMask,
@@ -82,7 +82,7 @@ const NavBar = () => {
                 <DropdownMenu
                     label="File"
                     items={[
-                        { label: "Open", onClick: () => handleOpen(navigate) },
+                        { label: "New file", onClick: () => handleNewFile(navigate) },
                         { label: "Open Folder", onClick: () => handleOpenFolder(navigate) },
                         { label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate) },
                         { label: "Virtual Sequence...", onClick: handleVirtualSequence },
@@ -134,14 +134,10 @@ const NavBar = () => {
                             ]
                         },
                         { label: "Color" },
-                        // { label: "Show Info..." },
-                        // { label: "Duplicate..." },
-                        // { label: "Rename" },
                         {
                             label: "Zoom", subItems: [
                                 { label: "In (+)", onClick: handleZoomIn },
                                 { label: "Out (-)", onClick: handleZoomOut },
-                                // { label: "To Selection" },
                                 { label: "Scale to Fit", onClick: handleScaleToFit }
                             ]
                         },
