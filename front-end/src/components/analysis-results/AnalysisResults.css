@@ -128,6 +128,9 @@
     cursor: pointer;
     position: relative;
     transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .tab-btn:hover {
@@ -147,6 +150,32 @@
     height: 3px;
     background: #4a90e2;
     border-radius: 3px 3px 0 0;
+}
+
+.tab-btn.search-tab {
+    margin-left: auto;
+    background: #fef3e8;
+    border-radius: 8px;
+    padding: 10px 20px;
+}
+
+.tab-btn.search-tab:hover {
+    background: #fde7d6;
+    color: #c45c26;
+}
+
+.tab-btn.search-tab.active {
+    background: #c45c26;
+    color: #fff;
+}
+
+.tab-btn.search-tab.active::after {
+    display: none;
+}
+
+.tab-icon {
+    display: flex;
+    align-items: center;
 }
 
 /* Content */

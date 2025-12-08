@@ -668,7 +668,6 @@ export const processGaussianBlur = (imageData: ImageData, sigma: number): ImageD
 
     // Calculate kernel size: 6*sigma is a common rule (3 sigma on each side)
     const kernelRadius = Math.ceil(sigma * 3);
-    const kernelSize = kernelRadius * 2 + 1;
 
     // Generate 1D Gaussian kernel
     const kernel1D: number[] = [];
@@ -985,8 +984,6 @@ export const processUnsharpMask = (
     // Get blurred version
     const blurred = processGaussianBlur(imageData, sigma);
 
-    const width = imageData.width;
-    const height = imageData.height;
     const src = imageData.data;
     const blurData = blurred.data;
     const output = createOutputImage(imageData);
@@ -1187,9 +1184,7 @@ export const generateCircularMasksComposite = (): { dataUrl: string; width: numb
         
         // Draw each pixel of the mask (scaled up for visibility)
         const pixelSize = Math.max(1, Math.floor(40 / maskSize)); // Scale small masks
-        const scaledSize = maskSize * pixelSize;
-        const scaledMaskX = cellX + cellPadding + (maxMaskSize * pixelSize - scaledSize) / 2 / pixelSize + (maxMaskSize - scaledSize / pixelSize) / 2;
-        const scaledMaskY = cellY + cellPadding + (maxMaskSize - maskSize) / 2;
+        void pixelSize; // Used for potential future mask scaling visualization
         
         for (let y = 0; y < maskSize; y++) {
             for (let x = 0; x < maskSize; x++) {

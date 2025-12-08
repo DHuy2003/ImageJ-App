@@ -996,7 +996,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {zScoreData.map((row, idx) => {
+                                                    {zScoreData.map((row) => {
                                                         // Count cells in this cluster
                                                         const clusterCells = features.filter(f =>
                                                             (f.hmm_state ?? f.gmm_state) === row.cluster
@@ -1077,6 +1077,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                     )}
                                 </div>
                             )}
+
                         </>
                     )}
                 </div>

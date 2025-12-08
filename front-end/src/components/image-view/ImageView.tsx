@@ -46,6 +46,7 @@ import {
   processVariance,
   processWatershed
 } from '../../utils/nav-bar/processUtils';
+import ArticleSearch from '../article-search/ArticleSearch';
 import BrushOverlay from '../brush-overlay/BrushOverlay';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
@@ -172,6 +173,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [currentFilterType, setCurrentFilterType] = useState<FilterType | null>(null);
   const [filterOriginalImageData, setFilterOriginalImageData] = useState<ImageData | null>(null);
 
+  // Article Search panel state
+  const [showArticleSearch, setShowArticleSearch] = useState(false);
+
   // Color Balance Dialog state
   const [showColorBalance, setShowColorBalance] = useState(false);
   const [colorBalanceMin, setColorBalanceMin] = useState(0);
@@ -195,6 +199,37 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     window.addEventListener('show-notification', handleCustomNotification);
     return () => {
       window.removeEventListener('show-notification', handleCustomNotification);
+    };
+  }, []);
+
+  // Listen for Article Search toggle event from NavBar
+  useEffect(() => {
+    const handleToggleArticleSearch = () => {
+      setShowArticleSearch(prev => !prev);
+    };
+
+    // Close article search when using other features (dialogs, analysis, etc.)
+    const handleCloseArticleSearch = () => {
+      setShowArticleSearch(false);
+    };
+
+    window.addEventListener('toggle-article-search', handleToggleArticleSearch);
+    // Close when opening dialogs or other features
+    window.addEventListener('show-analysis', handleCloseArticleSearch);
+    window.addEventListener('open-brightness-contrast', handleCloseArticleSearch);
+    window.addEventListener('open-threshold', handleCloseArticleSearch);
+    window.addEventListener('open-color-balance', handleCloseArticleSearch);
+    window.addEventListener('open-image-size', handleCloseArticleSearch);
+    window.addEventListener('open-filter-dialog', handleCloseArticleSearch);
+
+    return () => {
+      window.removeEventListener('toggle-article-search', handleToggleArticleSearch);
+      window.removeEventListener('show-analysis', handleCloseArticleSearch);
+      window.removeEventListener('open-brightness-contrast', handleCloseArticleSearch);
+      window.removeEventListener('open-threshold', handleCloseArticleSearch);
+      window.removeEventListener('open-color-balance', handleCloseArticleSearch);
+      window.removeEventListener('open-image-size', handleCloseArticleSearch);
+      window.removeEventListener('open-filter-dialog', handleCloseArticleSearch);
     };
   }, []);
   const { pushUndo } = useUndoStack({
@@ -1787,6 +1822,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           })}
         </div>
       </div>
+
+      {/* Article Search Panel */}
+      <ArticleSearch isActive={showArticleSearch} />
       {currentFile && (
         <ImageSizeDialog
           isOpen={showSizeDialog}

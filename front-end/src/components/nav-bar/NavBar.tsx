@@ -63,6 +63,10 @@ const dispatchProcessEvent = (action: string) => {
     window.dispatchEvent(new CustomEvent('process-image', { detail: { action } }));
 };
 
+const handleToggleArticleSearch = () => {
+    window.dispatchEvent(new CustomEvent('toggle-article-search'));
+};
+
 const handleOpenFilterDialog = (filterType: FilterType) => {
     dispatchFilterDialogEvent(filterType);
 };
@@ -225,7 +229,7 @@ const NavBar = () => {
                     <span>Result</span>
                 </div>
 
-                <div className="navbar-menu-item">
+                <div className="navbar-menu-item" onClick={handleToggleArticleSearch}>
                     <Search className="menu-icon" />
                     <span>Article</span>
                 </div>
