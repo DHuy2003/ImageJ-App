@@ -71,8 +71,6 @@ def process_and_save_image(image, destination_folder):
         else:
             arr = np.array(img).astype(np.int32)
 
-        # Save ORIGINAL mask with true labels for feature extraction
-        # This preserves the actual cell IDs (1, 5, 7, 11, etc.)
         original_mask_filename = converted_filename_base + '_labels.png'
         original_mask_path = os.path.join(destination_folder, original_mask_filename)
 
@@ -492,79 +490,6 @@ def convert_image_to_tiff(image_data=None, image_url=None, filename=None):
     except Exception as e:
         print(f"Error converting image to TIFF: {str(e)}")
         raise Exception(f"Failed to convert image to TIFF: {str(e)}")
-    
-def revert_image(image_id):
-    img_db = ImageModel.query.get(image_id)
-    if not img_db:
-        raise ValueError(f"Image with id {image_id} not found")
-
-    converted_filename = None
-    original_url = None
-    edited_url = None
-    mask_url = None
-
-    if img_db.filename:
-        converted_filename = os.path.splitext(img_db.filename)[0] + '.png'
-        original_url = url_for(
-            'image_bp.get_converted_image',
-            filename=converted_filename,
-            _external=True
-        )
-
-    if img_db.edited_filepath and os.path.exists(img_db.edited_filepath):
-        edited_filename = os.path.basename(img_db.edited_filepath)
-        edited_url = url_for(
-            'image_bp.get_edited_image',
-            filename=edited_filename,
-            _external=True
-        )
-
-    if img_db.mask_filename:
-        mask_url = url_for(
-            'image_bp.get_mask_image',
-            filename=img_db.mask_filename,
-            _external=True
-        )
-
-    path_for_info = None
-    final_url = None
-
-    if edited_url and os.path.exists(img_db.edited_filepath):
-        path_for_info = img_db.edited_filepath
-        final_url = edited_url
-    elif converted_filename and os.path.exists(os.path.join(CONVERTED_FOLDER, converted_filename)):
-        path_for_info = os.path.join(CONVERTED_FOLDER, converted_filename)
-        final_url = original_url
-    elif img_db.mask_filename and os.path.exists(os.path.join(MASK_FOLDER, img_db.mask_filename)):
-        path_for_info = os.path.join(MASK_FOLDER, img_db.mask_filename)
-        final_url = mask_url
-
-    width = height = file_size = bit_depth = None
-    if path_for_info and os.path.exists(path_for_info):
-        with Image.open(path_for_info) as img_pil:
-            width, height = img_pil.size
-            file_size = os.path.getsize(path_for_info)
-            arr = np.array(img_pil)
-            bit_depth = determine_bit_depth(img_pil, arr)
-
-    return {
-        "id": img_db.id,
-        "filename": img_db.filename,
-        "url": final_url,
-        "original_url": original_url,
-        "edited_url": edited_url,
-        "mask_filename": img_db.mask_filename,
-        "mask_filepath": img_db.mask_filepath,
-        "mask_url": mask_url,
-        "width": width,
-        "height": height,
-        "bitDepth": bit_depth,
-        "size": file_size,
-        "uploaded_on": img_db.uploaded_on.isoformat(),
-        "status": img_db.status,
-        "last_edited_on": img_db.last_edited_on.isoformat() if img_db.last_edited_on else None,
-    }
-
 
 def delete_image(image_id):
     img = ImageModel.query.get(image_id)
@@ -603,7 +528,6 @@ def cleanup_database(app):
     print("Cleaning up DB")
     with app.app_context():
         try:
-            # Clear child table first to avoid FK constraints
             CellFeature.query.delete()
             ImageModel.query.delete()
             db.session.commit()

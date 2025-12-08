@@ -8,7 +8,6 @@ from app.services.image_services import (
     update_edited_image,
     update_mask_image,
     convert_image_for_preview,
-    revert_image,
     delete_image,
     cleanup_folders,
     cleanup_database
@@ -214,21 +213,6 @@ def upload_mask_image(image_id):
     except Exception as e:
         print(f"Error saving mask image: {str(e)}")
         return jsonify({"error": str(e)}), 500
-    
-@image_bp.route('/revert/<int:image_id>', methods=['POST'])
-@cross_origin()
-def revert_single_image(image_id):
-    try:
-        info = revert_image(image_id)
-        return jsonify({
-            "message": "Image reverted successfully",
-            "image": info,
-        }), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        print(f"Error reverting image {image_id}: {e}")
-        return jsonify({"error": "Failed to revert image"}), 500
     
 @image_bp.route('/delete/<int:image_id>', methods=['DELETE'])
 @cross_origin()

@@ -38,7 +38,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export const handleOpen = (navigate: NavigateFunction) => {
+export const handleNewFile = (navigate: NavigateFunction) => {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/*";
