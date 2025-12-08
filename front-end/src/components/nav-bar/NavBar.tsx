@@ -33,20 +33,7 @@ import {
     handleSelectionNone,
     handleUndo
 } from "../../utils/nav-bar/editUtils";
-import {
-    handleClose,
-    handleCloseAll,
-    handleCreateMask,
-    handleExportAll,
-    handleOpen,
-    handleOpenFolder,
-    handleOpenMaskFolder,
-    handleQuit,
-    handleRevert,
-    handleSave,
-    handleSaveAll,
-    handleVirtualSequence
-} from "../../utils/nav-bar/fileUtils";
+
 import {
     handleConvertBitDepth,
     handleFlipHorizontal,
@@ -69,7 +56,6 @@ import {
     handleShowFeatures,
     handleTracking,
 } from "../../utils/nav-bar/toolUtils";
-import DropdownMenu from "../dropdown-menu/DropdownMenu";
 import "./NavBar.css";
 
 import type { FilterType } from "../image-view/dialogs/filters/FiltersDialog";
