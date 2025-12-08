@@ -176,7 +176,6 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       const id = Date.now();
       const newRoi: RoiShape = {
         id,
-
         type: 'rect',
         x: bounds.left,
         y: bounds.top,

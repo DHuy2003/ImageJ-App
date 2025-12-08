@@ -87,7 +87,6 @@ const VirtualSequenceImportDialog = ({
       setStart(1);
       setCount(result.length);
     } catch (err: any) {
-      // user bấm Cancel thì bỏ qua
       if (err?.name === "AbortError" || err?.name === "NotAllowedError") {
         return;
       }
