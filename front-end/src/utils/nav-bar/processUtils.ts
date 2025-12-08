@@ -1141,56 +1141,56 @@ export const generateCircularMasksComposite = (): { dataUrl: string; width: numb
     const padding = 20;
     const labelHeight = 25;
     const cellPadding = 10;
-    
+
     // Calculate dimensions for each mask cell
     const maskSizes = radii.map(r => r * 2 + 1);
     const maxMaskSize = Math.max(...maskSizes);
-    
+
     // Arrange in 2 rows of 4
     const cols = 4;
     const rows = 2;
     const cellWidth = maxMaskSize + cellPadding * 2;
     const cellHeight = maxMaskSize + labelHeight + cellPadding * 2;
-    
+
     const canvasWidth = cols * cellWidth + padding * 2;
     const canvasHeight = rows * cellHeight + padding * 2;
-    
+
     // Create canvas
     const canvas = document.createElement('canvas');
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
     const ctx = canvas.getContext('2d')!;
-    
+
     // Fill background with dark gray
     ctx.fillStyle = '#1a1f28';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    
+
     // Draw each mask
     radii.forEach((radius, index) => {
         const col = index % cols;
         const row = Math.floor(index / cols);
-        
+
         const cellX = padding + col * cellWidth;
         const cellY = padding + row * cellHeight;
-        
+
         const maskSize = radius * 2 + 1;
         const { offsets } = generateCircularMask(radius);
         const offsetSet = new Set(offsets.map(([dx, dy]) => `${dx + radius},${dy + radius}`));
-        
+
         // Center the mask in the cell
         const maskX = cellX + cellPadding + (maxMaskSize - maskSize) / 2;
         const maskY = cellY + cellPadding + (maxMaskSize - maskSize) / 2;
-        
+
         // Draw mask background (dark)
         ctx.fillStyle = '#2d3748';
         ctx.fillRect(maskX - 2, maskY - 2, maskSize + 4, maskSize + 4);
-        
+
         // Draw each pixel of the mask (scaled up for visibility)
         const pixelSize = Math.max(1, Math.floor(40 / maskSize)); // Scale small masks
         const scaledSize = maskSize * pixelSize;
         const scaledMaskX = cellX + cellPadding + (maxMaskSize * pixelSize - scaledSize) / 2 / pixelSize + (maxMaskSize - scaledSize / pixelSize) / 2;
         const scaledMaskY = cellY + cellPadding + (maxMaskSize - maskSize) / 2;
-        
+
         for (let y = 0; y < maskSize; y++) {
             for (let x = 0; x < maskSize; x++) {
                 const isInMask = offsetSet.has(`${x},${y}`);
@@ -1203,12 +1203,12 @@ export const generateCircularMasksComposite = (): { dataUrl: string; width: numb
                 );
             }
         }
-        
+
         // Draw border around mask
         ctx.strokeStyle = '#4b5563';
         ctx.lineWidth = 1;
         ctx.strokeRect(maskX - 1, maskY - 1, maskSize + 2, maskSize + 2);
-        
+
         // Draw label
         ctx.fillStyle = '#e8ecf1';
         ctx.font = '12px "Segoe UI", sans-serif';
@@ -1216,19 +1216,19 @@ export const generateCircularMasksComposite = (): { dataUrl: string; width: numb
         const labelX = cellX + cellWidth / 2;
         const labelY = cellY + cellPadding + maxMaskSize + labelHeight - 5;
         ctx.fillText(`r=${radius} (${maskSize}×${maskSize})`, labelX, labelY);
-        
+
         // Draw pixel count
         ctx.fillStyle = '#9ca3af';
         ctx.font = '10px "Segoe UI", sans-serif';
         ctx.fillText(`${offsets.length} pixels`, labelX, labelY + 12);
     });
-    
+
     // Add title
     ctx.fillStyle = '#e8ecf1';
     ctx.font = 'bold 14px "Segoe UI", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('Circular Masks for Rank Filters', padding, 15);
-    
+
     return {
         dataUrl: canvas.toDataURL('image/png'),
         width: canvasWidth,
@@ -1275,94 +1275,94 @@ const gaussianRandom = (mean = 0, stdDev = 1) => {
     while (v === 0) v = Math.random();
     const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
     return mean + z * stdDev;
-  };
-  
-  export const processAddNoise = (
+};
+
+export const processAddNoise = (
     imageData: ImageData,
     stdDev: number = 25
-  ): ImageData => {
+): ImageData => {
     const output = createOutputImage(imageData);
     const src = imageData.data;
     const dst = output.data;
-  
+
     for (let i = 0; i < src.length; i += 4) {
-      const noise = gaussianRandom(0, stdDev);
-  
-      const r = src[i];
-      const g = src[i + 1];
-      const b = src[i + 2];
-  
-      const nr = clamp(Math.round(r + noise));
-      const ng = clamp(Math.round(g + noise));
-      const nb = clamp(Math.round(b + noise));
-  
-      dst[i] = nr;
-      dst[i + 1] = ng;
-      dst[i + 2] = nb;
-      dst[i + 3] = src[i + 3]; 
+        const noise = gaussianRandom(0, stdDev);
+
+        const r = src[i];
+        const g = src[i + 1];
+        const b = src[i + 2];
+
+        const nr = clamp(Math.round(r + noise));
+        const ng = clamp(Math.round(g + noise));
+        const nb = clamp(Math.round(b + noise));
+
+        dst[i] = nr;
+        dst[i + 1] = ng;
+        dst[i + 2] = nb;
+        dst[i + 3] = src[i + 3];
     }
-  
+
     return output;
 };
 
 export const processAddSpecifiedNoise = (
     imageData: ImageData,
     options: { stdDev: number }
-  ): ImageData | null => {
+): ImageData | null => {
     const { stdDev } = options;
     if (!isFinite(stdDev) || stdDev <= 0) return null;
-  
+
     const output = createOutputImage(imageData);
     const src = imageData.data;
     const dst = output.data;
-  
+
     for (let i = 0; i < src.length; i += 4) {
-      const noise = gaussianRandom(0, stdDev);
-  
-      const r = src[i];
-      const g = src[i + 1];
-      const b = src[i + 2];
-  
-      const nr = clamp(Math.round(r + noise));
-      const ng = clamp(Math.round(g + noise));
-      const nb = clamp(Math.round(b + noise));
-  
-      dst[i] = nr;
-      dst[i + 1] = ng;
-      dst[i + 2] = nb;
-      dst[i + 3] = src[i + 3];
+        const noise = gaussianRandom(0, stdDev);
+
+        const r = src[i];
+        const g = src[i + 1];
+        const b = src[i + 2];
+
+        const nr = clamp(Math.round(r + noise));
+        const ng = clamp(Math.round(g + noise));
+        const nb = clamp(Math.round(b + noise));
+
+        dst[i] = nr;
+        dst[i + 1] = ng;
+        dst[i + 2] = nb;
+        dst[i + 3] = src[i + 3];
     }
-  
+
     return output;
-};  
+};
 
 export const processSaltAndPepperNoise = (
     imageData: ImageData,
-    density: number = 0.05 
-  ): ImageData => {
+    density: number = 0.05
+): ImageData => {
     const output = createOutputImage(imageData);
     const src = imageData.data;
     const dst = output.data;
-  
+
     const p = Math.max(0, Math.min(1, density));
-  
+
     for (let i = 0; i < src.length; i += 4) {
-      const r = Math.random();
-  
-      if (r < p) {
-        const salt = r < p / 2 ? 0 : 255;
-        dst[i] = salt;
-        dst[i + 1] = salt;
-        dst[i + 2] = salt;
-        dst[i + 3] = src[i + 3];
-      } else {
-        dst[i] = src[i];
-        dst[i + 1] = src[i + 1];
-        dst[i + 2] = src[i + 2];
-        dst[i + 3] = src[i + 3];
-      }
+        const r = Math.random();
+
+        if (r < p) {
+            const salt = r < p / 2 ? 0 : 255;
+            dst[i] = salt;
+            dst[i + 1] = salt;
+            dst[i + 2] = salt;
+            dst[i + 3] = src[i + 3];
+        } else {
+            dst[i] = src[i];
+            dst[i + 1] = src[i + 1];
+            dst[i + 2] = src[i + 2];
+            dst[i + 3] = src[i + 3];
+        }
     }
-  
+
     return output;
 };
 
@@ -1370,39 +1370,39 @@ export const processDespeckle = (imageData: ImageData): ImageData => {
     const { width, height, data: src } = imageData;
     const output = createOutputImage(imageData);
     const dst = output.data;
-  
+
     const w1 = width - 1;
     const h1 = height - 1;
-  
+
     for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const intensities: number[] = [];
-  
-        for (let dy = -1; dy <= 1; dy++) {
-          const yy = Math.min(h1, Math.max(0, y + dy));
-          for (let dx = -1; dx <= 1; dx++) {
-            const xx = Math.min(w1, Math.max(0, x + dx));
-            const idx = (yy * width + xx) * 4;
-            const r = src[idx];
-            const g = src[idx + 1];
-            const b = src[idx + 2];
-            const intensity = 0.299 * r + 0.587 * g + 0.114 * b; 
-            intensities.push(intensity);
-          }
+        for (let x = 0; x < width; x++) {
+            const intensities: number[] = [];
+
+            for (let dy = -1; dy <= 1; dy++) {
+                const yy = Math.min(h1, Math.max(0, y + dy));
+                for (let dx = -1; dx <= 1; dx++) {
+                    const xx = Math.min(w1, Math.max(0, x + dx));
+                    const idx = (yy * width + xx) * 4;
+                    const r = src[idx];
+                    const g = src[idx + 1];
+                    const b = src[idx + 2];
+                    const intensity = 0.299 * r + 0.587 * g + 0.114 * b;
+                    intensities.push(intensity);
+                }
+            }
+
+            intensities.sort((a, b) => a - b);
+            const median = intensities[4];
+            const val = clamp(Math.round(median));
+
+            const centerIdx = (y * width + x) * 4;
+            dst[centerIdx] = val;
+            dst[centerIdx + 1] = val;
+            dst[centerIdx + 2] = val;
+            dst[centerIdx + 3] = src[centerIdx + 3];
         }
-  
-        intensities.sort((a, b) => a - b);
-        const median = intensities[4];
-        const val = clamp(Math.round(median));
-  
-        const centerIdx = (y * width + x) * 4;
-        dst[centerIdx] = val;
-        dst[centerIdx + 1] = val;
-        dst[centerIdx + 2] = val;
-        dst[centerIdx + 3] = src[centerIdx + 3];
-      }
     }
-  
+
     return output;
 };
 
@@ -1411,75 +1411,75 @@ export const processRemoveOutliers = (
     radius: number = 1,
     threshold: number = 50,
     mode: 'bright' | 'dark' | 'both' = 'bright'
-  ): ImageData => {
+): ImageData => {
     const { width, height, data: src } = imageData;
     const output = createOutputImage(imageData);
     const dst = output.data;
-  
+
     const r = Math.max(1, Math.round(radius));
     const { offsets } = generateCircularMask(r);
-  
+
     const w1 = width - 1;
     const h1 = height - 1;
-  
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const intensities: number[] = [];
 
-        for (const [dx, dy] of offsets) {
-          const xx = Math.min(w1, Math.max(0, x + dx));
-          const yy = Math.min(h1, Math.max(0, y + dy));
-          const idx = (yy * width + xx) * 4;
-          const rN = src[idx];
-          const gN = src[idx + 1];
-          const bN = src[idx + 2];
-          const intensity = (rN + gN + bN) / 3;
-          intensities.push(intensity);
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const intensities: number[] = [];
+
+            for (const [dx, dy] of offsets) {
+                const xx = Math.min(w1, Math.max(0, x + dx));
+                const yy = Math.min(h1, Math.max(0, y + dy));
+                const idx = (yy * width + xx) * 4;
+                const rN = src[idx];
+                const gN = src[idx + 1];
+                const bN = src[idx + 2];
+                const intensity = (rN + gN + bN) / 3;
+                intensities.push(intensity);
+            }
+
+            intensities.sort((a, b) => a - b);
+            const median = intensities[Math.floor(intensities.length / 2)];
+
+            const centerIdx = (y * width + x) * 4;
+            const rC = src[centerIdx];
+            const gC = src[centerIdx + 1];
+            const bC = src[centerIdx + 2];
+            const centerIntensity = (rC + gC + bC) / 3;
+
+            const delta = centerIntensity - median;
+            const isBrightOutlier = delta > threshold;
+            const isDarkOutlier = -delta > threshold;
+
+            let replace = false;
+            switch (mode) {
+                case 'bright':
+                    replace = isBrightOutlier;
+                    break;
+                case 'dark':
+                    replace = isDarkOutlier;
+                    break;
+                case 'both':
+                    replace = isBrightOutlier || isDarkOutlier;
+                    break;
+            }
+
+            if (replace) {
+                const val = clamp(Math.round(median));
+                dst[centerIdx] = val;
+                dst[centerIdx + 1] = val;
+                dst[centerIdx + 2] = val;
+                dst[centerIdx + 3] = src[centerIdx + 3];
+            } else {
+                dst[centerIdx] = rC;
+                dst[centerIdx + 1] = gC;
+                dst[centerIdx + 2] = bC;
+                dst[centerIdx + 3] = src[centerIdx + 3];
+            }
         }
-  
-        intensities.sort((a, b) => a - b);
-        const median = intensities[Math.floor(intensities.length / 2)];
-  
-        const centerIdx = (y * width + x) * 4;
-        const rC = src[centerIdx];
-        const gC = src[centerIdx + 1];
-        const bC = src[centerIdx + 2];
-        const centerIntensity = (rC + gC + bC) / 3;
-  
-        const delta = centerIntensity - median;
-        const isBrightOutlier = delta > threshold;
-        const isDarkOutlier = -delta > threshold;
-  
-        let replace = false;
-        switch (mode) {
-          case 'bright':
-            replace = isBrightOutlier;
-            break;
-          case 'dark':
-            replace = isDarkOutlier;
-            break;
-          case 'both':
-            replace = isBrightOutlier || isDarkOutlier;
-            break;
-        }
-  
-        if (replace) {
-          const val = clamp(Math.round(median));
-          dst[centerIdx] = val;
-          dst[centerIdx + 1] = val;
-          dst[centerIdx + 2] = val;
-          dst[centerIdx + 3] = src[centerIdx + 3];
-        } else {
-          dst[centerIdx] = rC;
-          dst[centerIdx + 1] = gC;
-          dst[centerIdx + 2] = bC;
-          dst[centerIdx + 3] = src[centerIdx + 3];
-        }
-      }
     }
-  
+
     return output;
-};  
+};
 
 export const processRemoveNaNs = (imageData: ImageData): ImageData => {
     const output = createOutputImage(imageData);
@@ -1490,9 +1490,9 @@ export const processRemoveNaNs = (imageData: ImageData): ImageData => {
         for (let c = 0; c < 4; c++) {
             const v = src[i + c];
             if (!Number.isFinite(v) || Number.isNaN(v)) {
-            dst[i + c] = c === 3 ? 255 : 0;
+                dst[i + c] = c === 3 ? 255 : 0;
             } else {
-            dst[i + c] = c === 3 ? v : clamp(v);
+                dst[i + c] = c === 3 ? v : clamp(v);
             }
         }
     }
@@ -1500,4 +1500,116 @@ export const processRemoveNaNs = (imageData: ImageData): ImageData => {
     return output;
 };
 
-  
+// =============================
+//  Subtract Background (ImageJ-like)
+// =============================
+
+export interface SubtractBackgroundOptions {
+    radius: number;
+    lightBackground?: boolean;
+    createBackground?: boolean;
+    slidingParaboloid?: boolean;
+    disableSmoothing?: boolean;
+}
+
+// Invert RGB, giữ nguyên alpha – dùng cho Light background
+const invertForBackground = (imageData: ImageData): ImageData => {
+    const out = createOutputImage(imageData);
+    const s = imageData.data;
+    const d = out.data;
+    for (let i = 0; i < s.length; i += 4) {
+        d[i] = 255 - s[i];
+        d[i + 1] = 255 - s[i + 1];
+        d[i + 2] = 255 - s[i + 2];
+        d[i + 3] = s[i + 3];
+    }
+    return out;
+};
+
+// Tiền xử lý để tạo background:
+//  - Nếu !disableSmoothing: max 3x3 rồi mean 3x3 (đúng mô tả ImageJ)
+//  - Nếu disableSmoothing: dùng trực tiếp imageData
+const prefilterForBackground = (
+    imageData: ImageData,
+    disableSmoothing: boolean
+): ImageData => {
+    if (disableSmoothing) return imageData;
+
+    // radius=1 ~ kernel 3x3
+    let out = processMaximumFilter(imageData, 1);
+    out = processMean(out, 1);
+    return out;
+};
+
+// Ước lượng nền (rolling ball / sliding paraboloid xấp xỉ)
+const estimateBackground = (
+    imageData: ImageData,
+    radius: number,
+    slidingParaboloid: boolean
+): ImageData => {
+    if (radius <= 0) return imageData;
+
+    if (slidingParaboloid) {
+        // Xấp xỉ paraboloid bằng Gaussian blur với sigma tỉ lệ radius
+        const sigma = Math.max(0.5, radius / 3);
+        return processGaussianBlur(imageData, sigma);
+    }
+
+    // Xấp xỉ rolling-ball trên “mặt lưng” bằng opening xám:
+    // erosion (minimum) rồi dilation (maximum) với mask tròn radius R
+    let bg = processMinimumFilter(imageData, radius);
+    bg = processMaximumFilter(bg, radius);
+    return bg;
+};
+
+export const processSubtractBackground = (
+    imageData: ImageData,
+    options: SubtractBackgroundOptions
+): ImageData => {
+    const {
+        radius,
+        lightBackground = false,
+        createBackground = false,
+        slidingParaboloid = false,
+        disableSmoothing = false,
+    } = options;
+
+    if (radius <= 0) return imageData;
+
+    // Bước 1: nếu nền sáng → invert ảnh
+    const base = lightBackground ? invertForBackground(imageData) : imageData;
+
+    // Bước 2: tiền xử lý (max 3x3 + mean 3x3) trừ khi Disable smoothing
+    const prefiltered = prefilterForBackground(base, disableSmoothing);
+
+    // Bước 3: ước lượng background bằng rolling-ball / sliding-paraboloid
+    const background = estimateBackground(prefiltered, radius, slidingParaboloid);
+
+    // Bước 4: nếu chỉ muốn tạo nền, trả về luôn
+    if (createBackground) {
+        // Với “Create background” ImageJ cũng dùng ảnh nền trên hệ toạ độ đã invert;
+        // nhưng khi Light background thì người dùng chủ yếu quan tâm hình dạng nền,
+        // nên ta trả về background "như đang nhìn" (không invert lại).
+        return background;
+    }
+
+    // Bước 5: trừ nền
+    const out = createOutputImage(base);
+    const s = base.data;
+    const b = background.data;
+    const d = out.data;
+
+    for (let i = 0; i < s.length; i += 4) {
+        d[i] = clamp(s[i] - b[i]);
+        d[i + 1] = clamp(s[i + 1] - b[i + 1]);
+        d[i + 2] = clamp(s[i + 2] - b[i + 2]);
+        d[i + 3] = s[i + 3]; // giữ alpha
+    }
+
+    // Bước 6: nếu ban đầu invert (Light background) thì invert lại
+    if (lightBackground) {
+        return invertForBackground(out);
+    }
+
+    return out;
+};

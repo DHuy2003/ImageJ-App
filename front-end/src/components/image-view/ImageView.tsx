@@ -42,6 +42,7 @@ import {
   processOpen,
   processSharpen,
   processSmooth,
+  processSubtractBackground,
   processUnsharpMask,
   processVariance,
   processWatershed
@@ -55,18 +56,21 @@ import ColorBalanceDialog from './dialogs/color-balance/ColorBalanceDialog';
 import FiltersDialog, { type FilterParams, type FilterType } from './dialogs/filters/FiltersDialog';
 import ImageSizeDialog from './dialogs/image-size/ImageSizeDialog';
 import NotificationBar, { type NotificationType } from './dialogs/notifications/NotificationBar';
+import SubtractDialog, { type SubtractBackgroundParams } from './dialogs/subtract-background/SubtractDialog';
 import ThresholdDialog, { MODE_BLACK_AND_WHITE, MODE_OVER_UNDER, MODE_RED } from './dialogs/threshold/ThresholdDialog';
 import useBitDepthEvents from './hooks/useBitDepthEvents';
-import useBrushCommit from './hooks/useBrushCommit';
+import useBrushCommit from './hooks/useBrushCommit';  
 import useEditEvents from './hooks/useEditEvents';
 import useFileEvents from './hooks/useFileEvents';
 import useFilterEvents from './hooks/useFilterEvents';
 import useMaskCreation from './hooks/useMaskCreation';
+import useNoiseEvents from './hooks/useNoiseEvents';
 import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
 import useToolbarToolSelection from './hooks/useToolbarToolSelection';
 import useUndoStack from './hooks/useUndoStack';
-import useNoiseEvents from './hooks/useNoiseEvents';
+
+
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -178,6 +182,17 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [colorBalanceChannel, setColorBalanceChannel] = useState<ColorChannel>('All');
   const [colorBalanceHistogram, setColorBalanceHistogram] = useState<number[]>([]);
   const [colorBalanceOriginalImageData, setColorBalanceOriginalImageData] = useState<ImageData | null>(null);
+  const [showSubtractDialog, setShowSubtractDialog] = useState(false);
+  const [subtractParams, setSubtractParams] = useState<SubtractBackgroundParams>({
+    radius: 50,
+    lightBackground: false,
+    createBackground: false,
+    slidingParaboloid: false,
+    disableSmoothing: false,
+    preview: false,
+  });
+  const [subtractOriginalImageData, setSubtractOriginalImageData] = useState<ImageData | null>(null);
+
   const showNotification = (message: string, type: NotificationType = 'info') => {
     setNotification({ message, type, isVisible: true });
   };
@@ -474,7 +489,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     getImageData,
     updateImageFromCanvas,
     () => currentFile?.bitDepth || 8
-  );  
+  );
 
   // Bit depth conversion events - returns functions to work with raw data
   const { applyDisplayRangeToRawData, getCurrentBitDepthRange } = useBitDepthEvents({
@@ -624,23 +639,23 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // Helper function to check if a specific color exists in the image
   const hasColorInImage = (imageData: ImageData, channel: ColorChannel): boolean => {
     if (channel === 'All') return true; // 'All' always works
-    
+
     const data = imageData.data;
     const threshold = 30; // Minimum difference to consider as "having" that color
     const sampleSize = Math.min(2000, data.length / 4);
     const step = Math.max(1, Math.floor(data.length / 4 / sampleSize));
-    
+
     let colorPixelCount = 0;
     const minPixelsRequired = sampleSize * 0.005; // At least 0.5% of pixels should have this color
-    
+
     for (let i = 0; i < data.length / 4; i += step) {
       const idx = i * 4;
       const r = data[idx];
       const g = data[idx + 1];
       const b = data[idx + 2];
-      
+
       let hasColor = false;
-      
+
       switch (channel) {
         case 'Red':
           // Red: R is significantly higher than G and B
@@ -667,7 +682,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           hasColor = r > b + threshold && g > b + threshold;
           break;
       }
-      
+
       if (hasColor) {
         colorPixelCount++;
         if (colorPixelCount >= minPixelsRequired) {
@@ -675,7 +690,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         }
       }
     }
-    
+
     return false;
   };
 
@@ -699,7 +714,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         showNotification(`No ${channel.toLowerCase()} pixels detected in the image. Adjustment will have no effect.`, 'warning');
       }
     }
-    
+
     setColorBalanceChannel(channel);
     if (colorBalanceOriginalImageData) {
       const histogram = getColorChannelHistogram(colorBalanceOriginalImageData, channel);
@@ -1110,7 +1125,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // Handle showing circular masks (generates a composite image and adds to stack)
   const handleShowCircularMasks = () => {
     const { dataUrl, width, height } = generateCircularMasksComposite();
-    
+
     // Create a new image entry for the circular masks visualization
     const masksImage: ImageInfo = {
       id: Date.now(), // Unique ID
@@ -1125,11 +1140,11 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       mask_filepath: null,
       status: 'generated',
     };
-    
+
     // Add to visible images and navigate to it
     setVisibleImages(prev => [...prev, masksImage]);
     setCurrentIndex(visibleImages.length); // Navigate to the new image
-    
+
     showNotification('Generated circular masks visualization for radii: 1, 2, 3, 4, 5, 10, 15, 20', 'success');
     setShowFilterDialog(false);
   };
@@ -1397,6 +1412,104 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener('imageRotateRight90', handleRotateRight90Event);
     };
   }, [currentIndex, currentFile, pushUndo, setCurrentImageURL, setVisibleImages]);
+
+  const applySubtractPreview = (params: SubtractBackgroundParams) => {
+    if (!subtractOriginalImageData) return;
+
+    const result = processSubtractBackground(subtractOriginalImageData, {
+      radius: params.radius,
+      lightBackground: params.lightBackground,
+      createBackground: params.createBackground,
+      slidingParaboloid: params.slidingParaboloid,
+      disableSmoothing: params.disableSmoothing,
+    });
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = result.width;
+    tempCanvas.height = result.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.putImageData(result, 0, 0);
+
+    // Preview: không lưu history
+    updateImageFromCanvas(tempCanvas, false);
+  };
+
+  const restoreSubtractBaseImage = () => {
+    if (!subtractOriginalImageData) return;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = subtractOriginalImageData.width;
+    tempCanvas.height = subtractOriginalImageData.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.putImageData(subtractOriginalImageData, 0, 0);
+
+    updateImageFromCanvas(tempCanvas, false);
+  };
+
+  const handleSubtractParamsChange = (params: SubtractBackgroundParams) => {
+    setSubtractParams(params);
+    if (params.preview) {
+      applySubtractPreview(params);
+    } else {
+      // Tắt preview -> trả ảnh về trạng thái gốc khi mở dialog
+      restoreSubtractBaseImage();
+    }
+  };
+
+  const handleSubtractApply = () => {
+    if (!subtractOriginalImageData) return;
+
+    // Lưu vào undo stack
+    pushUndo();
+
+    const result = processSubtractBackground(subtractOriginalImageData, {
+      radius: subtractParams.radius,
+      lightBackground: subtractParams.lightBackground,
+      createBackground: subtractParams.createBackground,
+      slidingParaboloid: subtractParams.slidingParaboloid,
+      disableSmoothing: subtractParams.disableSmoothing,
+    });
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = result.width;
+    tempCanvas.height = result.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.putImageData(result, 0, 0);
+
+    updateImageFromCanvas(tempCanvas, false);
+    setShowSubtractDialog(false);
+  };
+
+  const handleSubtractCancel = () => {
+    setShowSubtractDialog(false);
+    // Nếu đang preview thì khôi phục lại ảnh gốc
+    if (subtractOriginalImageData) {
+      restoreSubtractBaseImage();
+    }
+  };
+
+  const handleOpenSubtractBackgroundEvent = () => {
+    const dataObj = getImageData();
+    if (!dataObj) return;
+
+    setSubtractOriginalImageData(dataObj.imageData);
+    // Reset preview về false mỗi lần mở
+    setSubtractParams(prev => ({
+      ...prev,
+      preview: false,
+    }));
+    setShowSubtractDialog(true);
+  };
+
+  useEffect(() => {
+    window.addEventListener('openSubtractBackground', handleOpenSubtractBackgroundEvent);
+    return () => {
+      window.removeEventListener('openSubtractBackground', handleOpenSubtractBackgroundEvent);
+    };
+  }, [currentImageURL, getImageData]);
 
   return (
     <div id="image-view">
@@ -1801,6 +1914,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         type={notification.type}
         isVisible={notification.isVisible}
         onClose={closeNotification}
+      />
+
+      <SubtractDialog
+        isOpen={showSubtractDialog}
+        params={subtractParams}
+        onChange={handleSubtractParamsChange}
+        onApply={handleSubtractApply}
+        onCancel={handleSubtractCancel}
       />
     </div>
   );

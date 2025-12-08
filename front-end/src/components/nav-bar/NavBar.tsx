@@ -1,51 +1,49 @@
 import { BarChart3, Microscope, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import DropdownMenu from "../dropdown-menu/DropdownMenu";
-import "./NavBar.css";
 import {
+    handleClear,
+    handleClearOutside,
+    handleCut,
+    handleDraw,
+    handleFill,
+    handleFitCircle,
+    handleFitRectangle,
+    handleInvert,
+    handleProperties,
+    handleRestoreSelection,
+    handleRotate,
+    handleScale,
+    handleSelectionAll,
+    handleSelectionNone,
+    handleUndo
+} from "../../utils/nav-bar/editUtils";
+import {
+    handleClose,
+    handleCloseAll,
+    handleCreateMask,
+    handleExportAll,
     handleOpen,
     handleOpenFolder,
     handleOpenMaskFolder,
-    handleCreateMask,
-    handleVirtualSequence,
+    handleQuit,
     handleRevert,
-    handleClose,
-    handleCloseAll,
     handleSave,
     handleSaveAll,
-    handleExportAll,
-    handleQuit
+    handleVirtualSequence
 } from "../../utils/nav-bar/fileUtils";
 import {
-    handleUndo,
-    handleCut,
-    handleClear,
-    handleClearOutside,
-    handleFill,
-    handleDraw,
-    handleInvert,
-    handleSelectionAll,
-    handleSelectionNone,
-    handleRestoreSelection,
-    handleFitCircle,
-    handleFitRectangle,
-    handleProperties,
-    handleScale,
-    handleRotate  
-} from "../../utils/nav-bar/editUtils";
-import {
     handleConvertBitDepth,
-    handleOpenBrightnessContrast,
-    handleOpenColorBalance,
-    handleScaleToFit,
-    handleZoomIn,
-    handleZoomOut,
-    handleOpenImageSize,
     handleFlipHorizontal,
     handleFlipVertical,
+    handleOpenBrightnessContrast,
+    handleOpenColorBalance,
+    handleOpenImageSize,
+    handleOpenThreshold,
     handleRotateLeft90,
     handleRotateRight90,
-    handleOpenThreshold
+    handleScaleToFit,
+    handleZoomIn,
+    handleZoomOut
 } from "../../utils/nav-bar/imageUtils";
 import {
     handleClustering,
@@ -55,9 +53,11 @@ import {
     handleShowFeatures,
     handleTracking,
 } from "../../utils/nav-bar/toolUtils";
+import DropdownMenu from "../dropdown-menu/DropdownMenu";
+import "./NavBar.css";
 
-import { dispatchFilterDialogEvent } from "../image-view/hooks/useFilterEvents";
 import type { FilterType } from "../image-view/dialogs/filters/FiltersDialog";
+import { dispatchFilterDialogEvent } from "../image-view/hooks/useFilterEvents";
 
 const dispatchProcessEvent = (action: string) => {
     window.dispatchEvent(new CustomEvent('process-image', { detail: { action } }));
@@ -65,6 +65,10 @@ const dispatchProcessEvent = (action: string) => {
 
 const handleOpenFilterDialog = (filterType: FilterType) => {
     dispatchFilterDialogEvent(filterType);
+};
+
+const handleOpenSubtractBackground = () => {
+    window.dispatchEvent(new Event('openSubtractBackground'));
 };
 
 const NavBar = () => {
@@ -158,7 +162,7 @@ const NavBar = () => {
                                 { label: "Brightness/Contrast...", onClick: handleOpenBrightnessContrast },
                                 { label: "Size", onClick: handleOpenImageSize },
                                 { label: "Color Balance...", onClick: handleOpenColorBalance },
-                                { label: "Threshold...", onClick: handleOpenThreshold}
+                                { label: "Threshold...", onClick: handleOpenThreshold }
                             ]
                         }
                     ]}
@@ -171,18 +175,20 @@ const NavBar = () => {
                         { label: "Sharpen", onClick: () => dispatchProcessEvent('sharpen') },
                         { label: "Find Edges", onClick: () => dispatchProcessEvent('find-edges') },
                         { label: "Enhance Contrast..." },
-                        { label: "Subtract Background..." },
-                        { label: "Filters", subItems: [
-                            {label: "Convolve...", onClick: () => handleOpenFilterDialog('convolve')},
-                            {label: "Gaussian Blur...", onClick: () => handleOpenFilterDialog('gaussian-blur')},
-                            {label: "Median...", onClick: () => handleOpenFilterDialog('median')},
-                            {label: "Mean...", onClick: () => handleOpenFilterDialog('mean')},
-                            {label: "Minimum...", onClick: () => handleOpenFilterDialog('minimum')},
-                            {label: "Maximum...", onClick: () => handleOpenFilterDialog('maximum')},
-                            {label: "Unsharp Mask...", onClick: () => handleOpenFilterDialog('unsharp-mask')},
-                            {label: "Variance...", onClick: () => handleOpenFilterDialog('variance')},
-                            {label: "Show Circular Masks", onClick: () => handleOpenFilterDialog('circular-masks')}
-                        ] },
+                        { label: "Subtract Background...", onClick: handleOpenSubtractBackground },
+                        {
+                            label: "Filters", subItems: [
+                                { label: "Convolve...", onClick: () => handleOpenFilterDialog('convolve') },
+                                { label: "Gaussian Blur...", onClick: () => handleOpenFilterDialog('gaussian-blur') },
+                                { label: "Median...", onClick: () => handleOpenFilterDialog('median') },
+                                { label: "Mean...", onClick: () => handleOpenFilterDialog('mean') },
+                                { label: "Minimum...", onClick: () => handleOpenFilterDialog('minimum') },
+                                { label: "Maximum...", onClick: () => handleOpenFilterDialog('maximum') },
+                                { label: "Unsharp Mask...", onClick: () => handleOpenFilterDialog('unsharp-mask') },
+                                { label: "Variance...", onClick: () => handleOpenFilterDialog('variance') },
+                                { label: "Show Circular Masks", onClick: () => handleOpenFilterDialog('circular-masks') }
+                            ]
+                        },
                         {
                             label: "Binary", subItems: [
                                 { label: "Make Binary", onClick: () => dispatchProcessEvent('make-binary') },
@@ -194,14 +200,16 @@ const NavBar = () => {
                                 { label: "Watershed", onClick: () => dispatchProcessEvent('watershed') }
                             ]
                         },
-                        { label: "Noise", subItems: [
-                            { label: "Add Noise", onClick: () => dispatchProcessEvent('add-noise') },
-                            { label: "Add Specified Noise...", onClick: () => dispatchProcessEvent('add-specified-noise') },
-                            { label: "Salt and Pepper", onClick: () => dispatchProcessEvent('salt-and-pepper') },
-                            { label: "Despeckle", onClick: () => dispatchProcessEvent('despeckle') },
-                            { label: "Remove Outliers", onClick: () => dispatchProcessEvent('remove-outliers') },
-                            { label: "Remove NaNs", onClick: () => dispatchProcessEvent('remove-nans') },
-                        ]}
+                        {
+                            label: "Noise", subItems: [
+                                { label: "Add Noise", onClick: () => dispatchProcessEvent('add-noise') },
+                                { label: "Add Specified Noise...", onClick: () => dispatchProcessEvent('add-specified-noise') },
+                                { label: "Salt and Pepper", onClick: () => dispatchProcessEvent('salt-and-pepper') },
+                                { label: "Despeckle", onClick: () => dispatchProcessEvent('despeckle') },
+                                { label: "Remove Outliers", onClick: () => dispatchProcessEvent('remove-outliers') },
+                                { label: "Remove NaNs", onClick: () => dispatchProcessEvent('remove-nans') },
+                            ]
+                        }
                     ]}
                 />
 
