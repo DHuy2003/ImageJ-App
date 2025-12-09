@@ -26,49 +26,9 @@ export const handleOpenColorBalance = (): void => {
 export type ColorChannel = 'Red' | 'Green' | 'Blue' | 'Cyan' | 'Magenta' | 'Yellow' | 'All';
 
 /**
- * Check if a pixel has the specified color characteristic
- * @param r - Red value
- * @param g - Green value
- * @param b - Blue value
- * @param channel - Color channel to check
- * @param threshold - Minimum difference to consider as "having" that color
- * @returns true if pixel has the specified color
- */
-const pixelHasColor = (r: number, g: number, b: number, channel: ColorChannel, threshold: number = 15): boolean => {
-    switch (channel) {
-        case 'Red':
-            // Red: R is higher than G and B
-            return r > g + threshold && r > b + threshold;
-        case 'Green':
-            // Green: G is higher than R and B
-            return g > r + threshold && g > b + threshold;
-        case 'Blue':
-            // Blue: B is higher than R and G
-            return b > r + threshold && b > g + threshold;
-        case 'Cyan':
-            // Cyan: G and B are high, R is low (opposite of Red)
-            return g > r + threshold && b > r + threshold;
-        case 'Magenta':
-            // Magenta: R and B are high, G is low (opposite of Green)
-            return r > g + threshold && b > g + threshold;
-        case 'Yellow':
-            // Yellow: R and G are high, B is low (opposite of Blue)
-            return r > b + threshold && g > b + threshold;
-        case 'All':
-            return true; // All pixels
-        default:
-            return false;
-    }
-};
-
-/**
- * Process color balance adjustment for a specific color channel
- * Only affects pixels that actually contain the selected color
- * @param imageData - Source image data
- * @param min - Minimum display value (0-255)
- * @param max - Maximum display value (0-255)
- * @param channel - Color channel to adjust
- * @returns Processed ImageData
+ * ImageJ Color Balance-style:
+ * - Giống Brightness/Contrast nhưng áp dụng trên kênh được chọn
+ * - Không lọc pixel "có màu" nữa: mọi pixel đều được chỉnh theo kênh đó
  */
 export const processColorBalance = (
     imageData: ImageData,
@@ -80,10 +40,9 @@ export const processColorBalance = (
     const range = max - min;
     const factor = 255 / (range === 0 ? 1 : range);
 
-    // Helper function to apply adjustment to a single value
     const adjust = (value: number): number => {
-        const adjusted = (value - min) * factor;
-        return Math.max(0, Math.min(255, adjusted));
+        const v = (value - min) * factor;
+        return v < 0 ? 0 : v > 255 ? 255 : v;
     };
 
     for (let i = 0; i < data.length; i += 4) {
@@ -91,38 +50,39 @@ export const processColorBalance = (
         const g = data[i + 1];
         const b = data[i + 2];
 
-        // Skip pixels that don't have the selected color (except for 'All')
-        if (channel !== 'All' && !pixelHasColor(r, g, b, channel)) {
-            continue;
-        }
-
         switch (channel) {
             case 'Red':
-                // Adjust only red channel for red pixels
                 data[i] = adjust(r);
                 break;
+
             case 'Green':
-                // Adjust only green channel for green pixels
                 data[i + 1] = adjust(g);
                 break;
+
             case 'Blue':
-                // Adjust only blue channel for blue pixels
                 data[i + 2] = adjust(b);
                 break;
+
             case 'Cyan':
-                // Cyan affects Red channel inversely for cyan pixels
-                data[i] = 255 - adjust(255 - r);
+                // Cyan ≈ G + B
+                data[i + 1] = adjust(g);
+                data[i + 2] = adjust(b);
                 break;
+
             case 'Magenta':
-                // Magenta affects Green channel inversely for magenta pixels
-                data[i + 1] = 255 - adjust(255 - g);
+                // Magenta ≈ R + B
+                data[i] = adjust(r);
+                data[i + 2] = adjust(b);
                 break;
+
             case 'Yellow':
-                // Yellow affects Blue channel inversely for yellow pixels
-                data[i + 2] = 255 - adjust(255 - b);
+                // Yellow ≈ R + G
+                data[i] = adjust(r);
+                data[i + 1] = adjust(g);
                 break;
+
             case 'All':
-                // Adjust all channels equally (like standard brightness/contrast)
+            default:
                 data[i] = adjust(r);
                 data[i + 1] = adjust(g);
                 data[i + 2] = adjust(b);
@@ -132,6 +92,7 @@ export const processColorBalance = (
 
     return imageData;
 };
+
 
 /**
  * Get histogram for a specific color channel
@@ -153,28 +114,38 @@ export const getColorChannelHistogram = (
             case 'Red':
                 value = data[i];
                 break;
+
             case 'Green':
                 value = data[i + 1];
                 break;
+
             case 'Blue':
                 value = data[i + 2];
                 break;
+
             case 'Cyan':
-                // Cyan = 255 - Red
-                value = 255 - data[i];
+                // Cyan ≈ trung bình G và B
+                value = Math.round((data[i + 1] + data[i + 2]) / 2);
                 break;
+
             case 'Magenta':
-                // Magenta = 255 - Green
-                value = 255 - data[i + 1];
+                // Magenta ≈ trung bình R và B
+                value = Math.round((data[i] + data[i + 2]) / 2);
                 break;
+
             case 'Yellow':
-                // Yellow = 255 - Blue
-                value = 255 - data[i + 2];
+                // Yellow ≈ trung bình R và G
+                value = Math.round((data[i] + data[i + 1]) / 2);
                 break;
+
             case 'All':
             default:
                 // Grayscale luminance
-                value = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+                value = Math.round(
+                    0.299 * data[i] +
+                    0.587 * data[i + 1] +
+                    0.114 * data[i + 2]
+                );
                 break;
         }
 
@@ -281,13 +252,13 @@ export const handleOpenThreshold = (): void => {
 export const getHistogram = (imageData: ImageData): number[] => {
     const histogram = new Array(256).fill(0);
     const data = imageData.data;
-    
+
     for (let i = 0; i < data.length; i += 4) {
         // Convert to grayscale using luminance formula
         const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
         histogram[gray]++;
     }
-    
+
     return histogram;
 };
 
@@ -298,42 +269,42 @@ export const getHistogram = (imageData: ImageData): number[] => {
 const thresholdDefault = (histogram: number[]): number => {
     const count = histogram.length;
     let total = 0;
-    
+
     for (let i = 0; i < count; i++) {
         total += histogram[i];
     }
-    
+
     if (total === 0) return 0;
-    
+
     // Initial guess at threshold
     let threshold = 0;
     for (let i = 0; i < count; i++) {
         threshold += i * histogram[i];
     }
     threshold = Math.round(threshold / total);
-    
+
     // Iterate until threshold is stable
     let lastThreshold = -1;
     while (threshold !== lastThreshold) {
         lastThreshold = threshold;
-        
+
         let sum1 = 0, count1 = 0;
         for (let i = 0; i <= threshold; i++) {
             sum1 += i * histogram[i];
             count1 += histogram[i];
         }
-        
+
         let sum2 = 0, count2 = 0;
         for (let i = threshold + 1; i < count; i++) {
             sum2 += i * histogram[i];
             count2 += histogram[i];
         }
-        
+
         const mean1 = count1 > 0 ? sum1 / count1 : 0;
         const mean2 = count2 > 0 ? sum2 / count2 : 0;
         threshold = Math.round((mean1 + mean2) / 2);
     }
-    
+
     return threshold;
 };
 
@@ -345,39 +316,39 @@ const thresholdOtsu = (histogram: number[]): number => {
     for (let i = 0; i < 256; i++) {
         total += histogram[i];
     }
-    
+
     if (total === 0) return 0;
-    
+
     let sumB = 0;
     let wB = 0;
     let maximum = 0;
     let threshold = 0;
     let sum1 = 0;
-    
+
     for (let i = 0; i < 256; i++) {
         sum1 += i * histogram[i];
     }
-    
+
     for (let i = 0; i < 256; i++) {
         wB += histogram[i];
         if (wB === 0) continue;
-        
+
         const wF = total - wB;
         if (wF === 0) break;
-        
+
         sumB += i * histogram[i];
-        
+
         const mB = sumB / wB;
         const mF = (sum1 - sumB) / wF;
-        
+
         const between = wB * wF * (mB - mF) * (mB - mF);
-        
+
         if (between >= maximum) {
             threshold = i;
             maximum = between;
         }
     }
-    
+
     return threshold;
 };
 
@@ -389,9 +360,9 @@ const thresholdHuang = (histogram: number[]): number => {
     for (let i = 0; i < 256; i++) {
         total += histogram[i];
     }
-    
+
     if (total === 0) return 0;
-    
+
     // Find first and last non-zero bins
     let first = 0, last = 255;
     for (let i = 0; i < 256; i++) {
@@ -400,29 +371,29 @@ const thresholdHuang = (histogram: number[]): number => {
     for (let i = 255; i >= 0; i--) {
         if (histogram[i] > 0) { last = i; break; }
     }
-    
+
     if (first === last) return first;
-    
+
     // Calculate fuzzy entropy
     let bestThreshold = first;
     let minEntropy = Number.MAX_VALUE;
-    
+
     for (let t = first + 1; t < last; t++) {
         let muB = 0, muF = 0;
         let sumB = 0, sumF = 0;
-        
+
         for (let i = first; i <= t; i++) {
             muB += i * histogram[i];
             sumB += histogram[i];
         }
         if (sumB > 0) muB /= sumB;
-        
+
         for (let i = t + 1; i <= last; i++) {
             muF += i * histogram[i];
             sumF += histogram[i];
         }
         if (sumF > 0) muF /= sumF;
-        
+
         let entropy = 0;
         for (let i = first; i <= last; i++) {
             const mu = i <= t ? muB : muF;
@@ -430,18 +401,18 @@ const thresholdHuang = (histogram: number[]): number => {
                 const diff = Math.abs(i - mu);
                 const membership = 1 / (1 + diff / 255);
                 if (membership > 0 && membership < 1) {
-                    entropy -= histogram[i] * (membership * Math.log(membership) + 
-                               (1 - membership) * Math.log(1 - membership));
+                    entropy -= histogram[i] * (membership * Math.log(membership) +
+                        (1 - membership) * Math.log(1 - membership));
                 }
             }
         }
-        
+
         if (entropy < minEntropy) {
             minEntropy = entropy;
             bestThreshold = t;
         }
     }
-    
+
     return bestThreshold;
 };
 
@@ -453,7 +424,7 @@ const thresholdIntermodes = (histogram: number[]): number => {
     const smoothed = [...histogram];
     let iter = 0;
     const maxIter = 10000;
-    
+
     while (!isBimodal(smoothed) && iter < maxIter) {
         const temp = [...smoothed];
         for (let i = 1; i < 255; i++) {
@@ -461,18 +432,18 @@ const thresholdIntermodes = (histogram: number[]): number => {
         }
         iter++;
     }
-    
+
     // Find two peaks
     let peak1 = 0, peak2 = 255;
     let maxVal = 0;
-    
+
     for (let i = 0; i < 128; i++) {
         if (smoothed[i] > maxVal) {
             maxVal = smoothed[i];
             peak1 = i;
         }
     }
-    
+
     maxVal = 0;
     for (let i = 128; i < 256; i++) {
         if (smoothed[i] > maxVal) {
@@ -480,7 +451,7 @@ const thresholdIntermodes = (histogram: number[]): number => {
             peak2 = i;
         }
     }
-    
+
     return Math.round((peak1 + peak2) / 2);
 };
 
@@ -501,22 +472,22 @@ const isBimodal = (histogram: number[]): boolean => {
 const thresholdLi = (histogram: number[]): number => {
     let total = 0;
     let sum = 0;
-    
+
     for (let i = 0; i < 256; i++) {
         total += histogram[i];
         sum += i * histogram[i];
     }
-    
+
     if (total === 0) return 0;
-    
+
     let mean = sum / total;
     let threshold = Math.round(mean);
     let newThreshold = 0;
-    
+
     for (let iter = 0; iter < 1000; iter++) {
         let sumB = 0, countB = 0;
         let sumF = 0, countF = 0;
-        
+
         for (let i = 0; i < 256; i++) {
             if (i <= threshold) {
                 sumB += i * histogram[i];
@@ -526,22 +497,22 @@ const thresholdLi = (histogram: number[]): number => {
                 countF += histogram[i];
             }
         }
-        
+
         const meanB = countB > 0 ? sumB / countB : 0;
         const meanF = countF > 0 ? sumF / countF : mean;
-        
+
         if (meanB <= 0 || meanF <= 0) break;
-        
-        newThreshold = Math.round((Math.log(meanB) - Math.log(meanF)) / 
-                                   (1 / meanF - 1 / meanB));
-        
+
+        newThreshold = Math.round((Math.log(meanB) - Math.log(meanF)) /
+            (1 / meanF - 1 / meanB));
+
         if (newThreshold < 0) newThreshold = 0;
         if (newThreshold > 255) newThreshold = 255;
-        
+
         if (newThreshold === threshold) break;
         threshold = newThreshold;
     }
-    
+
     return threshold;
 };
 
@@ -553,24 +524,24 @@ const thresholdMaxEntropy = (histogram: number[]): number => {
     for (let i = 0; i < 256; i++) {
         total += histogram[i];
     }
-    
+
     if (total === 0) return 0;
-    
+
     // Normalize histogram
     const norm = histogram.map(h => h / total);
-    
+
     let maxEntropy = -Number.MAX_VALUE;
     let threshold = 0;
-    
+
     for (let t = 0; t < 256; t++) {
         // Background entropy
         let sumB = 0;
         for (let i = 0; i <= t; i++) {
             sumB += norm[i];
         }
-        
+
         if (sumB <= 0 || sumB >= 1) continue;
-        
+
         let entropyB = 0;
         for (let i = 0; i <= t; i++) {
             if (norm[i] > 0) {
@@ -578,7 +549,7 @@ const thresholdMaxEntropy = (histogram: number[]): number => {
                 entropyB -= p * Math.log(p);
             }
         }
-        
+
         // Foreground entropy
         let entropyF = 0;
         const sumF = 1 - sumB;
@@ -588,15 +559,15 @@ const thresholdMaxEntropy = (histogram: number[]): number => {
                 entropyF -= p * Math.log(p);
             }
         }
-        
+
         const totalEntropy = entropyB + entropyF;
-        
+
         if (totalEntropy > maxEntropy) {
             maxEntropy = totalEntropy;
             threshold = t;
         }
     }
-    
+
     return threshold;
 };
 
@@ -606,12 +577,12 @@ const thresholdMaxEntropy = (histogram: number[]): number => {
 const thresholdMean = (histogram: number[]): number => {
     let total = 0;
     let sum = 0;
-    
+
     for (let i = 0; i < 256; i++) {
         total += histogram[i];
         sum += i * histogram[i];
     }
-    
+
     return total > 0 ? Math.round(sum / total) : 0;
 };
 
@@ -623,7 +594,7 @@ const thresholdMinimum = (histogram: number[]): number => {
     const smoothed = [...histogram];
     const maxIter = 10000;
     let iter = 0;
-    
+
     while (!isBimodal(smoothed) && iter < maxIter) {
         const temp = [...smoothed];
         for (let i = 1; i < 255; i++) {
@@ -631,18 +602,18 @@ const thresholdMinimum = (histogram: number[]): number => {
         }
         iter++;
     }
-    
+
     // Find minimum between peaks
     let minVal = Number.MAX_VALUE;
     let threshold = 128;
-    
+
     for (let i = 1; i < 255; i++) {
         if (smoothed[i] < minVal && smoothed[i - 1] >= smoothed[i] && smoothed[i + 1] >= smoothed[i]) {
             minVal = smoothed[i];
             threshold = i;
         }
     }
-    
+
     return threshold;
 };
 
@@ -658,9 +629,9 @@ const thresholdTriangle = (histogram: number[]): number => {
     for (let i = 255; i >= 0; i--) {
         if (histogram[i] > 0) { max = i; break; }
     }
-    
+
     if (min >= max) return min;
-    
+
     // Find the peak
     let peakIdx = min;
     let peakVal = histogram[min];
@@ -670,29 +641,29 @@ const thresholdTriangle = (histogram: number[]): number => {
             peakIdx = i;
         }
     }
-    
+
     // Line from peak to end
     const flipLow = peakIdx < (max - peakIdx);
     const start = flipLow ? peakIdx : max;
     const end = flipLow ? max : peakIdx;
-    
+
     // Calculate distances
     let maxDist = 0;
     let threshold = start;
-    
+
     const a = peakVal;
     const b = histogram[end];
     const lineLen = end - start;
-    
+
     for (let i = start; i <= end; i++) {
-        const d = Math.abs((histogram[i] - a) * lineLen - (b - a) * (i - start)) / 
-                  Math.sqrt(lineLen * lineLen + (b - a) * (b - a));
+        const d = Math.abs((histogram[i] - a) * lineLen - (b - a) * (i - start)) /
+            Math.sqrt(lineLen * lineLen + (b - a) * (b - a));
         if (d > maxDist) {
             maxDist = d;
             threshold = i;
         }
     }
-    
+
     return flipLow ? threshold : max - (threshold - peakIdx);
 };
 
@@ -704,34 +675,34 @@ const thresholdYen = (histogram: number[]): number => {
     for (let i = 0; i < 256; i++) {
         total += histogram[i];
     }
-    
+
     if (total === 0) return 0;
-    
+
     const norm = histogram.map(h => h / total);
-    
+
     // Cumulative sum
     const P1 = new Array(256).fill(0);
     P1[0] = norm[0];
     for (let i = 1; i < 256; i++) {
         P1[i] = P1[i - 1] + norm[i];
     }
-    
+
     // Cumulative sum of squares
     const P1_sq = new Array(256).fill(0);
     P1_sq[0] = norm[0] * norm[0];
     for (let i = 1; i < 256; i++) {
         P1_sq[i] = P1_sq[i - 1] + norm[i] * norm[i];
     }
-    
+
     const P2_sq = new Array(256).fill(0);
     P2_sq[255] = 0;
     for (let i = 254; i >= 0; i--) {
         P2_sq[i] = P2_sq[i + 1] + norm[i + 1] * norm[i + 1];
     }
-    
+
     let maxCrit = -Number.MAX_VALUE;
     let threshold = 0;
-    
+
     for (let t = 0; t < 255; t++) {
         const crit = -Math.log(P1_sq[t] * P2_sq[t]) + 2 * Math.log(P1[t] * (1 - P1[t]));
         if (crit > maxCrit) {
@@ -739,7 +710,7 @@ const thresholdYen = (histogram: number[]): number => {
             threshold = t;
         }
     }
-    
+
     return threshold;
 };
 
@@ -806,11 +777,11 @@ export const applyThresholdPreview = (
         imageData.height
     );
     const resultData = result.data;
-    
+
     for (let i = 0; i < data.length; i += 4) {
         const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
         const inRange = gray >= minThreshold && gray <= maxThreshold;
-        
+
         if (mode === 'red') {
             if (inRange) {
                 resultData[i] = 255;     // Red
@@ -837,7 +808,7 @@ export const applyThresholdPreview = (
             // Keep original if in range
         }
     }
-    
+
     return result;
 };
 
@@ -856,25 +827,34 @@ export const applyThresholdMask = (
         imageData.height
     );
     const resultData = result.data;
-    
+
     for (let i = 0; i < data.length; i += 4) {
         const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
         const inRange = gray >= minThreshold && gray <= maxThreshold;
-        
+
         const value = inRange ? 255 : 0;
         resultData[i] = value;
         resultData[i + 1] = value;
         resultData[i + 2] = value;
         resultData[i + 3] = 255;
     }
-    
+
     return result;
 };
 
 interface ResizeOptions {
     newWidth: number;
     newHeight: number;
-    interpolation?: 'NearestNeighbor' | 'Bilinear' | 'Bicubic'; 
+    /**
+     * Tên nội bộ (không dấu cách). UI có thể gửi "Nearest Neighbor", "Bilinear", "Bicubic",
+     * mình sẽ chuẩn hóa lại ở runtime.
+     */
+    interpolation?: 'NearestNeighbor' | 'Bilinear' | 'Bicubic' | string;
+    /**
+     * Giống checkbox "Average when downsizing" của ImageJ.
+     * Nếu true và đang thu nhỏ (scale < 1) → dùng average (box filter).
+     */
+    averageWhenDownsizing?: boolean;
 }
 
 export const processImageResize = (
@@ -882,65 +862,296 @@ export const processImageResize = (
     options: ResizeOptions
 ): ImageData => {
     const { newWidth, newHeight } = options;
+    const srcW = imageData.width;
+    const srcH = imageData.height;
 
-    const originalCanvas = document.createElement('canvas');
-    originalCanvas.width = imageData.width;
-    originalCanvas.height = imageData.height;
-    const originalCtx = originalCanvas.getContext('2d')!;
-    originalCtx.putImageData(imageData, 0, 0);
+    // Nếu không thay đổi size thì trả về clone
+    if (newWidth === srcW && newHeight === srcH) {
+        return new ImageData(
+            new Uint8ClampedArray(imageData.data),
+            srcW,
+            srcH
+        );
+    }
 
-    const newCanvas = document.createElement('canvas');
-    newCanvas.width = newWidth;
-    newCanvas.height = newHeight;
-    const newCtx = newCanvas.getContext('2d')!;
+    const srcData = imageData.data;
+    const dst = new ImageData(newWidth, newHeight);
+    const dstData = dst.data;
 
-    newCtx.imageSmoothingEnabled = true;
+    const scaleX = newWidth / srcW;
+    const scaleY = newHeight / srcH;
+    const downScaling = scaleX < 1 || scaleY < 1;
 
-    // Vẽ ảnh gốc lên canvas mới với kích thước mục tiêu
-    newCtx.drawImage(originalCanvas, 0, 0, newWidth, newHeight);
+    const normalizeInterpolation = (interp?: string): 'nearest' | 'bilinear' | 'bicubic' => {
+        if (!interp) return 'bilinear';
+        const key = interp.replace(/\s+/g, '').toLowerCase();
+        if (key === 'nearestneighbor' || key === 'nearest') return 'nearest';
+        if (key === 'bicubic') return 'bicubic';
+        return 'bilinear';
+    };
 
-    // Lấy ImageData mới từ canvas đã resize
-    const newImageData = newCtx.getImageData(0, 0, newWidth, newHeight);
+    const method = normalizeInterpolation(options.interpolation);
 
-    return newImageData;
+    const clamp = (v: number, min: number, max: number): number =>
+        v < min ? min : v > max ? max : v;
+
+    // --------------------------
+    // 1. Average when downsizing
+    // --------------------------
+    if (downScaling && options.averageWhenDownsizing) {
+        // Box filter theo đúng tinh thần "average when downsizing" của ImageJ
+        const invScaleX = srcW / newWidth;
+        const invScaleY = srcH / newHeight;
+
+        for (let y = 0; y < newHeight; y++) {
+            const srcY0 = y * invScaleY;
+            const srcY1 = (y + 1) * invScaleY;
+            const yStart = Math.floor(srcY0);
+            const yEnd = Math.min(srcH - 1, Math.floor(srcY1));
+
+            for (let x = 0; x < newWidth; x++) {
+                const srcX0 = x * invScaleX;
+                const srcX1 = (x + 1) * invScaleX;
+                const xStart = Math.floor(srcX0);
+                const xEnd = Math.min(srcW - 1, Math.floor(srcX1));
+
+                let rSum = 0, gSum = 0, bSum = 0, aSum = 0;
+                let totalWeight = 0;
+
+                for (let sy = yStart; sy <= yEnd; sy++) {
+                    const y0 = Math.max(srcY0, sy);
+                    const y1 = Math.min(srcY1, sy + 1);
+                    const wy = y1 - y0;
+                    if (wy <= 0) continue;
+
+                    for (let sx = xStart; sx <= xEnd; sx++) {
+                        const x0 = Math.max(srcX0, sx);
+                        const x1 = Math.min(srcX1, sx + 1);
+                        const wx = x1 - x0;
+                        if (wx <= 0) continue;
+
+                        const w = wx * wy;
+                        const idx = (sy * srcW + sx) * 4;
+
+                        rSum += srcData[idx] * w;
+                        gSum += srcData[idx + 1] * w;
+                        bSum += srcData[idx + 2] * w;
+                        aSum += srcData[idx + 3] * w;
+                        totalWeight += w;
+                    }
+                }
+
+                const di = (y * newWidth + x) * 4;
+                if (totalWeight > 0) {
+                    dstData[di] = rSum / totalWeight;
+                    dstData[di + 1] = gSum / totalWeight;
+                    dstData[di + 2] = bSum / totalWeight;
+                    dstData[di + 3] = aSum / totalWeight;
+                } else {
+                    // fallback: nearest neighbor
+                    const srcX = clamp((x + 0.5) / scaleX - 0.5, 0, srcW - 1);
+                    const srcY = clamp((y + 0.5) / scaleY - 0.5, 0, srcH - 1);
+                    const sx = Math.round(srcX);
+                    const sy = Math.round(srcY);
+                    const sIdx = (sy * srcW + sx) * 4;
+                    dstData[di] = srcData[sIdx];
+                    dstData[di + 1] = srcData[sIdx + 1];
+                    dstData[di + 2] = srcData[sIdx + 2];
+                    dstData[di + 3] = srcData[sIdx + 3];
+                }
+            }
+        }
+
+        return dst;
+    }
+
+    // --------------------------
+    // 2. Nearest Neighbor
+    // --------------------------
+    if (method === 'nearest') {
+        const invScaleX = srcW / newWidth;
+        const invScaleY = srcH / newHeight;
+
+        for (let y = 0; y < newHeight; y++) {
+            const srcY = (y + 0.5) * invScaleY - 0.5;
+            const sy = clamp(Math.round(srcY), 0, srcH - 1);
+
+            for (let x = 0; x < newWidth; x++) {
+                const srcX = (x + 0.5) * invScaleX - 0.5;
+                const sx = clamp(Math.round(srcX), 0, srcW - 1);
+
+                const sIdx = (sy * srcW + sx) * 4;
+                const dIdx = (y * newWidth + x) * 4;
+
+                dstData[dIdx] = srcData[sIdx];
+                dstData[dIdx + 1] = srcData[sIdx + 1];
+                dstData[dIdx + 2] = srcData[sIdx + 2];
+                dstData[dIdx + 3] = srcData[sIdx + 3];
+            }
+        }
+
+        return dst;
+    }
+
+    // --------------------------
+    // 3. Bilinear
+    // --------------------------
+    const bilinearSample = (fx: number, fy: number) => {
+        const x0 = clamp(Math.floor(fx), 0, srcW - 1);
+        const x1 = clamp(x0 + 1, 0, srcW - 1);
+        const y0 = clamp(Math.floor(fy), 0, srcH - 1);
+        const y1 = clamp(y0 + 1, 0, srcH - 1);
+
+        const dx = fx - x0;
+        const dy = fy - y0;
+
+        const idx00 = (y0 * srcW + x0) * 4;
+        const idx10 = (y0 * srcW + x1) * 4;
+        const idx01 = (y1 * srcW + x0) * 4;
+        const idx11 = (y1 * srcW + x1) * 4;
+
+        const w00 = (1 - dx) * (1 - dy);
+        const w10 = dx * (1 - dy);
+        const w01 = (1 - dx) * dy;
+        const w11 = dx * dy;
+
+        const r =
+            srcData[idx00] * w00 +
+            srcData[idx10] * w10 +
+            srcData[idx01] * w01 +
+            srcData[idx11] * w11;
+
+        const g =
+            srcData[idx00 + 1] * w00 +
+            srcData[idx10 + 1] * w10 +
+            srcData[idx01 + 1] * w01 +
+            srcData[idx11 + 1] * w11;
+
+        const b =
+            srcData[idx00 + 2] * w00 +
+            srcData[idx10 + 2] * w10 +
+            srcData[idx01 + 2] * w01 +
+            srcData[idx11 + 2] * w11;
+
+        const a =
+            srcData[idx00 + 3] * w00 +
+            srcData[idx10 + 3] * w10 +
+            srcData[idx01 + 3] * w01 +
+            srcData[idx11 + 3] * w11;
+
+        return [r, g, b, a];
+    };
+
+    // --------------------------
+    // 4. Bicubic (Catmull-Rom)
+    // --------------------------
+    const cubic = (t: number): number => {
+        const a = -0.5; // Catmull-Rom
+        const at = Math.abs(t);
+        const at2 = at * at;
+        const at3 = at2 * at;
+
+        if (at <= 1) return (a + 2) * at3 - (a + 3) * at2 + 1;
+        if (at < 2) return a * at3 - 5 * a * at2 + 8 * a * at - 4 * a;
+        return 0;
+    };
+
+    const bicubicSample = (fx: number, fy: number) => {
+        const xInt = Math.floor(fx);
+        const yInt = Math.floor(fy);
+
+        let r = 0, g = 0, b = 0, a = 0;
+        let totalW = 0;
+
+        for (let m = -1; m <= 2; m++) {
+            const yy = clamp(yInt + m, 0, srcH - 1);
+            const wy = cubic(fy - (yInt + m));
+
+            for (let n = -1; n <= 2; n++) {
+                const xx = clamp(xInt + n, 0, srcW - 1);
+                const wx = cubic(fx - (xInt + n));
+                const w = wx * wy;
+                if (w === 0) continue;
+
+                const idx = (yy * srcW + xx) * 4;
+
+                r += srcData[idx] * w;
+                g += srcData[idx + 1] * w;
+                b += srcData[idx + 2] * w;
+                a += srcData[idx + 3] * w;
+                totalW += w;
+            }
+        }
+
+        if (totalW === 0) return bilinearSample(fx, fy);
+        return [r / totalW, g / totalW, b / totalW, a / totalW];
+    };
+
+    const useBicubic = method === 'bicubic';
+
+    // --------------------------
+    // 5. Vòng lặp resize (bilinear/bicubic)
+    // --------------------------
+    const invScaleX = srcW / newWidth;
+    const invScaleY = srcH / newHeight;
+
+    for (let y = 0; y < newHeight; y++) {
+        const srcY = (y + 0.5) * invScaleY - 0.5;
+
+        for (let x = 0; x < newWidth; x++) {
+            const srcX = (x + 0.5) * invScaleX - 0.5;
+            const [r, g, b, a] = useBicubic
+                ? bicubicSample(srcX, srcY)
+                : bilinearSample(srcX, srcY);
+
+            const dIdx = (y * newWidth + x) * 4;
+            dstData[dIdx] = r;
+            dstData[dIdx + 1] = g;
+            dstData[dIdx + 2] = b;
+            dstData[dIdx + 3] = a;
+        }
+    }
+
+    return dst;
 };
 
 
+
 export const flipHorizontal = (
-  img: HTMLImageElement | null,
-  onComplete: (dataUrl: string, width: number, height: number, size: number) => void
+    img: HTMLImageElement | null,
+    onComplete: (dataUrl: string, width: number, height: number, size: number) => void
 ): void => {
-  if (!img) return;
+    if (!img) return;
 
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
 
-  const width = img.naturalWidth;
-  const height = img.naturalHeight;
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
 
 
-  if (width === 0 || height === 0) return;
+    if (width === 0 || height === 0) return;
 
 
-  canvas.width = width;
-  canvas.height = height;
+    canvas.width = width;
+    canvas.height = height;
 
 
-  // Flip horizontally using transform
-  ctx.translate(width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(img, 0, 0, width, height);
+    // Flip horizontally using transform
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, 0, width, height);
 
 
-  const dataUrl = canvas.toDataURL('image/png');
-  const base64 = dataUrl.split(',')[1];
-  const size = Math.ceil(base64.length * 0.75);
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    const size = Math.ceil(base64.length * 0.75);
 
 
-  onComplete(dataUrl, width, height, size);
+    onComplete(dataUrl, width, height, size);
 };
 
 
@@ -948,40 +1159,40 @@ export const flipHorizontal = (
  * Flip image vertically
  */
 export const flipVertical = (
-  img: HTMLImageElement | null,
-  onComplete: (dataUrl: string, width: number, height: number, size: number) => void
+    img: HTMLImageElement | null,
+    onComplete: (dataUrl: string, width: number, height: number, size: number) => void
 ): void => {
-  if (!img) return;
+    if (!img) return;
 
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
 
-  const width = img.naturalWidth;
-  const height = img.naturalHeight;
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
 
 
-  if (width === 0 || height === 0) return;
+    if (width === 0 || height === 0) return;
 
 
-  canvas.width = width;
-  canvas.height = height;
+    canvas.width = width;
+    canvas.height = height;
 
 
-  // Flip vertically using transform
-  ctx.translate(0, height);
-  ctx.scale(1, -1);
-  ctx.drawImage(img, 0, 0, width, height);
+    // Flip vertically using transform
+    ctx.translate(0, height);
+    ctx.scale(1, -1);
+    ctx.drawImage(img, 0, 0, width, height);
 
 
-  const dataUrl = canvas.toDataURL('image/png');
-  const base64 = dataUrl.split(',')[1];
-  const size = Math.ceil(base64.length * 0.75);
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    const size = Math.ceil(base64.length * 0.75);
 
 
-  onComplete(dataUrl, width, height, size);
+    onComplete(dataUrl, width, height, size);
 };
 
 
@@ -989,41 +1200,41 @@ export const flipVertical = (
  * Rotate image left 90 degrees (counter-clockwise)
  */
 export const rotateLeft90 = (
-  img: HTMLImageElement | null,
-  onComplete: (dataUrl: string, width: number, height: number, size: number) => void
+    img: HTMLImageElement | null,
+    onComplete: (dataUrl: string, width: number, height: number, size: number) => void
 ): void => {
-  if (!img) return;
+    if (!img) return;
 
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
 
-  const width = img.naturalWidth;
-  const height = img.naturalHeight;
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
 
 
-  if (width === 0 || height === 0) return;
+    if (width === 0 || height === 0) return;
 
 
-  // Swap dimensions for 90-degree rotation
-  canvas.width = height;
-  canvas.height = width;
+    // Swap dimensions for 90-degree rotation
+    canvas.width = height;
+    canvas.height = width;
 
 
-  // Rotate 90 degrees counter-clockwise (left)
-  ctx.translate(0, width);
-  ctx.rotate(-Math.PI / 2);
-  ctx.drawImage(img, 0, 0, width, height);
+    // Rotate 90 degrees counter-clockwise (left)
+    ctx.translate(0, width);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(img, 0, 0, width, height);
 
 
-  const dataUrl = canvas.toDataURL('image/png');
-  const base64 = dataUrl.split(',')[1];
-  const size = Math.ceil(base64.length * 0.75);
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    const size = Math.ceil(base64.length * 0.75);
 
 
-  onComplete(dataUrl, height, width, size);
+    onComplete(dataUrl, height, width, size);
 };
 
 
@@ -1031,41 +1242,41 @@ export const rotateLeft90 = (
  * Rotate image right 90 degrees (clockwise)
  */
 export const rotateRight90 = (
-  img: HTMLImageElement | null,
-  onComplete: (dataUrl: string, width: number, height: number, size: number) => void
+    img: HTMLImageElement | null,
+    onComplete: (dataUrl: string, width: number, height: number, size: number) => void
 ): void => {
-  if (!img) return;
+    if (!img) return;
 
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
 
-  const width = img.naturalWidth;
-  const height = img.naturalHeight;
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
 
 
-  if (width === 0 || height === 0) return;
+    if (width === 0 || height === 0) return;
 
 
-  // Swap dimensions for 90-degree rotation
-  canvas.width = height;
-  canvas.height = width;
+    // Swap dimensions for 90-degree rotation
+    canvas.width = height;
+    canvas.height = width;
 
 
-  // Rotate 90 degrees clockwise (right)
-  ctx.translate(height, 0);
-  ctx.rotate(Math.PI / 2);
-  ctx.drawImage(img, 0, 0, width, height);
+    // Rotate 90 degrees clockwise (right)
+    ctx.translate(height, 0);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, 0, 0, width, height);
 
 
-  const dataUrl = canvas.toDataURL('image/png');
-  const base64 = dataUrl.split(',')[1];
-  const size = Math.ceil(base64.length * 0.75);
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    const size = Math.ceil(base64.length * 0.75);
 
 
-  onComplete(dataUrl, height, width, size);
+    onComplete(dataUrl, height, width, size);
 };
 
 
@@ -1073,26 +1284,26 @@ export const rotateRight90 = (
  * Handler functions that dispatch events (for NavBar integration)
  */
 export const handleFlipHorizontal = (): void => {
-  const event = new CustomEvent('imageFlipHorizontal');
-  window.dispatchEvent(event);
+    const event = new CustomEvent('imageFlipHorizontal');
+    window.dispatchEvent(event);
 };
 
 
 export const handleFlipVertical = (): void => {
-  const event = new CustomEvent('imageFlipVertical');
-  window.dispatchEvent(event);
+    const event = new CustomEvent('imageFlipVertical');
+    window.dispatchEvent(event);
 };
 
 
 export const handleRotateLeft90 = (): void => {
-  const event = new CustomEvent('imageRotateLeft90');
-  window.dispatchEvent(event);
+    const event = new CustomEvent('imageRotateLeft90');
+    window.dispatchEvent(event);
 };
 
 
 export const handleRotateRight90 = (): void => {
-  const event = new CustomEvent('imageRotateRight90');
-  window.dispatchEvent(event);
+    const event = new CustomEvent('imageRotateRight90');
+    window.dispatchEvent(event);
 };
 
 // ============================================
@@ -1151,9 +1362,9 @@ const calculateMinMax = (data: Uint8ClampedArray | Uint16Array | Float32Array, _
     if (isColor && data instanceof Uint8ClampedArray) {
         // For RGBA data, calculate grayscale min/max
         for (let i = 0; i < data.length; i += 4) {
-            const gray = data[i] * DEFAULT_RGB_WEIGHTS.r + 
-                        data[i + 1] * DEFAULT_RGB_WEIGHTS.g + 
-                        data[i + 2] * DEFAULT_RGB_WEIGHTS.b;
+            const gray = data[i] * DEFAULT_RGB_WEIGHTS.r +
+                data[i + 1] * DEFAULT_RGB_WEIGHTS.g +
+                data[i + 2] * DEFAULT_RGB_WEIGHTS.b;
             if (gray < min) min = gray;
             if (gray > max) max = gray;
         }

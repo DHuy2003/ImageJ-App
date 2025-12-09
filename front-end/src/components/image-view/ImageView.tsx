@@ -42,6 +42,7 @@ import {
   processOpen,
   processSharpen,
   processSmooth,
+  processSubtractBackground,
   processUnsharpMask,
   processVariance,
   processWatershed
@@ -55,6 +56,7 @@ import ColorBalanceDialog from './dialogs/color-balance/ColorBalanceDialog';
 import FiltersDialog, { type FilterParams, type FilterType } from './dialogs/filters/FiltersDialog';
 import ImageSizeDialog from './dialogs/image-size/ImageSizeDialog';
 import NotificationBar, { type NotificationType } from './dialogs/notifications/NotificationBar';
+import SubtractDialog, { type SubtractBackgroundParams } from './dialogs/subtract-background/SubtractDialog';
 import ThresholdDialog, { MODE_BLACK_AND_WHITE, MODE_OVER_UNDER, MODE_RED } from './dialogs/threshold/ThresholdDialog';
 import useBitDepthEvents from './hooks/useBitDepthEvents';
 import useBrushCommit from './hooks/useBrushCommit';
@@ -62,11 +64,13 @@ import useEditEvents from './hooks/useEditEvents';
 import useFileEvents from './hooks/useFileEvents';
 import useFilterEvents from './hooks/useFilterEvents';
 import useMaskCreation from './hooks/useMaskCreation';
+import useNoiseEvents from './hooks/useNoiseEvents';
 import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
 import useToolbarToolSelection from './hooks/useToolbarToolSelection';
 import useUndoStack from './hooks/useUndoStack';
-import useNoiseEvents from './hooks/useNoiseEvents';
+
+
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -178,6 +182,17 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [colorBalanceChannel, setColorBalanceChannel] = useState<ColorChannel>('All');
   const [colorBalanceHistogram, setColorBalanceHistogram] = useState<number[]>([]);
   const [colorBalanceOriginalImageData, setColorBalanceOriginalImageData] = useState<ImageData | null>(null);
+  const [showSubtractDialog, setShowSubtractDialog] = useState(false);
+  const [subtractParams, setSubtractParams] = useState<SubtractBackgroundParams>({
+    radius: 50,
+    lightBackground: false,
+    createBackground: false,
+    slidingParaboloid: false,
+    disableSmoothing: false,
+    preview: false,
+  });
+  const [subtractOriginalImageData, setSubtractOriginalImageData] = useState<ImageData | null>(null);
+
   const showNotification = (message: string, type: NotificationType = 'info') => {
     setNotification({ message, type, isVisible: true });
   };
@@ -474,7 +489,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     getImageData,
     updateImageFromCanvas,
     () => currentFile?.bitDepth || 8
-  );  
+  );
 
   // Bit depth conversion events - returns functions to work with raw data
   const { applyDisplayRangeToRawData, getCurrentBitDepthRange } = useBitDepthEvents({
@@ -621,93 +636,65 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // COLOR BALANCE DIALOG HANDLERS
   // ============================================
 
-  // Helper function to check if a specific color exists in the image
-  const hasColorInImage = (imageData: ImageData, channel: ColorChannel): boolean => {
-    if (channel === 'All') return true; // 'All' always works
-    
-    const data = imageData.data;
-    const threshold = 30; // Minimum difference to consider as "having" that color
-    const sampleSize = Math.min(2000, data.length / 4);
-    const step = Math.max(1, Math.floor(data.length / 4 / sampleSize));
-    
-    let colorPixelCount = 0;
-    const minPixelsRequired = sampleSize * 0.005; // At least 0.5% of pixels should have this color
-    
-    for (let i = 0; i < data.length / 4; i += step) {
-      const idx = i * 4;
-      const r = data[idx];
-      const g = data[idx + 1];
-      const b = data[idx + 2];
-      
-      let hasColor = false;
-      
-      switch (channel) {
-        case 'Red':
-          // Red: R is significantly higher than G and B
-          hasColor = r > g + threshold && r > b + threshold;
-          break;
-        case 'Green':
-          // Green: G is significantly higher than R and B
-          hasColor = g > r + threshold && g > b + threshold;
-          break;
-        case 'Blue':
-          // Blue: B is significantly higher than R and G
-          hasColor = b > r + threshold && b > g + threshold;
-          break;
-        case 'Cyan':
-          // Cyan: G and B are high, R is low (opposite of Red)
-          hasColor = g > r + threshold && b > r + threshold;
-          break;
-        case 'Magenta':
-          // Magenta: R and B are high, G is low (opposite of Green)
-          hasColor = r > g + threshold && b > g + threshold;
-          break;
-        case 'Yellow':
-          // Yellow: R and G are high, B is low (opposite of Blue)
-          hasColor = r > b + threshold && g > b + threshold;
-          break;
-      }
-      
-      if (hasColor) {
-        colorPixelCount++;
-        if (colorPixelCount >= minPixelsRequired) {
-          return true;
-        }
-      }
+  const isRgbColor = currentFile?.bitDepth === 24;
+
+  const getEffectiveColorChannel = (channel: ColorChannel): ColorChannel => {
+    if (!isRgbColor && channel !== 'All') {
+      return 'All';
     }
-    
-    return false;
+    return channel;
   };
 
   const handleOpenColorBalanceEvent = () => {
     const dataObj = getImageData();
     if (dataObj) {
       setColorBalanceOriginalImageData(dataObj.imageData);
-      const histogram = getColorChannelHistogram(dataObj.imageData, colorBalanceChannel);
+
+      const effectiveChannel = getEffectiveColorChannel(colorBalanceChannel);
+      const histogram = getColorChannelHistogram(dataObj.imageData, effectiveChannel);
       setColorBalanceHistogram(histogram);
+
       setColorBalanceMin(0);
       setColorBalanceMax(255);
+
+      // Nếu ảnh không phải RGB mà user đang ở kênh khác All,
+      // ta ép UI về 'All' cho rõ ràng.
+      if (!isRgbColor && colorBalanceChannel !== 'All') {
+        setColorBalanceChannel('All');
+        showNotification(
+          'Color Balance: color channels are only available for RGB images. Using All.',
+          'warning'
+        );
+      }
+
       setShowColorBalance(true);
     }
   };
 
+
   // Handle color channel change - update histogram for new channel
   const handleColorChannelChange = (channel: ColorChannel) => {
-    if (colorBalanceOriginalImageData && channel !== 'All') {
-      // Check if the selected color exists in the image
-      if (!hasColorInImage(colorBalanceOriginalImageData, channel)) {
-        showNotification(`No ${channel.toLowerCase()} pixels detected in the image. Adjustment will have no effect.`, 'warning');
-      }
+    let effectiveChannel = getEffectiveColorChannel(channel);
+
+    // Nếu ảnh không phải RGB mà user chọn kênh màu,
+    // báo 1 lần và ép về 'All'
+    if (!isRgbColor && channel !== 'All') {
+      showNotification(
+        'Color Balance: color channels (Red/Green/Blue/Cyan/Magenta/Yellow) chỉ hoạt động với RGB Color. Đang dùng All.',
+        'warning'
+      );
+      effectiveChannel = 'All';
     }
-    
-    setColorBalanceChannel(channel);
+
+    setColorBalanceChannel(effectiveChannel);
+
     if (colorBalanceOriginalImageData) {
-      const histogram = getColorChannelHistogram(colorBalanceOriginalImageData, channel);
+      const histogram = getColorChannelHistogram(colorBalanceOriginalImageData, effectiveChannel);
       setColorBalanceHistogram(histogram);
-      // Reset min/max when changing channel
       setColorBalanceMin(0);
       setColorBalanceMax(255);
-      // Also restore original image when changing channel
+
+      // Khôi phục ảnh gốc khi đổi kênh
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = colorBalanceOriginalImageData.width;
       tempCanvas.height = colorBalanceOriginalImageData.height;
@@ -719,19 +706,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     }
   };
 
+
+
   // Handle color balance slider changes - preview mode
   const handleColorBalanceChange = (newMin: number, newMax: number, channel: ColorChannel) => {
     setColorBalanceMin(newMin);
     setColorBalanceMax(newMax);
 
-    // Skip processing if channel color doesn't exist in image (except 'All')
-    if (colorBalanceOriginalImageData && channel !== 'All') {
-      if (!hasColorInImage(colorBalanceOriginalImageData, channel)) {
-        return; // Don't apply changes if color doesn't exist
-      }
-    }
-
-    // Preview color balance on original image
+    // Preview color balance trên ảnh gốc
     if (colorBalanceOriginalImageData) {
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = colorBalanceOriginalImageData.width;
@@ -739,33 +721,28 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       const ctx = tempCanvas.getContext('2d');
       if (!ctx) return;
 
-      // Clone original data
       const previewData = new ImageData(
         new Uint8ClampedArray(colorBalanceOriginalImageData.data),
         colorBalanceOriginalImageData.width,
         colorBalanceOriginalImageData.height
       );
 
-      // Apply color balance
       processColorBalance(previewData, newMin, newMax, channel);
       ctx.putImageData(previewData, 0, 0);
       updateImageFromCanvas(tempCanvas, false);
     }
   };
 
+
   // Handle auto color balance
   const handleColorBalanceAuto = () => {
     if (!colorBalanceOriginalImageData) return;
 
-    // Check if the selected color exists in the image
-    if (colorBalanceChannel !== 'All' && !hasColorInImage(colorBalanceOriginalImageData, colorBalanceChannel)) {
-      showNotification(`No ${colorBalanceChannel.toLowerCase()} pixels detected. Auto adjustment skipped.`, 'warning');
-      return;
-    }
-
-    const { min, max } = analyzeColorChannelHistogram(colorBalanceOriginalImageData, colorBalanceChannel);
-    handleColorBalanceChange(min, max, colorBalanceChannel);
+    const effectiveChannel = getEffectiveColorChannel(colorBalanceChannel);
+    const { min, max } = analyzeColorChannelHistogram(colorBalanceOriginalImageData, effectiveChannel);
+    handleColorBalanceChange(min, max, effectiveChannel);
   };
+
 
   // Handle color balance reset
   const handleColorBalanceReset = () => {
@@ -789,14 +766,6 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const handleColorBalanceApply = () => {
     if (!colorBalanceOriginalImageData) return;
 
-    // Check if the selected color exists in the image
-    if (colorBalanceChannel !== 'All' && !hasColorInImage(colorBalanceOriginalImageData, colorBalanceChannel)) {
-      showNotification(`No ${colorBalanceChannel.toLowerCase()} pixels in the image. No changes applied.`, 'warning');
-      setColorBalanceOriginalImageData(null);
-      setShowColorBalance(false);
-      return;
-    }
-
     pushUndo();
 
     const resultCanvas = document.createElement('canvas');
@@ -809,7 +778,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         colorBalanceOriginalImageData.width,
         colorBalanceOriginalImageData.height
       );
-      processColorBalance(processedData, colorBalanceMin, colorBalanceMax, colorBalanceChannel);
+
+      const effectiveChannel = getEffectiveColorChannel(colorBalanceChannel);
+      processColorBalance(processedData, colorBalanceMin, colorBalanceMax, effectiveChannel);
+
       ctx.putImageData(processedData, 0, 0);
       updateImageFromCanvas(resultCanvas, false);
     }
@@ -818,6 +790,8 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setShowColorBalance(false);
     showNotification('Color balance applied successfully', 'success');
   };
+
+
 
   // Handle color balance dialog close
   const handleColorBalanceClose = () => {
@@ -1110,7 +1084,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   // Handle showing circular masks (generates a composite image and adds to stack)
   const handleShowCircularMasks = () => {
     const { dataUrl, width, height } = generateCircularMasksComposite();
-    
+
     // Create a new image entry for the circular masks visualization
     const masksImage: ImageInfo = {
       id: Date.now(), // Unique ID
@@ -1125,11 +1099,11 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       mask_filepath: null,
       status: 'generated',
     };
-    
+
     // Add to visible images and navigate to it
     setVisibleImages(prev => [...prev, masksImage]);
     setCurrentIndex(visibleImages.length); // Navigate to the new image
-    
+
     showNotification('Generated circular masks visualization for radii: 1, 2, 3, 4, 5, 10, 15, 20', 'success');
     setShowFilterDialog(false);
   };
@@ -1322,30 +1296,35 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   }, []); // dependencies
 
   // 4. Hàm xử lý khi bấm OK trong dialog
-  const handleSizeApply = (w: number, h: number, _d: number, interp: string) => {
+  const handleSizeApply = (
+    w: number,
+    h: number,
+    _d: number,
+    interp: string,
+    average: boolean
+  ) => {
     const dataObj = getImageData();
     if (!dataObj) return;
 
-    // Gọi hàm logic từ imageUtils (đã được định nghĩa ở bước trước)
     const newImageData = processImageResize(dataObj.imageData, {
       newWidth: w,
       newHeight: h,
-      interpolation: interp as any
+      interpolation: interp,
+      averageWhenDownsizing: average,
     });
 
-    // Tạo canvas tạm để chuyển đổi ImageData -> URL
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = w;
     tempCanvas.height = h;
     const ctx = tempCanvas.getContext('2d');
     if (ctx) {
       ctx.putImageData(newImageData, 0, 0);
-      // Cập nhật ảnh hiển thị và lưu vào Undo Stack
       updateImageFromCanvas(tempCanvas, true);
     }
 
     setShowSizeDialog(false);
   };
+
 
   useEffect(() => {
     const transformImage = (
@@ -1397,6 +1376,104 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener('imageRotateRight90', handleRotateRight90Event);
     };
   }, [currentIndex, currentFile, pushUndo, setCurrentImageURL, setVisibleImages]);
+
+  const applySubtractPreview = (params: SubtractBackgroundParams) => {
+    if (!subtractOriginalImageData) return;
+
+    const result = processSubtractBackground(subtractOriginalImageData, {
+      radius: params.radius,
+      lightBackground: params.lightBackground,
+      createBackground: params.createBackground,
+      slidingParaboloid: params.slidingParaboloid,
+      disableSmoothing: params.disableSmoothing,
+    });
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = result.width;
+    tempCanvas.height = result.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.putImageData(result, 0, 0);
+
+    // Preview: không lưu history
+    updateImageFromCanvas(tempCanvas, false);
+  };
+
+  const restoreSubtractBaseImage = () => {
+    if (!subtractOriginalImageData) return;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = subtractOriginalImageData.width;
+    tempCanvas.height = subtractOriginalImageData.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.putImageData(subtractOriginalImageData, 0, 0);
+
+    updateImageFromCanvas(tempCanvas, false);
+  };
+
+  const handleSubtractParamsChange = (params: SubtractBackgroundParams) => {
+    setSubtractParams(params);
+    if (params.preview) {
+      applySubtractPreview(params);
+    } else {
+      // Tắt preview -> trả ảnh về trạng thái gốc khi mở dialog
+      restoreSubtractBaseImage();
+    }
+  };
+
+  const handleSubtractApply = () => {
+    if (!subtractOriginalImageData) return;
+
+    // Lưu vào undo stack
+    pushUndo();
+
+    const result = processSubtractBackground(subtractOriginalImageData, {
+      radius: subtractParams.radius,
+      lightBackground: subtractParams.lightBackground,
+      createBackground: subtractParams.createBackground,
+      slidingParaboloid: subtractParams.slidingParaboloid,
+      disableSmoothing: subtractParams.disableSmoothing,
+    });
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = result.width;
+    tempCanvas.height = result.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.putImageData(result, 0, 0);
+
+    updateImageFromCanvas(tempCanvas, false);
+    setShowSubtractDialog(false);
+  };
+
+  const handleSubtractCancel = () => {
+    setShowSubtractDialog(false);
+    // Nếu đang preview thì khôi phục lại ảnh gốc
+    if (subtractOriginalImageData) {
+      restoreSubtractBaseImage();
+    }
+  };
+
+  const handleOpenSubtractBackgroundEvent = () => {
+    const dataObj = getImageData();
+    if (!dataObj) return;
+
+    setSubtractOriginalImageData(dataObj.imageData);
+    // Reset preview về false mỗi lần mở
+    setSubtractParams(prev => ({
+      ...prev,
+      preview: false,
+    }));
+    setShowSubtractDialog(true);
+  };
+
+  useEffect(() => {
+    window.addEventListener('openSubtractBackground', handleOpenSubtractBackgroundEvent);
+    return () => {
+      window.removeEventListener('openSubtractBackground', handleOpenSubtractBackgroundEvent);
+    };
+  }, [currentImageURL, getImageData]);
 
   return (
     <div id="image-view">
@@ -1801,6 +1878,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         type={notification.type}
         isVisible={notification.isVisible}
         onClose={closeNotification}
+      />
+
+      <SubtractDialog
+        isOpen={showSubtractDialog}
+        params={subtractParams}
+        onChange={handleSubtractParamsChange}
+        onApply={handleSubtractApply}
+        onCancel={handleSubtractCancel}
       />
     </div>
   );
