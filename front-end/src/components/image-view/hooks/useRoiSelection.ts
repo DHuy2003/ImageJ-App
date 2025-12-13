@@ -1,17 +1,16 @@
-import { useEffect, useState } from 'react';
-import type { SelectedRoiInfo } from '../../../types/roi';
+import { useEffect, useState } from "react";
+import type { SelectedRoiInfo } from "../../../types/roi";
 
 const useRoiSelection = () => {
   const [selectedRoi, setSelectedRoi] = useState<SelectedRoiInfo>(null);
 
   useEffect(() => {
-    const handler = (
-      e: Event,
-    ) => {
+    const handler = (e: Event) => {
       const ce = e as CustomEvent<{
         id: number;
-        type: 'rect' | 'circle';
+        type: "rect" | "circle";
         imageRect: { x: number; y: number; width: number; height: number };
+        angle?: number;
       } | null>;
 
       if (!ce.detail) {
@@ -19,19 +18,21 @@ const useRoiSelection = () => {
         return;
       }
 
-      const { type, imageRect } = ce.detail;
+      const { type, imageRect, angle } = ce.detail;
+
       setSelectedRoi({
         type,
         x: imageRect.x,
         y: imageRect.y,
         width: imageRect.width,
         height: imageRect.height,
-        angle: 0,
+        angle: angle ?? 0,
       });
     };
 
-    window.addEventListener('roiSelection', handler as EventListener);
-    return () => window.removeEventListener('roiSelection', handler as EventListener);
+    window.addEventListener("roiSelection", handler as EventListener);
+    return () =>
+      window.removeEventListener("roiSelection", handler as EventListener);
   }, []);
 
   return selectedRoi;

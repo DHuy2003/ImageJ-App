@@ -485,7 +485,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     });
   };
 
-  useNoiseEvents(
+  const noiseDialogs = useNoiseEvents(
     getImageData,
     updateImageFromCanvas,
     () => currentFile?.bitDepth || 8
@@ -1618,6 +1618,9 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         onPreview={handleFilterPreview}
         onReset={handleFilterReset}
       />
+
+      {noiseDialogs}
+
       {/* Left Resize Handle */}
       {showProperties && (
         <div

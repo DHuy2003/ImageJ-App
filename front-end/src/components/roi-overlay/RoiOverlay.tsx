@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { showSelectionRequired, type ResizeHandle, type RoiOverlayProps, type RoiShape } from '../../types/roi';
+import { type ResizeHandle, type RoiOverlayProps, type RoiShape } from '../../types/roi';
 import './RoiOverlay.css';
+import { showSelectionRequired } from '../../utils/nav-bar/editUtils';
+import { dispatchNotification } from '../../utils/nav-bar/processUtils';
 
 const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
   const [rois, setRois] = useState<RoiShape[]>([]);
@@ -25,10 +27,12 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
     width: number;
     height: number;
   } | null>(null);
+  const moveStartAngleRef = useRef<number>(0);
   const moveStartMouseRef = useRef<{ x: number; y: number } | null>(null);
   const lastRoiRef = useRef<RoiShape | null>(null);
   const canDraw = !disabled && tool !== 'pointer' && tool !== 'brush' && tool !== 'eraser';
   const canInteract = !disabled;
+
   const getBounds = () => {
     const container = containerRef.current;
     if (!container) return null;
@@ -106,23 +110,125 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
     return { x, y, width, height };
   };
 
-  const clampRectToBoundsForMove = (rectInput: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }) => {
+  const clampMoveRotatedRectToBounds = (
+    rectInput: { x: number; y: number; width: number; height: number },
+    angleDeg: number
+  ) => {
     const bounds = getBounds();
     if (!bounds) return rectInput;
-  
-    let { x, y, width, height } = rectInput;
-  
-    width = Math.max(1, width);
-    height = Math.max(1, height);
-    x = Math.max(bounds.left, Math.min(x, bounds.right - width));
-    y = Math.max(bounds.top, Math.min(y, bounds.bottom - height));
-  
-    return { x, y, width, height };
+
+    const w = Math.max(1, rectInput.width);
+    const h = Math.max(1, rectInput.height);
+
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const c = Math.abs(Math.cos(angleRad));
+    const s = Math.abs(Math.sin(angleRad));
+
+    const bboxW = w * c + h * s;
+    const bboxH = w * s + h * c;
+
+    const cx = rectInput.x + w / 2;
+    const cy = rectInput.y + h / 2;
+
+    const minCx = bounds.left + bboxW / 2;
+    const maxCx = bounds.right - bboxW / 2;
+    const minCy = bounds.top + bboxH / 2;
+    const maxCy = bounds.bottom - bboxH / 2;
+
+    let clampedCx = cx;
+    let clampedCy = cy;
+
+    if (minCx <= maxCx) {
+      clampedCx = Math.max(minCx, Math.min(cx, maxCx));
+    } else {
+      clampedCx = (bounds.left + bounds.right) / 2;
+    }
+
+    if (minCy <= maxCy) {
+      clampedCy = Math.max(minCy, Math.min(cy, maxCy));
+    } else {
+      clampedCy = (bounds.top + bounds.bottom) / 2;
+    }
+
+    return { x: clampedCx - w / 2, y: clampedCy - h / 2, width: w, height: h };
+  };
+
+
+  const fitRotatedRoiToBounds = (
+    roi: RoiShape,
+    newAngleDeg: number,
+    bounds: { left: number; top: number; right: number; bottom: number }
+  ): { roi: RoiShape; didShrink: boolean; didMove: boolean } => {
+    const availW = Math.max(1, bounds.right - bounds.left);
+    const availH = Math.max(1, bounds.bottom - bounds.top);
+
+    const angleRad = (newAngleDeg * Math.PI) / 180;
+    const c = Math.abs(Math.cos(angleRad));
+    const s = Math.abs(Math.sin(angleRad));
+
+    const centerX = roi.x + roi.width / 2;
+    const centerY = roi.y + roi.height / 2;
+
+    let w = Math.max(1, roi.width);
+    let h = Math.max(1, roi.height);
+
+    let bboxW = w * c + h * s;
+    let bboxH = w * s + h * c;
+
+    let didShrink = false;
+    let didMove = false;
+
+    if (bboxW > availW || bboxH > availH) {
+      const scale = Math.min(availW / bboxW, availH / bboxH);
+      if (isFinite(scale) && scale > 0) {
+        w = Math.max(1, w * scale);
+        h = Math.max(1, h * scale);
+        didShrink = true;
+
+        bboxW = w * c + h * s;
+        bboxH = w * s + h * c;
+      }
+    }
+
+    const minCx = bounds.left + bboxW / 2;
+    const maxCx = bounds.right - bboxW / 2;
+    const minCy = bounds.top + bboxH / 2;
+    const maxCy = bounds.bottom - bboxH / 2;
+
+    let clampedCx = centerX;
+    let clampedCy = centerY;
+
+    if (minCx <= maxCx) {
+      clampedCx = Math.max(minCx, Math.min(centerX, maxCx));
+    } else {
+      clampedCx = (bounds.left + bounds.right) / 2;
+    }
+
+    if (minCy <= maxCy) {
+      clampedCy = Math.max(minCy, Math.min(centerY, maxCy));
+    } else {
+      clampedCy = (bounds.top + bounds.bottom) / 2;
+    }
+
+    if (Math.abs(clampedCx - centerX) > 0.01 || Math.abs(clampedCy - centerY) > 0.01) {
+      didMove = true;
+    }
+
+    const newX = clampedCx - w / 2;
+    const newY = clampedCy - h / 2;
+
+    const axisClamped = {
+      x: Math.max(bounds.left, Math.min(newX, bounds.right - w)),
+      y: Math.max(bounds.top, Math.min(newY, bounds.bottom - h)),
+      width: w,
+      height: h,
+    };
+
+    return {
+      roi: { ...roi, ...axisClamped, angle: newAngleDeg },
+      didShrink,
+      didMove,
+    };
   };
 
   useEffect(() => {
@@ -139,6 +245,8 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
     resizeStartRectRef.current = null;
     moveStartMouseRef.current = null;
     moveStartRectRef.current = null;
+    moveStartAngleRef.current = 0;
+    moveStartAngleRef.current = 0;
 
     const evt = new CustomEvent('roiSelection', { detail: null });
     window.dispatchEvent(evt);
@@ -146,13 +254,13 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
 
   useEffect(() => {
     if (!disabled) return;
-  
+
     setRois([]);
     setSelectedId(null);
     setIsDrawing(false);
     setIsResizing(false);
     setIsMoving(false);
-  
+
     activeRoiIdRef.current = null;
     drawStartRef.current = null;
     resizeHandleRef.current = null;
@@ -160,10 +268,10 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
     resizeStartRectRef.current = null;
     moveStartMouseRef.current = null;
     moveStartRectRef.current = null;
-  
+
     const evt = new CustomEvent('roiSelection', { detail: null });
     window.dispatchEvent(evt);
-  }, [disabled]);  
+  }, [disabled]);
 
   useEffect(() => {
     const onSelectAll = () => {
@@ -234,15 +342,39 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       if (!delta) return;
       if (selectedId === null) return;
 
+      const bounds = getBounds();
+      if (!bounds) {
+        setRois(prev =>
+          prev.map(roi =>
+            roi.id === selectedId
+              ? { ...roi, angle: (((roi.angle ?? 0) + delta) % 360 + 360) % 360 }
+              : roi
+          )
+        );
+        return;
+      }
+
+      let didWarn = false;
+
       setRois(prev =>
-        prev.map(roi =>
-          roi.id === selectedId
-            ? {
-                ...roi,
-                angle: (((roi.angle ?? 0) + delta) % 360 + 360) % 360, 
-              }
-            : roi
-        )
+        prev.map(roi => {
+          if (roi.id !== selectedId) return roi;
+
+          const nextAngle = (((roi.angle ?? 0) + delta) % 360 + 360) % 360;
+
+          const fitted = fitRotatedRoiToBounds(roi, nextAngle, bounds);
+
+          if (!didWarn && (fitted.didShrink || fitted.didMove)) {
+            didWarn = true;
+            if (fitted.didShrink) {
+              dispatchNotification('Rotate: ROI was auto-shrunk to keep it inside the image.', 'warning');
+            } else {
+              dispatchNotification('Rotate: ROI was auto-moved to keep it inside the image.', 'info');
+            }
+          }
+
+          return fitted.roi;
+        })
       );
     };
 
@@ -256,55 +388,56 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       window.dispatchEvent(evt);
       return;
     }
-  
+
     const bounds = getBounds();
     if (!bounds) {
       const evt = new CustomEvent('roiSelection', { detail: null });
       window.dispatchEvent(evt);
       return;
     }
-  
+
     const img = imgRef.current;
     const displayWidth = bounds.right - bounds.left;
     const displayHeight = bounds.bottom - bounds.top;
-  
+
     if (displayWidth <= 0 || displayHeight <= 0) {
       const evt = new CustomEvent('roiSelection', { detail: null });
       window.dispatchEvent(evt);
       return;
     }
-  
+
     const selected = rois.find((r) => r.id === selectedId) || null;
-  
+
     if (!selected) {
       const evt = new CustomEvent('roiSelection', { detail: null });
       window.dispatchEvent(evt);
       return;
     }
-  
+
     const scaleX = img.naturalWidth / displayWidth;
     const scaleY = img.naturalHeight / displayHeight;
-  
+
     const localX = selected.x - bounds.left;
     const localY = selected.y - bounds.top;
-  
+
     const imageRect = {
       x: localX * scaleX,
       y: localY * scaleY,
       width: selected.width * scaleX,
       height: selected.height * scaleY,
     };
-  
+
     const evt = new CustomEvent('roiSelection', {
       detail: {
         id: selected.id,
         type: selected.type,
         imageRect,
+        angle: selected.angle ?? 0,
       },
     });
-  
+
     window.dispatchEvent(evt);
-  }, [rois, selectedId, imgRef]);  
+  }, [rois, selectedId, imgRef]);
 
   useEffect(() => {
     const getCurrentRoi = (): RoiShape | null => {
@@ -388,37 +521,36 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       const ce = e as CustomEvent<{ sx: number; sy: number }>;
       const sx = ce.detail?.sx ?? 1;
       const sy = ce.detail?.sy ?? 1;
-    
+
       if (sx <= 0 || sy <= 0) return;
-    
+
       const roi = getCurrentRoi();
       if (!roi) {
         showSelectionRequired();
         return;
       }
       lastRoiRef.current = roi;
-    
+
       const centerX = roi.x + roi.width / 2;
       const centerY = roi.y + roi.height / 2;
-    
+
       const newW = roi.width * sx;
       const newH = roi.height * sy;
-    
+
       const x = centerX - newW / 2;
       const y = centerY - newH / 2;
-    
+
       const clamped = clampRectToBounds({
         x,
         y,
         width: newW,
         height: newH,
       });
-    
+
       const updated: RoiShape = { ...roi, ...clamped };
       setSelectedId(updated.id);
       setRois([updated]);
     };
-    
 
     window.addEventListener('editRestoreSelection', onRestoreSelection);
     window.addEventListener('editFitCircle', onFitCircle);
@@ -534,12 +666,15 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       const dx = x - startMouse.x;
       const dy = y - startMouse.y;
 
-      const clamped = clampRectToBoundsForMove({
-        x: baseRect.x + dx,
-        y: baseRect.y + dy,
-        width: baseRect.width,
-        height: baseRect.height,
-      });
+      const clamped = clampMoveRotatedRectToBounds(
+        {
+          x: baseRect.x + dx,
+          y: baseRect.y + dy,
+          width: baseRect.width,
+          height: baseRect.height,
+        },
+        moveStartAngleRef.current
+      );
 
       setRois((prev) =>
         prev.map((roi) =>
@@ -594,6 +729,7 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       setIsMoving(false);
       moveStartMouseRef.current = null;
       moveStartRectRef.current = null;
+      moveStartAngleRef.current = 0;
       activeRoiIdRef.current = null;
     }
   };
@@ -630,12 +766,12 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
 
   const startMove = (e: MouseEvent<HTMLDivElement>, roiId: number) => {
     if (disabled) return;
-  
+
     const roi = rois.find((r) => r.id === roiId);
     if (!roi) return;
 
     lastRoiRef.current = roi;
-  
+
     if (tool !== 'pointer') {
       const bounds = getBounds();
       if (bounds) {
@@ -645,25 +781,25 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
           Math.abs(roi.y - bounds.top) <= eps &&
           Math.abs(roi.x + roi.width - bounds.right) <= eps &&
           Math.abs(roi.y + roi.height - bounds.bottom) <= eps;
-  
+
         if (coversFull) {
           return;
         }
       }
     }
-  
+
     if (!canInteract) return;
-  
+
     e.stopPropagation();
     e.preventDefault();
-  
+
     const { x, y } = toLocalClamped(e);
-  
+
     setSelectedId(roiId);
     setIsMoving(true);
     setIsDrawing(false);
     setIsResizing(false);
-  
+
     activeRoiIdRef.current = roiId;
     moveStartMouseRef.current = { x, y };
     moveStartRectRef.current = {
@@ -672,7 +808,8 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       width: roi.width,
       height: roi.height,
     };
-  }; 
+    moveStartAngleRef.current = roi.angle ?? 0;
+  };
 
   useEffect(() => {
     if (tool === 'brush' || tool === 'eraser') {
@@ -683,7 +820,7 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
       setIsMoving(false);
     }
   }, [tool]);
-  
+
   const containerClass = [
     'roi-overlay',
     `tool-${tool}`,
@@ -755,7 +892,7 @@ const RoiOverlay = ({ tool, disabled, imgRef, frameIndex }: RoiOverlayProps) =>{
           );
         })}
     </div>
-  );  
+  );
 }
 
 export default RoiOverlay;

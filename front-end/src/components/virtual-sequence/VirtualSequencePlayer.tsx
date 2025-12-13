@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, X } from "lucide-react";
 import "./VirtualSequence.css";
 
 export type SequenceFrame = {
@@ -80,7 +80,7 @@ const VirtualSequencePlayer = ({
             </p>
           </div>
           <button className="vs-close-btn" onClick={onClose}>
-            <span className="vs-close-icon">&times;</span>
+            <span className="vs-close-icon"><X/></span>
           </button>
         </div>
 

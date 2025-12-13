@@ -1406,79 +1406,83 @@ export const processDespeckle = (imageData: ImageData): ImageData => {
     return output;
 };
 
+export type OutlierMode = 'bright' | 'dark' | 'both';
+
 export const processRemoveOutliers = (
-    imageData: ImageData,
-    radius: number = 1,
-    threshold: number = 50,
-    mode: 'bright' | 'dark' | 'both' = 'bright'
+  imageData: ImageData,
+  radius: number,
+  threshold: number,
+  mode: OutlierMode = 'both'
 ): ImageData => {
-    const { width, height, data: src } = imageData;
-    const output = createOutputImage(imageData);
-    const dst = output.data;
+  const r = Math.max(0.5, Math.min(25, radius));
+  const th = Math.max(0, Math.min(100, threshold));
+  const w = imageData.width;
+  const h = imageData.height;
+  const src = imageData.data;
+  const out = createOutputImage(imageData);
+  const dst = out.data;
 
-    const r = Math.max(1, Math.round(radius));
-    const { offsets } = generateCircularMask(r);
+  const rad = Math.round(r);
+  const r2 = r * r;
 
-    const w1 = width - 1;
-    const h1 = height - 1;
-
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const intensities: number[] = [];
-
-            for (const [dx, dy] of offsets) {
-                const xx = Math.min(w1, Math.max(0, x + dx));
-                const yy = Math.min(h1, Math.max(0, y + dy));
-                const idx = (yy * width + xx) * 4;
-                const rN = src[idx];
-                const gN = src[idx + 1];
-                const bN = src[idx + 2];
-                const intensity = (rN + gN + bN) / 3;
-                intensities.push(intensity);
-            }
-
-            intensities.sort((a, b) => a - b);
-            const median = intensities[Math.floor(intensities.length / 2)];
-
-            const centerIdx = (y * width + x) * 4;
-            const rC = src[centerIdx];
-            const gC = src[centerIdx + 1];
-            const bC = src[centerIdx + 2];
-            const centerIntensity = (rC + gC + bC) / 3;
-
-            const delta = centerIntensity - median;
-            const isBrightOutlier = delta > threshold;
-            const isDarkOutlier = -delta > threshold;
-
-            let replace = false;
-            switch (mode) {
-                case 'bright':
-                    replace = isBrightOutlier;
-                    break;
-                case 'dark':
-                    replace = isDarkOutlier;
-                    break;
-                case 'both':
-                    replace = isBrightOutlier || isDarkOutlier;
-                    break;
-            }
-
-            if (replace) {
-                const val = clamp(Math.round(median));
-                dst[centerIdx] = val;
-                dst[centerIdx + 1] = val;
-                dst[centerIdx + 2] = val;
-                dst[centerIdx + 3] = src[centerIdx + 3];
-            } else {
-                dst[centerIdx] = rC;
-                dst[centerIdx + 1] = gC;
-                dst[centerIdx + 2] = bC;
-                dst[centerIdx + 3] = src[centerIdx + 3];
-            }
-        }
+  const getMedian = (hist: Uint16Array, total: number) => {
+    let acc = 0;
+    const mid = Math.floor(total / 2);
+    for (let v = 0; v < 256; v++) {
+      acc += hist[v];
+      if (acc > mid) return v;
     }
+    return 0;
+  };
 
-    return output;
+  const hist = new Uint16Array(256);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      hist.fill(0);
+      let count = 0;
+
+      for (let dy = -rad; dy <= rad; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -rad; dx <= rad; dx++) {
+          if (dx * dx + dy * dy > r2) continue;
+          const xx = x + dx;
+          if (xx < 0 || xx >= w) continue;
+
+          const idx = (yy * w + xx) * 4;
+          const gray = (0.299 * src[idx] + 0.587 * src[idx + 1] + 0.114 * src[idx + 2]) | 0;
+          hist[gray]++; 
+          count++;
+        }
+      }
+
+      const med = getMedian(hist, count);
+
+      const i = (y * w + x) * 4;
+      const g = (0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]) | 0;
+
+      const brighter = g - med > th;
+      const darker   = med - g > th;
+
+      const isOutlier =
+        mode === 'bright' ? brighter :
+        mode === 'dark'   ? darker   :
+                            (brighter || darker);
+
+      if (isOutlier) {
+        dst[i] = dst[i + 1] = dst[i + 2] = med;
+        dst[i + 3] = src[i + 3];
+      } else {
+        dst[i] = src[i];
+        dst[i + 1] = src[i + 1];
+        dst[i + 2] = src[i + 2];
+        dst[i + 3] = src[i + 3];
+      }
+    }
+  }
+
+  return out;
 };
 
 export const processRemoveNaNs = (imageData: ImageData): ImageData => {

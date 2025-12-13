@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { base64ToBytes } from '../../../utils/common/formatFileSize';
-import { showSelectionRequired, type SelectedRoiInfo } from '../../../types/roi';
+import { type SelectedRoiInfo } from '../../../types/roi';
 import type { ImageInfo } from '../../../types/image';
 import type { RelativeCropRect } from '../../../types/crop';
+import { dispatchNotification } from '../../../utils/nav-bar/processUtils';
+import { showSelectionRequired } from '../../../utils/nav-bar/editUtils';
 
 type UseEditEventsParams = {
   imgRef: React.RefObject<HTMLImageElement | null>;
@@ -106,7 +108,10 @@ const useEditEvents = ({
 
     image.onerror = (e) => {
       console.error('Image load (CORS) failed: ', e, src);
-      alert('Cannot export cropped image due to CORS. Please refresh after backend CORS fix.');
+      dispatchNotification(
+        'Cannot export cropped image due to CORS. Please refresh after backend CORS fix.',
+        'error'
+      );
     };
   };
 
@@ -228,14 +233,14 @@ const useEditEvents = ({
         ctx.putImageData(imageData, x, y);
   
       } else if (mode === 'draw') {
-          const x = Math.round(roi.x);
-          const y = Math.round(roi.y);
-          const w = Math.round(roi.width);
-          const h = Math.round(roi.height);
-        
-          ctx.save();
-          ctx.beginPath();
-          if (roi.type === 'circle') {
+        const x = Math.round(roi.x);
+        const y = Math.round(roi.y);
+        const w = Math.round(roi.width);
+        const h = Math.round(roi.height);
+      
+        ctx.save();
+        ctx.beginPath();
+        if (roi.type === 'circle') {
           const cx = x + w / 2;
           const cy = y + h / 2;
           const rx = w / 2;
@@ -244,7 +249,7 @@ const useEditEvents = ({
         } else {
           ctx.rect(x, y, w, h);
         }
-      ctx.strokeStyle = '#ffff00';
+        ctx.strokeStyle = '#ffff00';
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
@@ -305,7 +310,10 @@ const useEditEvents = ({
 
     image.onerror = (e) => {
       console.error('Image load (CORS) failed: ', e, src);
-      alert('Cannot edit image due to CORS. Please refresh after backend CORS fix.');
+      dispatchNotification(
+        'Cannot edit image due to CORS. Please refresh after backend CORS fix.',
+        'error'
+      );
     };
   };
 
@@ -373,7 +381,10 @@ const useEditEvents = ({
   
     image.onerror = (e) => {
       console.error('Image load (CORS) failed: ', e, src);
-      alert('Cannot edit image due to CORS. Please refresh after backend CORS fix.');
+      dispatchNotification(
+        'Cannot edit image due to CORS. Please refresh after backend CORS fix.',
+        'error'
+      );
     };
   };
 

@@ -1,126 +1,93 @@
-import React from "react";
-import "./NoiseDialogs.css";
+import React, { useEffect, useRef, useState } from 'react';
+import './NoiseDialogs.css';
+import type { OutlierMode } from '../../../../utils/nav-bar/processUtils';
 
-export type OutlierMode = "bright" | "dark" | "both";
-
-interface RemoveOutliersDialogProps {
+type Props = {
   isOpen: boolean;
   radius: number;
   threshold: number;
   mode: OutlierMode;
   previewEnabled: boolean;
-  onRadiusChange: (value: number) => void;
-  onThresholdChange: (value: number) => void;
-  onModeChange: (mode: OutlierMode) => void;
-  onTogglePreview: (enabled: boolean) => void;
-  onApply: () => void;
-  onCancel: () => void;
-}
+  onRadiusChange: (v:number)=>void;
+  onThresholdChange: (v:number)=>void;
+  onModeChange: (v:OutlierMode)=>void;
+  onTogglePreview: (enabled:boolean)=>void;
+  onApply: ()=>void;
+  onCancel: ()=>void;
+};
 
-const RemoveOutliersDialog: React.FC<RemoveOutliersDialogProps> = ({
-  isOpen,
-  radius,
-  threshold,
-  mode,
-  previewEnabled,
-  onRadiusChange,
-  onThresholdChange,
-  onModeChange,
-  onTogglePreview,
-  onApply,
-  onCancel,
+const RemoveOutliersDialog: React.FC<Props> = ({
+  isOpen, radius, threshold, mode, previewEnabled,
+  onRadiusChange, onThresholdChange, onModeChange, onTogglePreview, onApply, onCancel
 }) => {
+  const dlgRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState({ x: 20, y: 20 });
+  const dragRef = useRef<{ dx: number; dy: number; dragging: boolean }>({ dx: 0, dy: 0, dragging: false });
+
+  useEffect(() => { if (isOpen) setPos({ x: 20, y: 20 }); }, [isOpen]);
+
+  const clamp = (x:number,y:number) => {
+    const c = document.getElementById('image-view'); const d = dlgRef.current;
+    if (!c || !d) return {x,y};
+    const cR = c.getBoundingClientRect(); const dR = d.getBoundingClientRect();
+    return { x: Math.max(0, Math.min(x, cR.width - dR.width)), y: Math.max(0, Math.min(y, cR.height - dR.height)) };
+  };
+  const onDown = (e:React.MouseEvent)=>{ const d=dlgRef.current; if(!d) return;
+    dragRef.current.dragging=true;
+    dragRef.current.dx=e.clientX-d.getBoundingClientRect().left;
+    dragRef.current.dy=e.clientY-d.getBoundingClientRect().top;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp, {once:true});
+  };
+  const onMove=(e:MouseEvent)=>{ if(!dragRef.current.dragging) return;
+    const c=document.getElementById('image-view'); if(!c) return;
+    const cR=c.getBoundingClientRect();
+    setPos(clamp(e.clientX-cR.left-dragRef.current.dx, e.clientY-cR.top-dragRef.current.dy));
+  };
+  const onUp=()=>{ dragRef.current.dragging=false; window.removeEventListener('mousemove', onMove); };
+
   if (!isOpen) return null;
 
-  const clampedRadius = Math.min(25, Math.max(0.5, radius));
-  const clampedThreshold = Math.min(100, Math.max(0, threshold));
+  const r = Number.isFinite(radius) ? radius : 0;
+  const t = Number.isFinite(threshold) ? threshold : 0;
 
-  const radiusValid = clampedRadius >= 0.5 && clampedRadius <= 25;
-  const thresholdValid = clampedThreshold >= 0 && clampedThreshold <= 100;
-
-  const handleRadiusInput = (value: string) => {
-    const n = parseFloat(value);
-    if (!isNaN(n)) onRadiusChange(n);
+  const onRadiusNum = (v:string)=> {
+    const p=parseFloat(v);
+    onRadiusChange(!isFinite(p)?0:Math.max(0,p));
   };
-
-  const handleThresholdInput = (value: string) => {
-    const n = parseFloat(value);
-    if (!isNaN(n)) onThresholdChange(n);
-  };
-
-  const handleHelp = () => {
-    window.open(
-      "https://imagej.net/ij/docs/menus/process.html#outliers",
-      "_blank",
-      "noopener"
-    );
+  const onThresholdNum = (v:string)=> {
+    const p=parseFloat(v);
+    onThresholdChange(!isFinite(p)?0:Math.max(0,p));
   };
 
   return (
     <div className="noise-dialog-backdrop">
-      <div className="noise-dialog">
-        <div className="noise-dialog-header">
-          <div className="noise-dialog-title">Remove Outliers...</div>
+      <div ref={dlgRef} className="noise-dialog" style={{ left: pos.x, top: pos.y }}>
+        <div className="noise-dialog-header" onMouseDown={onDown}>
+          <div className="noise-dialog-title">Remove Outliers</div>
+          <button className="noise-dialog-close" onClick={onCancel} aria-label="Close">×</button>
         </div>
 
         <div className="noise-dialog-body">
           <div className="noise-field">
-            <div className="noise-field-label">Radius (0.5 – 25)</div>
+            <div className="noise-field-label">Radius</div>
             <div className="noise-field-row">
-              <input
-                className="noise-range"
-                type="range"
-                min={0.5}
-                max={25}
-                step={0.5}
-                value={clampedRadius}
-                onChange={(e) => onRadiusChange(parseFloat(e.target.value))}
-              />
-              <input
-                className="noise-number-input"
-                type="number"
-                step={0.5}
-                min={0.5}
-                max={25}
-                value={radius.toString()}
-                onChange={(e) => handleRadiusInput(e.target.value)}
-              />
+              <input type="range" className="noise-range" min={1} max={20} step={1} value={r} onChange={(e)=>onRadiusChange(parseFloat(e.target.value))}/>
+              <input type="number" className="noise-number-input" min={1} max={999} step={1} value={r} onChange={(e)=>onRadiusNum(e.target.value)} />
             </div>
           </div>
 
           <div className="noise-field">
-            <div className="noise-field-label">Threshold (0 – 100)</div>
+            <div className="noise-field-label">Threshold</div>
             <div className="noise-field-row">
-              <input
-                className="noise-range"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={clampedThreshold}
-                onChange={(e) =>
-                  onThresholdChange(parseFloat(e.target.value))
-                }
-              />
-              <input
-                className="noise-number-input"
-                type="number"
-                step={1}
-                min={0}
-                max={100}
-                value={threshold.toString()}
-                onChange={(e) => handleThresholdInput(e.target.value)}
-              />
+              <input type="range" className="noise-range" min={0} max={255} step={1} value={t} onChange={(e)=>onThresholdChange(parseFloat(e.target.value))}/>
+              <input type="number" className="noise-number-input" min={0} max={9999} step={1} value={t} onChange={(e)=>onThresholdNum(e.target.value)} />
             </div>
           </div>
 
           <div className="noise-field">
             <div className="noise-field-label">Which outliers</div>
-            <select
-              className="noise-select"
-              value={mode}
-              onChange={(e) => onModeChange(e.target.value as OutlierMode)}
-            >
+            <select className="noise-select" value={mode} onChange={(e)=>onModeChange(e.target.value as any)}>
               <option value="bright">Bright</option>
               <option value="dark">Dark</option>
               <option value="both">Both</option>
@@ -128,41 +95,14 @@ const RemoveOutliersDialog: React.FC<RemoveOutliersDialogProps> = ({
           </div>
 
           <label className="noise-preview-row">
-            <input
-              className="noise-checkbox"
-              type="checkbox"
-              checked={previewEnabled}
-              onChange={(e) => onTogglePreview(e.target.checked)}
-            />
+            <input type="checkbox" className="noise-checkbox" checked={previewEnabled} onChange={(e)=>onTogglePreview(e.target.checked)} />
             <span>Preview</span>
           </label>
         </div>
 
         <div className="noise-dialog-footer">
-          <button
-            type="button"
-            className="noise-btn noise-btn-help"
-            onClick={handleHelp}
-          >
-            Help
-          </button>
-
-          <button
-            type="button"
-            className="noise-btn noise-btn-secondary"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            className="noise-btn noise-btn-primary"
-            onClick={onApply}
-            disabled={!radiusValid || !thresholdValid}
-          >
-            OK
-          </button>
+          <button type="button" className="noise-btn noise-btn-secondary" onClick={onCancel}>Cancel</button>
+          <button type="button" className="noise-btn noise-btn-primary" onClick={onApply}>OK</button>
         </div>
       </div>
     </div>
