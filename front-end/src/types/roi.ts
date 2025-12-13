@@ -1,5 +1,3 @@
-import Swal from "sweetalert2";
-
 export type RoiTool = 'pointer' | 'rect' | 'circle' | 'brush' | 'eraser';
 
 export type RoiShape = {
@@ -37,12 +35,3 @@ export type SelectedRoiInfo = {
   height: number;
   angle?: number;
 } | null;
-
-export const showSelectionRequired = () => {
-  Swal.fire({
-    text: "This command requires a selection.",
-    icon: 'warning',
-    confirmButtonText: 'OK',
-    confirmButtonColor: '#3085d6',
-  });
-};

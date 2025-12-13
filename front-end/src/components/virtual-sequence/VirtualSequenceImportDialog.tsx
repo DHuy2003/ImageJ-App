@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, X } from "lucide-react";
 import Swal from "sweetalert2";
 import "./VirtualSequence.css";
 
@@ -142,7 +142,7 @@ const VirtualSequenceImportDialog = ({
             </p>
           </div>
           <button className="vs-close-btn" onClick={onCancel}>
-            <span className="vs-close-icon">&times;</span>
+            <span className="vs-close-icon"><X/></span>
           </button>
         </div>
 

@@ -1,21 +1,21 @@
-import React, { useEffect, useRef, useState } from "react";
-import "./NoiseDialogs.css";
+import React, { useEffect, useRef, useState } from 'react';
+import './NoiseDialogs.css';
 
-type RemoveNaNsDialogProps = {
+type SaltPepperNoiseDialogProps = {
   isOpen: boolean;
-  radius: number;
+  densityPercent: number;
   previewEnabled: boolean;
-  onRadiusChange: (value: number) => void;
+  onDensityChange: (value: number) => void;
   onTogglePreview: (enabled: boolean) => void;
   onApply: () => void;
   onCancel: () => void;
 }
 
-const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
+const SaltPepperNoiseDialog: React.FC<SaltPepperNoiseDialogProps> = ({
   isOpen,
-  radius,
+  densityPercent,
   previewEnabled,
-  onRadiusChange,
+  onDensityChange,
   onTogglePreview,
   onApply,
   onCancel,
@@ -81,19 +81,27 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
 
   if (!isOpen) return null;
 
-  const clampedRadius = Math.min(100, Math.max(0, radius));
-  const radiusValid = clampedRadius >= 0 && clampedRadius <= 100;
+  const displayDensity = Number.isFinite(densityPercent)
+    ? densityPercent
+    : 0;
+  const clampedDensity = Math.min(100, Math.max(0, displayDensity));
+  const isValid = clampedDensity > 0 && clampedDensity <= 100;
 
-  const handleRadiusInput = (value: string) => {
-    const n = parseFloat(value);
-    if (!isNaN(n)) onRadiusChange(n);
+  const handleDensityInputChange = (value: string) => {
+    const parsed = parseFloat(value);
+    if (!isFinite(parsed)) {
+      onDensityChange(0);
+      return;
+    }
+    const clamped = Math.min(100, Math.max(0, parsed));
+    onDensityChange(clamped);
   };
 
-  const handleHelp = () => {
+  const handleHelpClick = () => {
     window.open(
-      "https://imagej.net/ij/docs/menus/process.html#nans",
-      "_blank",
-      "noopener"
+      'https://imagej.net/ij/docs/menus/process.html#noise',
+      '_blank',
+      'noopener'
     );
   };
 
@@ -108,7 +116,7 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
           className="noise-dialog-header"
           onMouseDown={onHeaderMouseDown}
         >
-          <div className="noise-dialog-title">Remove NaNs...</div>
+          <div className="noise-dialog-title">Salt and Pepper Noise</div>
           <button
             aria-label="Close"
             className="noise-dialog-close"
@@ -120,33 +128,36 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
 
         <div className="noise-dialog-body">
           <div className="noise-field">
-            <div className="noise-field-label">Radius (0 – 100) pixels</div>
+            <div className="noise-field-label">Density (%)</div>
             <div className="noise-field-row">
               <input
-                className="noise-range"
                 type="range"
+                className="noise-range"
                 min={0}
                 max={100}
-                step={1}
-                value={clampedRadius}
-                onChange={(e) => onRadiusChange(parseFloat(e.target.value))}
+                step={0.1}
+                value={clampedDensity}
+                onChange={(e) => onDensityChange(parseFloat(e.target.value))}
               />
               <input
-                className="noise-number-input"
                 type="number"
-                step={1}
+                className="noise-number-input"
                 min={0}
                 max={100}
-                value={radius.toString()}
-                onChange={(e) => handleRadiusInput(e.target.value)}
+                step={0.1}
+                value={displayDensity.toFixed(1)}
+                onChange={(e) => handleDensityInputChange(e.target.value)}
               />
+            </div>
+            <div className="noise-help-text">
+              Replaces 2.5% of pixels with black and 2.5% with white when density = 5%.
             </div>
           </div>
 
           <label className="noise-preview-row">
             <input
-              className="noise-checkbox"
               type="checkbox"
+              className="noise-checkbox"
               checked={previewEnabled}
               onChange={(e) => onTogglePreview(e.target.checked)}
             />
@@ -158,11 +169,10 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
           <button
             type="button"
             className="noise-btn noise-btn-help"
-            onClick={handleHelp}
+            onClick={handleHelpClick}
           >
             Help
           </button>
-
           <button
             type="button"
             className="noise-btn noise-btn-secondary"
@@ -170,12 +180,11 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
           >
             Cancel
           </button>
-
           <button
             type="button"
             className="noise-btn noise-btn-primary"
             onClick={onApply}
-            disabled={!radiusValid}
+            disabled={!isValid}
           >
             OK
           </button>
@@ -185,4 +194,4 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
   );
 };
 
-export default RemoveNaNsDialog;
+export default SaltPepperNoiseDialog;

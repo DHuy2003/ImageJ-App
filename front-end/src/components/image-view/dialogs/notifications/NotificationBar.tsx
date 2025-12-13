@@ -17,7 +17,7 @@ const NotificationBar: React.FC<NotificationBarProps> = ({
   type = 'info', 
   isVisible, 
   onClose, 
-  duration = 1000 
+  duration = 3000 
 }) => {
   useEffect(() => {
     if (isVisible) {

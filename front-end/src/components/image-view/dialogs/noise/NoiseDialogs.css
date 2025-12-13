@@ -1,29 +1,33 @@
 .noise-dialog-backdrop {
-    position: fixed;
+    position: absolute;    
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1300;
+    pointer-events: none;  
+    background: transparent;
+    backdrop-filter: none;
+    z-index: 10;
 }
 
 .noise-dialog {
-    background: #171b26;
-    color: #e5e7eb;
-    border-radius: 14px;
-    padding: 20px 24px;
-    min-width: 360px;
+    position: absolute;
+    min-width: 320px;
     max-width: 420px;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    pointer-events: auto;  
+    border-radius: 12px;
+    background: #1f2937;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    color: #e5e7eb;
+    top: 20px;
+    left: 20px;
 }
 
 .noise-dialog-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    justify-content: space-between;
+    padding: 10px 12px;
+    cursor: move;          
+    user-select: none;
+    border-bottom: 1px solid rgba(255,255,255,.06);
 }
 
 .noise-dialog-title {
@@ -31,11 +35,29 @@
     font-weight: 600;
 }
 
+.noise-dialog-close {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 30px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 8px;
+}
+
+.noise-dialog-close:hover {
+    background: rgba(255,255,255,0.06);
+    color: red;
+}
+
 .noise-dialog-body {
     display: flex;
     flex-direction: column;
     gap: 14px;
     margin-bottom: 20px;
+    padding: 12px;
 }
 
 .noise-field {
@@ -81,6 +103,7 @@
     background: #0f172a;
     color: #e5e7eb;
     font-size: 13px;
+    cursor: pointer;
 }
 
 .noise-preview-row {
@@ -90,12 +113,14 @@
     margin-top: 8px;
     font-size: 13px;
     color: #d1d5db;
+    cursor: pointer;
 }
 
 .noise-dialog-footer {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    padding: 0 12px 12px 12px;
 }
 
 .noise-btn {
@@ -110,7 +135,6 @@
     background: #111827;
     color: #e5e7eb;
 }
-
 .noise-btn-secondary:hover {
     background: #1f2937;
 }
@@ -119,12 +143,10 @@
     background: #2563eb;
     color: #ffffff;
 }
-
 .noise-btn-primary:disabled {
     opacity: 0.4;
     cursor: default;
 }
-
 .noise-btn-primary:not(:disabled):hover {
     background: #1d4ed8;
 }
@@ -134,7 +156,6 @@
     background: transparent;
     color: #9ca3af;
 }
-
 .noise-btn-help:hover {
     color: #e5e7eb;
 }
@@ -144,13 +165,13 @@
     height: 14px;
 }
 
-/* basic slider styling */
 .noise-range[type="range"] {
     -webkit-appearance: none;
     appearance: none;
     height: 4px;
     border-radius: 999px;
     background: #374151;
+    cursor: pointer;
 }
 
 .noise-range[type="range"]::-webkit-slider-thumb {
@@ -160,6 +181,7 @@
     height: 14px;
     border-radius: 999px;
     background: #2563eb;
+    cursor: pointer;
 }
 
 .noise-range[type="range"]::-moz-range-thumb {
@@ -168,4 +190,11 @@
     border-radius: 999px;
     background: #2563eb;
     border: none;
+    cursor: pointer;
+}
+
+.noise-help-text {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #9ca3af;
 }
