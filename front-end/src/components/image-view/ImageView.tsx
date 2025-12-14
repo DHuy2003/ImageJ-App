@@ -26,7 +26,7 @@ import {
   rotateRight90
 } from '../../utils/nav-bar/imageUtils';
 import {
-  generateCircularMasksComposite,
+  generateCircularMasksStack,
   processClose,
   processConvertToMask,
   processConvolve,
@@ -45,7 +45,8 @@ import {
   processSubtractBackground,
   processUnsharpMask,
   processVariance,
-  processWatershed
+  processWatershed,
+  type CircularMasksStack
 } from '../../utils/nav-bar/processUtils';
 import BrushOverlay from '../brush-overlay/BrushOverlay';
 import CropOverlay from '../crop-overlay/CropOverlay';
@@ -69,7 +70,7 @@ import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
 import useToolbarToolSelection from './hooks/useToolbarToolSelection';
 import useUndoStack from './hooks/useUndoStack';
-
+import NewStackViewer from './dialogs/depth-size/DepthSize';
 
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
@@ -192,6 +193,25 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     preview: false,
   });
   const [subtractOriginalImageData, setSubtractOriginalImageData] = useState<ImageData | null>(null);
+
+  const [newStackFrames, setNewStackFrames] = useState<any[]>([]);
+  const [showNewStack, setShowNewStack] = useState(false);
+
+  const [showCircularMasksPlayer, setShowCircularMasksPlayer] = useState(false);
+  const [circularMasksStack, setCircularMasksStack] = useState<CircularMasksStack | null>(null);
+  const [circularMasksIndex, setCircularMasksIndex] = useState(0);
+  const [circularMasksPlaying, setCircularMasksPlaying] = useState(false);
+  const circularMasksTimerRef = useRef<number | null>(null);
+
+    useEffect(() => {
+    return () => {
+      if (circularMasksTimerRef.current !== null) {
+        window.clearInterval(circularMasksTimerRef.current);
+      }
+    };
+  }, []);
+
+
 
   const showNotification = (message: string, type: NotificationType = 'info') => {
     setNotification({ message, type, isVisible: true });
@@ -472,18 +492,21 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   };
 
   // --- Update Image Source from Canvas ---
-  const updateImageFromCanvas = (canvas: HTMLCanvasElement, saveToHistory: boolean = true) => {
+  const updateImageFromCanvas = (
+    canvas: HTMLCanvasElement,
+    saveToHistory: boolean = true,
+    onDone?: (newUrl: string, blob: Blob) => void
+  ) => {
     canvas.toBlob((blob) => {
       if (!blob) return;
       const newUrl = URL.createObjectURL(blob);
 
-      if (saveToHistory) {
-        pushUndo();
-      }
+      if (saveToHistory) pushUndo();
 
       setCurrentImageURL(newUrl);
+      onDone?.(newUrl, blob);
     });
-  };
+};
 
   const noiseDialogs = useNoiseEvents(
     getImageData,
@@ -1081,32 +1104,29 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     }
   };
 
-  // Handle showing circular masks (generates a composite image and adds to stack)
+    // Show Circular Masks → mở pop-up stack giống ImageJ
   const handleShowCircularMasks = () => {
-    const { dataUrl, width, height } = generateCircularMasksComposite();
+    const stack = generateCircularMasksStack();
 
-    // Create a new image entry for the circular masks visualization
-    const masksImage: ImageInfo = {
-      id: Date.now(), // Unique ID
-      filename: 'Circular_Masks.png',
-      url: dataUrl,
-      width: width,
-      height: height,
-      size: 0, // Size not applicable for generated image
-      bitDepth: 8,
-      uploaded_on: new Date().toISOString(),
-      mask_filename: null,
-      mask_filepath: null,
-      status: 'generated',
-    };
+    if (!stack.frames.length) {
+      showNotification('Không tạo được Circular Masks.', 'error');
+      return;
+    }
 
-    // Add to visible images and navigate to it
-    setVisibleImages(prev => [...prev, masksImage]);
-    setCurrentIndex(visibleImages.length); // Navigate to the new image
-
-    showNotification('Generated circular masks visualization for radii: 1, 2, 3, 4, 5, 10, 15, 20', 'success');
+    setCircularMasksStack(stack);
+    setCircularMasksIndex(0);
+    setShowCircularMasksPlayer(true);
     setShowFilterDialog(false);
+
+    // auto play như ImageJ
+    stopCircularMasksPlayback();
+    setTimeout(() => {
+      startCircularMasksPlayback();
+    }, 0);
+
+    showNotification('Generated circular masks stack (99 masks).', 'success');
   };
+
 
   // Handle filter preview
   const handleFilterPreview = (filterType: FilterType, params: FilterParams) => {
@@ -1299,13 +1319,14 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const handleSizeApply = (
     w: number,
     h: number,
-    _d: number,
+    depth: number,
     interp: string,
     average: boolean
   ) => {
     const dataObj = getImageData();
     if (!dataObj) return;
 
+    // 1. Resize ảnh hiện tại (logic cũ giữ nguyên)
     const newImageData = processImageResize(dataObj.imageData, {
       newWidth: w,
       newHeight: h,
@@ -1317,13 +1338,60 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     tempCanvas.width = w;
     tempCanvas.height = h;
     const ctx = tempCanvas.getContext('2d');
-    if (ctx) {
-      ctx.putImageData(newImageData, 0, 0);
-      updateImageFromCanvas(tempCanvas, true);
+    if (!ctx) return;
+
+    ctx.putImageData(newImageData, 0, 0);
+
+    // ====================================================
+    // 🔥 CHỖ XỬ LÝ DEPTH – PHẦN BẠN HỎI
+    // ====================================================
+    if (depth > 1) {
+      // Không thay đổi ảnh hiện tại
+      // Tạo stack và popup viewer mới giống ImageJ
+
+      tempCanvas.toBlob(blob => {
+        if (!blob) return;
+
+        const url = URL.createObjectURL(blob);
+
+        const frames = Array.from({ length: depth }, () => ({
+          url,
+          width: w,
+          height: h,
+        }));
+
+        setNewStackFrames(frames);
+        setShowNewStack(true);
+      });
+
+      setShowSizeDialog(false);
+      return; // ⬅️ QUAN TRỌNG: dừng ở đây
     }
+
+    // ====================================================
+    // depth <= 1 → xử lý như Resize bình thường
+    // ====================================================
+    updateImageFromCanvas(tempCanvas, true, (newUrl, blob) => {
+      setVisibleImages(prev => {
+        const copy = [...prev];
+        const old = copy[currentIndex];
+        if (!old) return prev;
+
+        copy[currentIndex] = {
+          ...old,
+          cropped_url: newUrl as any,   // để UI dùng ảnh đã resize
+          width: w,
+          height: h,
+          size: blob.size,              // optional nhưng nên có để “Size” đúng
+        } as any;
+
+        return copy;
+      });
+    });
 
     setShowSizeDialog(false);
   };
+
 
 
   useEffect(() => {
@@ -1474,6 +1542,50 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       window.removeEventListener('openSubtractBackground', handleOpenSubtractBackgroundEvent);
     };
   }, [currentImageURL, getImageData]);
+
+    const stopCircularMasksPlayback = () => {
+    if (circularMasksTimerRef.current !== null) {
+      window.clearInterval(circularMasksTimerRef.current);
+      circularMasksTimerRef.current = null;
+    }
+    setCircularMasksPlaying(false);
+  };
+
+  const startCircularMasksPlayback = () => {
+    if (!circularMasksStack || !circularMasksStack.frames.length) return;
+
+    stopCircularMasksPlayback();
+    setCircularMasksPlaying(true);
+
+    circularMasksTimerRef.current = window.setInterval(() => {
+      setCircularMasksIndex(prev => {
+        if (!circularMasksStack) return prev;
+        return (prev + 1) % circularMasksStack.frames.length;
+      });
+    }, 150); // tốc độ chạy ~ giống ImageJ, muốn chậm hơn thì tăng ms
+  };
+
+  const handleCircularMasksPrev = () => {
+    if (!circularMasksStack || !circularMasksStack.frames.length) return;
+    setCircularMasksIndex(prev =>
+      (prev - 1 + circularMasksStack.frames.length) % circularMasksStack.frames.length
+    );
+  };
+
+  const handleCircularMasksNext = () => {
+    if (!circularMasksStack || !circularMasksStack.frames.length) return;
+    setCircularMasksIndex(prev =>
+      (prev + 1) % circularMasksStack.frames.length
+    );
+  };
+
+  const handleCircularMasksTogglePlay = () => {
+    if (circularMasksPlaying) {
+      stopCircularMasksPlayback();
+    } else {
+      startCircularMasksPlayback();
+    }
+  };
 
   return (
     <div id="image-view">
@@ -1890,6 +2002,87 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         onApply={handleSubtractApply}
         onCancel={handleSubtractCancel}
       />
+
+            {showCircularMasksPlayer && circularMasksStack && (
+        <div className="cm-overlay">
+          <div className="cm-window">
+            {/* Title-bar giống ImageJ */}
+            <div className="cm-titlebar">
+              <span>Masks</span>
+              <button
+                className="cm-close"
+                onClick={() => {
+                  stopCircularMasksPlayback();
+                  setShowCircularMasksPlayer(false);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Status line: 12/99 (radius=6.0, size=13); 150x150 pixels; 32-bit; 8.5MB */}
+            {(() => {
+              const frame = circularMasksStack.frames[circularMasksIndex];
+              const slice = circularMasksIndex + 1;
+              const total = circularMasksStack.frames.length;
+              const radiusStr = frame.radius.toFixed(1).replace(/\.0$/, '');
+              const memMB = (circularMasksStack.stackBytes / (1024 * 1024)).toFixed(1);
+
+              return (
+                <div className="cm-status">
+                  {slice}/{total} (radius={radiusStr}, size={frame.maskSize});{' '}
+                  {circularMasksStack.width}x{circularMasksStack.height} pixels;{' '}
+                  {circularMasksStack.bitDepth}-bit; {memMB}MB
+                </div>
+              );
+            })()}
+
+            {/* Ảnh mask */}
+            <div className="cm-image-area">
+              <img
+                src={circularMasksStack.frames[circularMasksIndex].dataUrl}
+                alt="Circular mask"
+              />
+            </div>
+
+            {/* Thanh điều khiển giống thanh stack Player */}
+            <div className="cm-controls">
+              <button onClick={() => setCircularMasksIndex(0)}>{'⏮'}</button>
+              <button onClick={handleCircularMasksPrev}>{'◀'}</button>
+              <button onClick={handleCircularMasksTogglePlay}>
+                {circularMasksPlaying ? 'Pause' : 'Play'}
+              </button>
+              <button onClick={handleCircularMasksNext}>{'▶'}</button>
+              <button
+                onClick={() => {
+                  if (!circularMasksStack) return;
+                  setCircularMasksIndex(circularMasksStack.frames.length - 1);
+                }}
+              >
+                {'⏭'}
+              </button>
+
+              <input
+                className="cm-slider"
+                type="range"
+                min={0}
+                max={circularMasksStack.frames.length - 1}
+                value={circularMasksIndex}
+                onChange={e => setCircularMasksIndex(Number(e.target.value))}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewStack && (
+        <NewStackViewer
+          frames={newStackFrames}
+          title="Generated Stack"
+          onClose={() => setShowNewStack(false)}
+        />
+      )}
+
     </div>
   );
 };
