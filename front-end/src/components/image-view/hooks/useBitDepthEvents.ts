@@ -195,7 +195,6 @@ const useBitDepthEvents = ({
             };
 
             const currentData = getCurrentData();
-
             // Perform conversion based on target bit depth
             if (targetBitDepth === 8) {
                 // Convert to 8-bit
@@ -254,24 +253,57 @@ const useBitDepthEvents = ({
                 // Convert to ImageData for display (scale to 0-255)
                 resultImageData = grayToImageData(result.data as Uint16Array, rawData.width, rawData.height, 16, min16, max16);
             } else if (targetBitDepth === 32) {
-                // Convert to 32-bit
+                // ✅ Save source bit depth BEFORE converting
+                const sourceBitDepth = rawData.currentBitDepth;
+
+                // Keep current display range (ImageJ-style "window/level")
+                const prevMin = rawData.min;
+                const prevMax = rawData.max;
+
+                // Convert to 32-bit (Float32)
                 const result = convertTo32Bit({
                     data: currentData,
                     width: rawData.width,
                     height: rawData.height,
-                    bitDepth: rawData.currentBitDepth,
+                    bitDepth: sourceBitDepth,
                     isColor,
                 });
 
                 rawData.data32 = result.data as Float32Array;
                 rawData.currentBitDepth = 32;
-                rawData.min = result.min ?? 0;
-                rawData.max = result.max ?? 255;
-                newMin = result.min ?? 0;
-                newMax = result.max ?? 255;
 
-                // Convert to ImageData for display (scale to 0-255)
-                resultImageData = grayToImageData(result.data as Float32Array, rawData.width, rawData.height, 32, result.min, result.max);
+                // ✅ FIX: If converting from 8-bit -> 32-bit, KEEP display range min/max
+                // (Do NOT overwrite with result.min/result.max, which can be 47..255 if image has no values <47)
+                if (sourceBitDepth === 8 && !isColor) {
+                    rawData.min = prevMin;
+                    rawData.max = prevMax;
+                    newMin = prevMin;
+                    newMax = prevMax;
+
+                    resultImageData = grayToImageData(
+                    rawData.data32,
+                    rawData.width,
+                    rawData.height,
+                    32,
+                    prevMin,
+                    prevMax
+                    );
+                } else {
+                    // Keep existing behavior for 16->32, 32->32, etc.
+                    rawData.min = result.min ?? 0;
+                    rawData.max = result.max ?? 255;
+                    newMin = rawData.min;
+                    newMax = rawData.max;
+
+                    resultImageData = grayToImageData(
+                    rawData.data32,
+                    rawData.width,
+                    rawData.height,
+                    32,
+                    rawData.min,
+                    rawData.max
+                    );
+                }
             } else {
                 // RGB Color (24-bit) - convert back to color display
                 newMin = 0;

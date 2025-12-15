@@ -753,6 +753,82 @@ const generateCircularMask = (radius: number): { offsets: [number, number][], si
     return { offsets, size: offsets.length };
 };
 
+export interface CircularMaskFrame {
+  dataUrl: string;
+  radius: number;   // bán kính (giống ImageJ)
+  maskSize: number; // kích thước kernel = 2*radius+1 (pixel)
+}
+
+export interface CircularMasksStack {
+  frames: CircularMaskFrame[];
+  width: number;
+  height: number;
+  bitDepth: number;
+  stackBytes: number; // tổng dung lượng toàn stack (byte)
+}
+
+/**
+ * Tạo stack 99 circular masks giống ImageJ: radius = 0.5, 1.0, ..., 49.5
+ * Mỗi frame: ảnh 150x150, nền đen, mask trắng ở giữa.
+ */
+export const generateCircularMasksStack = (): CircularMasksStack => {
+  const frames: CircularMaskFrame[] = [];
+
+  // ImageJ dùng 99 kernel → 99 radius
+  const radii: number[] = [];
+  for (let i = 0; i < 99; i++) {
+    const r = 0.5 + i * 0.5;           // 0.5 → 49.5
+    radii.push(Number(r.toFixed(1)));  // lưu 1 chữ số thập phân
+  }
+
+  const width = 150;
+  const height = 150;
+
+  radii.forEach((radius) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // nền đen
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, width, height);
+
+    // tính mask bằng hàm generateCircularMask sẵn có
+    const { offsets } = generateCircularMask(radius as number);
+    const cx = Math.floor(width / 2);
+    const cy = Math.floor(height / 2);
+
+    ctx.fillStyle = 'white';
+    offsets.forEach(([dx, dy]) => {
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x >= 0 && x < width && y >= 0 && y < height) {
+        ctx.fillRect(x, y, 1, 1);
+      }
+    });
+
+    frames.push({
+      dataUrl: canvas.toDataURL('image/png'),
+      radius,
+      maskSize: Math.round(radius * 2 + 1),
+    });
+  });
+
+  const bitDepth = 32;       // RGBA 8 bit * 4 kênh
+  const bytesPerPixel = 4;
+  const stackBytes = width * height * bytesPerPixel * frames.length;
+
+  return {
+    frames,
+    width,
+    height,
+    bitDepth,
+    stackBytes,
+  };
+};
+
 /**
  * Median Filter: Reduces noise by replacing each pixel with the median of neighboring values.
  * Uses histogram-based approach for O(1) median finding per pixel (much faster than sorting).
@@ -1088,48 +1164,48 @@ export const processVariance = (imageData: ImageData, radius: number): ImageData
     return output;
 };
 
-/**
- * Generate circular masks stack for visualization.
- * Creates ImageData objects showing the circular masks used for various radii.
- * Returns an array of { radius, imageData } objects.
- */
-export const generateCircularMasksStack = (): { radius: number; imageData: ImageData }[] => {
-    const masks: { radius: number; imageData: ImageData }[] = [];
-    const radii = [1, 2, 3, 4, 5, 10, 15, 20];
+// /**
+//  * Generate circular masks stack for visualization.
+//  * Creates ImageData objects showing the circular masks used for various radii.
+//  * Returns an array of { radius, imageData } objects.
+//  */
+// export const generateCircularMasksStack = (): { radius: number; imageData: ImageData }[] => {
+//     const masks: { radius: number; imageData: ImageData }[] = [];
+//     const radii = [1, 2, 3, 4, 5, 10, 15, 20];
 
-    for (const radius of radii) {
-        const size = radius * 2 + 1;
-        const imageData = new ImageData(size, size);
-        const data = imageData.data;
+//     for (const radius of radii) {
+//         const size = radius * 2 + 1;
+//         const imageData = new ImageData(size, size);
+//         const data = imageData.data;
 
-        const { offsets } = generateCircularMask(radius);
-        const offsetSet = new Set(offsets.map(([dx, dy]) => `${dx + radius},${dy + radius}`));
+//         const { offsets } = generateCircularMask(radius);
+//         const offsetSet = new Set(offsets.map(([dx, dy]) => `${dx + radius},${dy + radius}`));
 
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const idx = (y * size + x) * 4;
-                const isInMask = offsetSet.has(`${x},${y}`);
+//         for (let y = 0; y < size; y++) {
+//             for (let x = 0; x < size; x++) {
+//                 const idx = (y * size + x) * 4;
+//                 const isInMask = offsetSet.has(`${x},${y}`);
 
-                if (isInMask) {
-                    // White pixel for mask
-                    data[idx] = 255;
-                    data[idx + 1] = 255;
-                    data[idx + 2] = 255;
-                } else {
-                    // Black pixel for background
-                    data[idx] = 0;
-                    data[idx + 1] = 0;
-                    data[idx + 2] = 0;
-                }
-                data[idx + 3] = 255; // Full opacity
-            }
-        }
+//                 if (isInMask) {
+//                     // White pixel for mask
+//                     data[idx] = 255;
+//                     data[idx + 1] = 255;
+//                     data[idx + 2] = 255;
+//                 } else {
+//                     // Black pixel for background
+//                     data[idx] = 0;
+//                     data[idx + 1] = 0;
+//                     data[idx + 2] = 0;
+//                 }
+//                 data[idx + 3] = 255; // Full opacity
+//             }
+//         }
 
-        masks.push({ radius, imageData });
-    }
+//         masks.push({ radius, imageData });
+//     }
 
-    return masks;
-};
+//     return masks;
+// };
 
 /**
  * Generate a composite image showing all circular masks with labels.
@@ -1555,7 +1631,7 @@ const estimateBackground = (
 
     if (slidingParaboloid) {
         // Xấp xỉ paraboloid bằng Gaussian blur với sigma tỉ lệ radius
-        const sigma = Math.max(0.5, radius / 3);
+        const sigma = Math.max(0.5, radius / 2);
         return processGaussianBlur(imageData, sigma);
     }
 
