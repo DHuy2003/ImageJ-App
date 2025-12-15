@@ -5,7 +5,7 @@ import numpy as np
 from app import db, config
 from app.models import Image as ImageModel, CellFeature
 import re
-from flask import url_for
+from flask import url_for, request
 from sqlalchemy import or_
 import base64
 import requests
@@ -15,11 +15,24 @@ from PIL import Image as PILImage
 from sqlalchemy.exc import OperationalError
 import time
 from uuid import uuid4
+import shutil
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 CONVERTED_FOLDER = config.CONVERTED_FOLDER
 MASK_FOLDER = config.MASK_FOLDER
 EDITED_FOLDER = config.EDITED_FOLDER
+SESSION_HEADER = "X-Session-Id"
+
+def _session_scoped_dir(base_dir: str, session_id):
+    if not session_id:
+        return base_dir
+    return os.path.join(base_dir, session_id)
+
+def _ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
+
+def get_current_session_id():
+    return request.headers.get(SESSION_HEADER)
 
 def commit_with_retry(retries: int = 3, delay: float = 0.3):
     for attempt in range(retries):
@@ -50,7 +63,14 @@ def extract_numeric_part(filename):
 
 def process_and_save_image(image, destination_folder):
     original_filename = image.filename
-    input_path = os.path.join(UPLOAD_FOLDER, original_filename)
+    session_id = get_current_session_id()
+
+    upload_dir = _session_scoped_dir(UPLOAD_FOLDER, session_id)
+    dest_dir = _session_scoped_dir(destination_folder, session_id)
+    _ensure_dir(upload_dir)
+    _ensure_dir(dest_dir)
+
+    input_path = os.path.join(upload_dir, original_filename)
     image.save(input_path)
 
     img = Image.open(input_path)
@@ -60,7 +80,7 @@ def process_and_save_image(image, destination_folder):
 
     converted_filename_base = os.path.splitext(original_filename)[0]
     converted_filename = converted_filename_base + '.png'
-    output_path = os.path.join(destination_folder, converted_filename)
+    output_path = os.path.join(dest_dir, converted_filename)
 
     if destination_folder == MASK_FOLDER:
         if img.mode != 'L' and img.mode != 'I' and img.mode != 'I;16':
@@ -72,7 +92,7 @@ def process_and_save_image(image, destination_folder):
             arr = np.array(img).astype(np.int32)
 
         original_mask_filename = converted_filename_base + '_labels.png'
-        original_mask_path = os.path.join(destination_folder, original_mask_filename)
+        original_mask_path = os.path.join(dest_dir, original_mask_filename)
 
         if arr.max() > 255:
             original_mask_img = Image.fromarray(arr.astype(np.uint16), mode='I;16')
@@ -136,20 +156,24 @@ def process_and_save_image(image, destination_folder):
 
     width, height = img.size
     file_size = os.path.getsize(output_path)
-
+    session_id = get_current_session_id()
     numeric_part = extract_numeric_part(original_filename)
     image_record = None
 
     if numeric_part:
-        image_record = ImageModel.query.filter(
+        query = ImageModel.query.filter(
             or_(
                 ImageModel.filename.like(f'%{numeric_part}%'),
                 ImageModel.mask_filename.like(f'%{numeric_part}%')
             )
-        ).first()
+        )
+        if session_id:
+            query = query.filter(ImageModel.session_id == session_id)
+        image_record = query.first()
 
     if not image_record:
         image_record = ImageModel()
+        image_record.session_id = session_id
         db.session.add(image_record)
         if destination_folder == MASK_FOLDER:
             image_record.status = 'mask_only'
@@ -191,7 +215,7 @@ def process_and_save_image(image, destination_folder):
         "last_edited_on": image_record.last_edited_on.isoformat() if image_record.last_edited_on else None
     }
 
-def convert_image_for_preview(image):
+def convert_image_for_preview(image, session_id=None):
     img = Image.open(image)
     arr = np.array(img)
 
@@ -229,7 +253,10 @@ def convert_image_for_preview(image):
         img = img.convert('RGB')
 
     preview_filename = f"vs_{uuid4().hex}.png"
-    output_path = os.path.join(CONVERTED_FOLDER, preview_filename)
+    session_id = session_id or get_current_session_id()
+    preview_dir = _session_scoped_dir(CONVERTED_FOLDER, session_id)
+    _ensure_dir(preview_dir)
+    output_path = os.path.join(preview_dir, preview_filename)
     img.save(output_path, "PNG")
 
     return preview_filename
@@ -242,7 +269,8 @@ def upload_cell_images(images):
         try:
             cell_image_info = process_and_save_image(image, CONVERTED_FOLDER)
             cell_image_info["url"] = url_for(
-                'image_bp.get_converted_image',
+                'image_bp.get_converted_image_session',
+                session_id=get_current_session_id(),
                 filename=cell_image_info['converted_filename'],
                 _external=True
             )
@@ -262,24 +290,30 @@ def upload_mask_images(images):
             mask_info = process_and_save_image(mask_file, MASK_FOLDER)
             numeric_part = extract_numeric_part(mask_file.filename)
             if numeric_part:
-                linked_image_record = ImageModel.query.filter(
+                session_id = get_current_session_id()
+                linked_query = ImageModel.query.filter(
                     or_(
                         ImageModel.filename.like(f'%{numeric_part}%'),
                         ImageModel.mask_filename.like(f'%{numeric_part}%')
                     )
-                ).first()
+                )
+                if session_id:
+                    linked_query = linked_query.filter(ImageModel.session_id == session_id)
+                linked_image_record = linked_query.first()
                 if linked_image_record:
                     mask_info["id"] = linked_image_record.id
                     mask_info["cell_filename"] = linked_image_record.filename
                     if linked_image_record.filename:
                         cell_converted_filename = os.path.splitext(linked_image_record.filename)[0] + '.png'
                         mask_info["url"] = url_for(
-                            'image_bp.get_converted_image',
+                            'image_bp.get_converted_image_session',
+                            session_id=session_id,
                             filename=cell_converted_filename,
                             _external=True
                         )
                     mask_info["mask_url"] = url_for(
-                        'image_bp.get_mask_image',
+                        'image_bp.get_mask_image_session',
+                        session_id=session_id,
                         filename=linked_image_record.mask_filename,
                         _external=True
                     )
@@ -300,9 +334,16 @@ def update_edited_image(image, image_id):
     if not img_record:
         raise ValueError(f"Image with id {image_id} not found")
 
+    session_id = get_current_session_id()
+    if img_record.session_id:
+        if not session_id or img_record.session_id != session_id:
+            raise PermissionError("Image does not belong to this session")
+
     stem = Path(img_record.filename).stem if img_record.filename else f"image_{image_id}"
     edited_filename = f"{stem}_edited.png"
-    output_path = os.path.join(EDITED_FOLDER, edited_filename)
+    edited_dir = _session_scoped_dir(EDITED_FOLDER, session_id)
+    _ensure_dir(edited_dir)
+    output_path = os.path.join(edited_dir, edited_filename)
 
     img = PILImage.open(image)
     if img.mode not in ["RGB", "RGBA", "L"]:
@@ -312,13 +353,14 @@ def update_edited_image(image, image_id):
     img_record.edited_filename = edited_filename
     img_record.edited_filepath = output_path
     img_record.status = "edited"
-    
+
     commit_with_retry()
 
     edited_url = url_for(
-        'image_bp.get_edited_image',
+        "image_bp.get_edited_image_session",
+        session_id=session_id,
         filename=edited_filename,
-        _external=True
+        _external=True,
     )
 
     return {
@@ -332,9 +374,16 @@ def update_mask_image(mask_file, image_id):
     if not img_record:
         raise ValueError(f"Image with id {image_id} not found")
 
+    session_id = get_current_session_id()
+    if img_record.session_id:
+        if not session_id or img_record.session_id != session_id:
+            raise PermissionError("Image does not belong to this session")
+
     stem = Path(img_record.filename).stem if img_record.filename else f"image_{image_id}"
     mask_filename = f"{stem}_mask.png"
-    output_path = os.path.join(MASK_FOLDER, mask_filename)
+    mask_dir = _session_scoped_dir(MASK_FOLDER, session_id)
+    _ensure_dir(mask_dir)
+    output_path = os.path.join(mask_dir, mask_filename)
 
     img = PILImage.open(mask_file)
     if img.mode not in ["L", "RGB", "RGBA"]:
@@ -349,9 +398,10 @@ def update_mask_image(mask_file, image_id):
     commit_with_retry()
 
     mask_url = url_for(
-        'image_bp.get_mask_image',
+        "image_bp.get_mask_image_session",
+        session_id=session_id,
         filename=mask_filename,
-        _external=True
+        _external=True,
     )
 
     return {
@@ -362,7 +412,13 @@ def update_mask_image(mask_file, image_id):
     }
 
 def get_all_images():
-    images = ImageModel.query.filter(ImageModel.filename.isnot(None)).all()
+    session_id = get_current_session_id()
+    if not session_id:
+        return []
+    query = ImageModel.query.filter(ImageModel.filename.isnot(None))
+    if session_id:
+        query = query.filter(ImageModel.session_id == session_id)
+    images = query.all()
     image_list = []
 
     for img_db in images:
@@ -375,7 +431,8 @@ def get_all_images():
             if img_db.filename:
                 converted_filename = os.path.splitext(img_db.filename)[0] + '.png'
                 original_url = url_for(
-                    'image_bp.get_converted_image',
+                    'image_bp.get_converted_image_session',
+                    session_id=img_db.session_id,
                     filename=converted_filename,
                     _external=True
                 )
@@ -384,14 +441,16 @@ def get_all_images():
                 edited_filename = os.path.basename(img_db.edited_filepath)
                 if os.path.exists(img_db.edited_filepath):
                     edited_url = url_for(
-                        'image_bp.get_edited_image',
+                        'image_bp.get_edited_image_session',
+                        session_id=img_db.session_id,
                         filename=edited_filename,
                         _external=True
                     )
 
             if img_db.mask_filename:
                 mask_url = url_for(
-                    'image_bp.get_mask_image',
+                    'image_bp.get_mask_image_session',
+                    session_id=img_db.session_id,
                     filename=img_db.mask_filename,
                     _external=True
                 )
@@ -402,11 +461,11 @@ def get_all_images():
             if img_db.edited_filepath and os.path.exists(img_db.edited_filepath):
                 path_for_info = img_db.edited_filepath
                 final_url = edited_url
-            elif converted_filename and os.path.exists(os.path.join(CONVERTED_FOLDER, converted_filename)):
-                path_for_info = os.path.join(CONVERTED_FOLDER, converted_filename)
+            elif converted_filename and os.path.exists(os.path.join(_session_scoped_dir(CONVERTED_FOLDER, img_db.session_id), converted_filename)):
+                path_for_info = os.path.join(_session_scoped_dir(CONVERTED_FOLDER, img_db.session_id), converted_filename)
                 final_url = original_url
-            elif img_db.mask_filename and os.path.exists(os.path.join(MASK_FOLDER, img_db.mask_filename)):
-                path_for_info = os.path.join(MASK_FOLDER, img_db.mask_filename)
+            elif img_db.mask_filename and os.path.exists(os.path.join(_session_scoped_dir(MASK_FOLDER, img_db.session_id), img_db.mask_filename)):
+                path_for_info = os.path.join(_session_scoped_dir(MASK_FOLDER, img_db.session_id), img_db.mask_filename)
                 final_url = mask_url
 
             width = height = file_size = bit_depth = None
@@ -496,6 +555,11 @@ def delete_image(image_id):
     if not img:
         raise ValueError(f"Image with id {image_id} not found")
 
+    session_id = get_current_session_id()
+    if img.session_id:
+        if not session_id or img.session_id != session_id:
+            raise PermissionError("Image does not belong to this session")
+
     for path in [img.filepath, img.mask_filepath, img.edited_filepath]:
         if path and os.path.exists(path):
             try:
@@ -507,6 +571,55 @@ def delete_image(image_id):
     db.session.commit()
 
     return {"id": image_id}
+
+def delete_session_data(session_id: str):
+    if not session_id:
+        raise ValueError("Session ID is required to reset session data")
+
+    print(f"Cleaning up data for session {session_id}")
+    images = ImageModel.query.filter(ImageModel.session_id == session_id).all()
+    if not images:
+        return {"deleted_images": 0, "deleted_features": 0}
+
+    image_ids = [img.id for img in images]
+
+    CellFeature.query.filter(
+        CellFeature.image_id.in_(image_ids)
+    ).delete(synchronize_session=False)
+
+    for img in images:
+        paths = []
+        for p in [img.filepath, img.mask_filepath, img.edited_filepath]:
+            if p:
+                paths.append(p)
+
+        if img.mask_filename:
+            mask_dir = os.path.dirname(img.mask_filepath) if img.mask_filepath else _session_scoped_dir(MASK_FOLDER, session_id)
+            label_path = os.path.join(
+                mask_dir,
+                f"{os.path.splitext(img.mask_filename)[0]}_labels.png",
+            )
+            paths.append(label_path)
+
+        for path in paths:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError as e:
+                    print(f"Failed to remove file {path}: {e}")
+
+        db.session.delete(img)
+
+    commit_with_retry()
+
+    for base in [UPLOAD_FOLDER, CONVERTED_FOLDER, MASK_FOLDER, EDITED_FOLDER]:
+        session_dir = os.path.join(base, session_id)
+        try:
+            shutil.rmtree(session_dir, ignore_errors=True)
+        except Exception as e:
+            print(f"Failed to remove session dir {session_dir}: {e}")
+    print(f"Cleaning up data for session complete")
+    return {"deleted_images": len(image_ids)}
 
 def cleanup_folders():
     print("Cleaning up folders...")

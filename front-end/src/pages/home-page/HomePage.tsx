@@ -7,7 +7,6 @@ const HomePage = () => {
   const handleStartClick = () => {
     navigate('/display-images');
   };
-
   return (
     <div id="main">
 

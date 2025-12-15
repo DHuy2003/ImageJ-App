@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { NavigateFunction } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import type { ImageInfo } from '../../types/image';
+import { getSessionId } from './getSessionId';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -22,6 +23,7 @@ export const uploadCellImages = async (
     const response = await axios.post(`${API_BASE_URL}/upload-cells`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
+        "X-Session-Id": getSessionId(),
       },
     });
 
@@ -39,6 +41,7 @@ export const uploadCellImages = async (
     navigate("/display-images", {
       replace: !isNewWindow,
     });
+
   } catch (error: any) {
     console.error("Error uploading cell images:", error);
     Swal.fire({
@@ -67,6 +70,7 @@ export const uploadMasks = async (
     await axios.post(`${API_BASE_URL}/upload-masks`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
+        "X-Session-Id": getSessionId(),
       },
     });
 

@@ -2,6 +2,7 @@ import type { NavigateFunction } from "react-router-dom";
 import { uploadCellImages, uploadMasks } from '../common/uploadImages'; 
 import Swal from 'sweetalert2';
 import axios from 'axios';
+import { getSessionId } from "../common/getSessionId";
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -54,22 +55,24 @@ export const handleNewFile = (navigate: NavigateFunction) => {
 
     try {
       const response = await axios.post(`${API_BASE_URL}/upload-cells`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: { 
+          "Content-Type": "multipart/form-data",
+          "X-Session-Id": getSessionId(),
+        },
       });
 
       const newUploadedImages =
         response.data.images ?? response.data.uploaded ?? [];
 
-      await Swal.fire({
-        title: 'Success',
-        text: `${newUploadedImages.length} cell images uploaded and processed.`,
-        icon: 'success',
-        confirmButtonText: 'OK',
-        confirmButtonColor: '#3085d6',
-      });
-
       if (!hasDataset && navigate) {
         navigate("/display-images", { replace: true });
+        Swal.fire({
+          title: 'Success',
+          text: `${newUploadedImages.length} cell images uploaded and processed.`,
+          icon: 'success',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#3085d6',
+        });
       } else {
         window.dispatchEvent(
           new CustomEvent(IMAGES_APPENDED_EVENT, {
@@ -119,7 +122,15 @@ export const handleOpenFolder = async (navigate: NavigateFunction) => {
     }
     files.sort(naturalSort);
 
-    await axios.post(`${API_BASE_URL}/reset`);
+    await axios.post(
+      `${API_BASE_URL}/reset`,
+      null,
+      {
+        headers: {
+          "X-Session-Id": getSessionId(),
+        },
+      }
+    );
 
     await uploadCellImages(files, navigate, false);
   
@@ -204,7 +215,15 @@ export const handleQuit = async (navigate: NavigateFunction) => {
     if (!result.isConfirmed) return;
   
     try {
-      await axios.post(`${API_BASE_URL}/reset`);
+      await axios.post(
+        `${API_BASE_URL}/reset`,
+        null,
+        {
+          headers: {
+            "X-Session-Id": getSessionId(),
+          },
+        }
+      );
     } catch (err) {
       console.error("Error resetting dataset on quit:", err);
     }

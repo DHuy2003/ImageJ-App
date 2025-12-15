@@ -1,4 +1,6 @@
 from flask import Blueprint, request, jsonify, send_from_directory, Response, current_app, url_for
+import os
+import threading
 from flask_cors import cross_origin
 from app.services.image_services import (
     get_all_images,
@@ -9,8 +11,8 @@ from app.services.image_services import (
     update_mask_image,
     convert_image_for_preview,
     delete_image,
-    cleanup_folders,
-    cleanup_database
+    get_current_session_id,
+    delete_session_data,
 )
 from app.services.segmentation_services import (
     run_cellpose_segmentation,
@@ -39,7 +41,6 @@ from app.services.clustering_services import (
     get_clustering_results
 )
 from app import config
-import os
 
 image_bp = Blueprint('image_bp', __name__)
 
@@ -48,45 +49,55 @@ CONVERTED_FOLDER = config.CONVERTED_FOLDER
 MASK_FOLDER = config.MASK_FOLDER
 EDITED_FOLDER = config.EDITED_FOLDER
 
-@image_bp.route('/uploads/<filename>')
-@cross_origin() 
-def get_origin_image(filename):
+@image_bp.route('/uploads/<session_id>/<filename>')
+@cross_origin()
+def get_origin_image_session(session_id, filename):
     try:
-        return send_from_directory(UPLOAD_FOLDER, filename)
-    except FileNotFoundError:
-        return jsonify({"error": "File not found"}), 404
-    
-@image_bp.route('/converted/<filename>')
-@cross_origin() 
-def get_converted_image(filename):
-    try:
-        return send_from_directory(CONVERTED_FOLDER, filename)
+        directory = os.path.join(UPLOAD_FOLDER, session_id)
+        return send_from_directory(directory, filename)
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
 
-@image_bp.route('/masks/<filename>')
-@cross_origin()  
-def get_mask_image(filename):
+@image_bp.route('/converted/<session_id>/<filename>')
+@cross_origin()
+def get_converted_image_session(session_id, filename):
     try:
-        return send_from_directory(MASK_FOLDER, filename)
+        directory = os.path.join(CONVERTED_FOLDER, session_id)
+        return send_from_directory(directory, filename)
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
-    
-@image_bp.route('/edited/<filename>')
+
+@image_bp.route('/masks/<session_id>/<filename>')
 @cross_origin()
-def get_edited_image(filename):
+def get_mask_image_session(session_id, filename):
     try:
-        return send_from_directory(EDITED_FOLDER, filename)
+        directory = os.path.join(MASK_FOLDER, session_id)
+        return send_from_directory(directory, filename)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
+
+@image_bp.route('/edited/<session_id>/<filename>')
+@cross_origin()
+def get_edited_image_session(session_id, filename):
+    try:
+        directory = os.path.join(EDITED_FOLDER, session_id)
+        return send_from_directory(directory, filename)
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
 
 @image_bp.route('/', methods=['GET'])
 def get_images():
+    session_id = get_current_session_id()
+    if not session_id:
+        return jsonify({"error": "Missing session id"}), 400
     images = get_all_images()
     return jsonify({"images": images}), 200
 
 @image_bp.route('/upload-cells', methods=['POST'])
 def upload_cells():
+    session_id = get_current_session_id()
+    if not session_id:
+        return jsonify({"error": "Missing session id"}), 400
     if "images" not in request.files:
         return jsonify({"error": "No cell images uploaded"}), 400
     
@@ -100,6 +111,9 @@ def upload_cells():
 
 @image_bp.route('/upload-masks', methods=['POST'])
 def upload_masks():
+    session_id = get_current_session_id()
+    if not session_id:
+        return jsonify({"error": "Missing session id"}), 400
     if "masks" not in request.files:
         return jsonify({"error": "No mask images uploaded"}), 400
     
@@ -120,11 +134,16 @@ def virtual_sequence_preview():
     files = request.files.getlist("files")
     frames = []
 
+    session_id = get_current_session_id()
+    if not session_id:
+        return jsonify({"error": "Missing session id"}), 400
+
     for f in files:
         try:
-            preview_filename = convert_image_for_preview(f)
+            preview_filename = convert_image_for_preview(f, session_id=session_id)
             preview_url = url_for(
-                'image_bp.get_converted_image',
+                'image_bp.get_converted_image_session',
+                session_id=session_id,
                 filename=preview_filename,
                 _external=True
             )
@@ -180,7 +199,7 @@ def export_images():
         print(f"Error in save image: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@image_bp.route('/update/<int:image_id>', methods=['POST'])
+@image_bp.route("/update/<int:image_id>", methods=["POST"])
 @cross_origin()
 def upload_edited_image(image_id):
     if "edited" not in request.files:
@@ -189,15 +208,19 @@ def upload_edited_image(image_id):
     edited_image = request.files["edited"]
     try:
         info = update_edited_image(edited_image, image_id)
-        return jsonify({
-            "message": "Edited image saved successfully",
-            "image": info
-        }), 200
+        return jsonify(
+            {
+                "message": "Edited image saved successfully",
+                "image": info,
+            }
+        ), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
     except Exception as e:
         print(f"Error saving edited image: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
-@image_bp.route('/update-mask/<int:image_id>', methods=['POST'])
+@image_bp.route("/update-mask/<int:image_id>", methods=["POST"])
 @cross_origin()
 def upload_mask_image(image_id):
     if "mask" not in request.files:
@@ -206,41 +229,98 @@ def upload_mask_image(image_id):
     mask_image = request.files["mask"]
     try:
         info = update_mask_image(mask_image, image_id)
-        return jsonify({
-            "message": "Mask image saved successfully",
-            "image": info
-        }), 200
+        return jsonify(
+            {
+                "message": "Mask image saved successfully",
+                "image": info,
+            }
+        ), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
     except Exception as e:
         print(f"Error saving mask image: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
-@image_bp.route('/delete/<int:image_id>', methods=['DELETE'])
+@image_bp.route("/delete/<int:image_id>", methods=["DELETE"])
 @cross_origin()
 def remove_image(image_id):
     try:
         info = delete_image(image_id)
-        return jsonify({
-            "message": "Image deleted successfully",
-            "image": info,
-        }), 200
+        return jsonify(
+            {
+                "message": "Image deleted successfully",
+                "image": info,
+            }
+        ), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
         print(f"Error deleting image {image_id}: {e}")
         return jsonify({"error": "Failed to delete image"}), 500
 
-
-@image_bp.route('/reset', methods=['POST'])
+@image_bp.route("/reset", methods=["POST"])
 @cross_origin()
 def reset_dataset():
     try:
-        cleanup_folders()
-        cleanup_database(current_app)
-        return jsonify({"message": "Dataset reset successfully"}), 200
+        session_id = get_current_session_id()
+        if not session_id:
+            return jsonify({"error": "Missing session id"}), 400
+
+        result = delete_session_data(session_id)
+        return jsonify(
+            {
+                "message": "Dataset reset successfully for this session",
+                "result": result,
+            }
+        ), 200
     except Exception as e:
         print(f"Error resetting dataset: {e}")
         return jsonify({"error": str(e)}), 500
 
+_pending_deletes = {} 
+_pending_lock = threading.Lock()
+@image_bp.route("/session/closing", methods=["POST"])
+def session_closing():
+    session_id = request.headers.get("X-Session-Id")
+    if not session_id:
+        return jsonify({"error": "Missing X-Session-Id"}), 400
+
+    app = current_app._get_current_object()
+
+    def do_delete():
+        try:
+            with app.app_context():
+                delete_session_data(session_id)
+        finally:
+            with _pending_lock:
+                _pending_deletes.pop(session_id, None)
+
+    with _pending_lock:
+        old = _pending_deletes.get(session_id)
+        if old:
+            old.cancel()
+
+        t = threading.Timer(1.0, do_delete)
+        _pending_deletes[session_id] = t
+        t.start()
+
+    return jsonify({"status": "scheduled"}), 200
+
+@image_bp.route("/session/alive", methods=["POST"])
+@cross_origin()
+def session_alive():
+    session_id = request.headers.get("X-Session-Id")
+    if not session_id:
+        return jsonify({"error": "Missing X-Session-Id"}), 400
+
+    with _pending_lock:
+        t = _pending_deletes.pop(session_id, None)
+        if t:
+            t.cancel()
+
+    return jsonify({"status": "ok"}), 200
 
 @image_bp.route('/segmentation/<int:image_id>', methods=['POST'])
 @cross_origin()
