@@ -7,8 +7,14 @@ import {
   FILE_MENU_EVENT_NAME,
   type FileMenuActionPayload,
 } from '../../../utils/nav-bar/fileUtils';
+import { getSessionId } from '../../../utils/common/getSessionId';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
+
+const buildEditedUrl = (filename: string) => {
+  const sid = getSessionId();
+  return `${API_BASE_URL}/edited/${sid}/${filename}`;
+};
 
 type UseFileEventsParams ={
   imageArray: ImageViewProps['imageArray'];
@@ -51,7 +57,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
       const fullPath = (image as any).edited_filepath as string;
       const filename = fullPath.split(/[/\\]/).pop();
       if (filename) {
-        imageUrl = `${API_BASE_URL}/edited/${filename}`;
+        imageUrl = `${buildEditedUrl(filename)}`;
       }
     }
 
@@ -156,7 +162,12 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           const response = await axios.post(
             `${API_BASE_URL}/update/${currentFile.id}`,
             formData,
-            { headers: { 'Content-Type': 'multipart/form-data' } },
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+                "X-Session-Id": getSessionId(),
+              },
+            }
           );
 
           const updated = response.data.image as ImageInfo & {
@@ -167,7 +178,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
           editedUrl =
             (updated as any).edited_url ||
             (updated.edited_filepath
-              ? `${API_BASE_URL}/edited/${updated.edited_filepath.split(/[/\\]/).pop()}`
+              ? `${buildEditedUrl(updated.edited_filepath.split(/[/\\]/).pop() as string)}`
               : null);
 
           updatedImageInfo = {
@@ -210,7 +221,12 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
             const maskResponse = await axios.post(
               `${API_BASE_URL}/update-mask/${currentFile.id}`,
               maskForm,
-              { headers: { 'Content-Type': 'multipart/form-data' } },
+              { 
+                headers: { 
+                  'Content-Type': 'multipart/form-data', 
+                  'X-Session-Id': getSessionId() 
+                } 
+              },
             );
 
             const maskUpdated = maskResponse.data.image as {
@@ -315,7 +331,12 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
             const response = await axios.post(
               `${API_BASE_URL}/update/${img.id}`,
               formData,
-              { headers: { 'Content-Type': 'multipart/form-data' } },
+              { 
+                headers: { 
+                  'Content-Type': 'multipart/form-data', 
+                  'X-Session-Id': getSessionId() 
+                } 
+              },
             );
     
             const updated = response.data.image as ImageInfo & {
@@ -326,7 +347,7 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
             if (updated.edited_filepath) {
               const filename = updated.edited_filepath.split(/[/\\]/).pop();
               if (filename) {
-                editedUrl = `${API_BASE_URL}/edited/${filename}`;
+                editedUrl = `${buildEditedUrl(filename)}`;
               }
             } else if ((updated as any).edited_url) {
               editedUrl = (updated as any).edited_url as string;
@@ -367,7 +388,12 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
             const maskResp = await axios.post(
               `${API_BASE_URL}/update-mask/${img.id}`,
               maskForm,
-              { headers: { 'Content-Type': 'multipart/form-data' } },
+              { 
+                headers: { 
+                  'Content-Type': 'multipart/form-data', 
+                  'X-Session-Id': getSessionId() 
+                } 
+              },
             );
     
             const maskUpdated = maskResp.data.image as {
@@ -514,7 +540,11 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
       }
   
       try {
-        await axios.delete(`${API_BASE_URL}/delete/${currentFile.id}`);
+        await axios.delete(`${API_BASE_URL}/delete/${currentFile.id}`, {
+          headers: {
+            "X-Session-Id": getSessionId(),
+          },
+        });
       } catch (err) {
         console.error('Error deleting image from DB:', err);
         await Swal.fire({
@@ -578,7 +608,15 @@ const convertImageToTIFF = async (image: ImageInfo): Promise<Blob> => {
       if (!result.isConfirmed) return;
   
       try {
-        await axios.post(`${API_BASE_URL}/reset`);
+        await axios.post(
+          `${API_BASE_URL}/reset`,
+          null,
+          {
+            headers: {
+              "X-Session-Id": getSessionId(),
+            },
+          }
+        );
       } catch (err) {
         console.error('Error resetting dataset from DB:', err);
         await Swal.fire({

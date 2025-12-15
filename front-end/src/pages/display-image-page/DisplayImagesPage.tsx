@@ -14,11 +14,14 @@ import axios from 'axios';
 import { TOOL_EVENT_NAME, TOOL_PROGRESS_EVENT, type ToolActionPayload, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
 import VirtualSequencePlayer, { type SequenceFrame } from "../../components/virtual-sequence/VirtualSequencePlayer";
 import VirtualSequenceImportDialog from "../../components/virtual-sequence/VirtualSequenceImportDialog";
-import { VIRTUAL_SEQUENCE_IMPORT_EVENT } from "../../utils/nav-bar/fileUtils";
+import {  VIRTUAL_SEQUENCE_IMPORT_EVENT } from "../../utils/nav-bar/fileUtils";
+import { getSessionId } from '../../utils/common/getSessionId';
+import { useResetCurrentSessionOnClose } from '../../utils/common/apiClient';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
 const DisplayImagesPage = () => {
+  useResetCurrentSessionOnClose();
   const [imageArray, setImageArray] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +44,11 @@ const DisplayImagesPage = () => {
         setLoading(true);
         setError(null);
 
-        const res = await axios.get(`${API_BASE_URL}/`);
+        const res = await axios.get(`${API_BASE_URL}/`, {
+          headers: { 
+            "X-Session-Id": getSessionId() 
+          },
+        });
         const images: ImageInfo[] = res.data.images ?? [];
         setImageArray(images);
       } catch (err: any) {
@@ -118,7 +125,6 @@ const DisplayImagesPage = () => {
     };
 
     window.addEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
-    console.log('Tool event listener registered for:', TOOL_EVENT_NAME);
     return () => {
       window.removeEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
     };
@@ -156,7 +162,10 @@ const DisplayImagesPage = () => {
         `${API_BASE_URL}/virtual-sequence/preview`,
         formData,
         {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: { 
+            "Content-Type": "multipart/form-data", 
+            "X-Session-Id": getSessionId() 
+          },
         }
       );
 

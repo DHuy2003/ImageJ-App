@@ -1,24 +1,31 @@
-import axios from 'axios';
-import { getSessionId } from './session';
+import { useEffect } from "react";
+import { getSessionId } from "./getSessionId";
 
-export const API_BASE_URL = 'http://127.0.0.1:5000/api/images';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/images";
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-});
+export const useResetCurrentSessionOnClose = () => {
+  useEffect(() => {
+    const sid = getSessionId();
 
-// Mọi request đều tự gắn ?session_id=...
-api.interceptors.request.use((config) => {
-  const sid = getSessionId();
+    fetch(`${API_BASE_URL}/session/alive`, {
+      method: "POST",
+      headers: { "X-Session-Id": sid },
+    }).catch(() => {});
 
-  // đảm bảo luôn có params
-  config.params = {
-    ...(config.params || {}),
-    session_id: sid,
-  };
+    const markClosing = () => {
+      fetch(`${API_BASE_URL}/session/closing`, {
+        method: "POST",
+        headers: { "X-Session-Id": sid },
+        keepalive: true,
+      }).catch(() => {});
+    };
 
-  return config;
-});
+    window.addEventListener("pagehide", markClosing);
+    window.addEventListener("beforeunload", markClosing);
 
-export default api;
-
+    return () => {
+      window.removeEventListener("pagehide", markClosing);
+      window.removeEventListener("beforeunload", markClosing);
+    };
+  }, []);
+}
