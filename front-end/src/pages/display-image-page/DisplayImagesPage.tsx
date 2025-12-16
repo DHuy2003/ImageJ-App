@@ -9,7 +9,7 @@ import ClusteringDialog from '../../components/clustering-dialog/ClusteringDialo
 import ProgressDialog from '../../components/progress-dialog/ProgressDialog';
 import { FaFileCircleXmark } from "react-icons/fa6"
 import './DisplayImagesPage.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { ImageInfo } from '../../types/image';
 import axios from 'axios';
 import { TOOL_EVENT_NAME, TOOL_PROGRESS_EVENT, type ToolActionPayload, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
@@ -40,6 +40,21 @@ const DisplayImagesPage = () => {
   const [showArticleSearch, setShowArticleSearch] = useState(false);
   const location = useLocation();
 
+  // Refetch images function - can be called after segmentation
+  const refetchImages = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/`, {
+        headers: {
+          "X-Session-Id": getSessionId()
+        },
+      });
+      const images: ImageInfo[] = res.data.images ?? [];
+      setImageArray(images);
+    } catch (err: any) {
+      console.error("Failed to refetch images:", err);
+    }
+  }, []);
+
   useEffect(() => {
     const fetchImages = async () => {
       try {
@@ -47,8 +62,8 @@ const DisplayImagesPage = () => {
         setError(null);
 
         const res = await axios.get(`${API_BASE_URL}/`, {
-          headers: { 
-            "X-Session-Id": getSessionId() 
+          headers: {
+            "X-Session-Id": getSessionId()
           },
         });
         const images: ImageInfo[] = res.data.images ?? [];
@@ -124,13 +139,18 @@ const DisplayImagesPage = () => {
         console.log('Setting showClusteringDialog to true');
         setShowClusteringDialog(true);
       }
+      // After segmentation completes, reload images to get updated mask data
+      if (e.detail.type === 'SEGMENTATION') {
+        console.log('Segmentation completed, refetching images to load masks...');
+        refetchImages();
+      }
     };
 
     window.addEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
     return () => {
       window.removeEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
     };
-  }, []);
+  }, [refetchImages]);
 
   useEffect(() => {
     const handleToggleArticleSearch = () => {
