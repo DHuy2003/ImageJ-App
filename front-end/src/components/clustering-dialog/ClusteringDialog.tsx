@@ -85,7 +85,7 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
         });
     };
 
-    const handleSelectAll = (category: 'morphology' | 'intensity' | 'motion') => {
+    const handleSelectAll = (category: 'morphology' | 'intensity' | 'motion' | 'position' | 'bounding_box') => {
         const categoryFeatures = AVAILABLE_FEATURES
             .filter(f => f.category === category)
             .map(f => f.key);
@@ -132,7 +132,7 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
             window.dispatchEvent(new CustomEvent('clusteringComplete'));
 
             const gmmResult = response.data.result?.gmm || {};
-            const hmmResult = response.data.result?.hmm || {};
+            void response.data.result?.hmm; // HMM result available but not used yet
 
             const statsHtml = `
                 <div style="text-align:left;margin-top:12px;">

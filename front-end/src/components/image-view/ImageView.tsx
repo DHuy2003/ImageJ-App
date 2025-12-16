@@ -1606,31 +1606,54 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
               </table>
             </div>
 
-            <div className="properties-section">
+            <div className="properties-section cell-features-section">
               <h3>Cell Features (Frame {currentIndex + 1})</h3>
               {frameFeatures.length === 0 ? (
                 <p className="no-features">No features extracted. Run segmentation first.</p>
               ) : (
-                <div className="features-table-container">
-                  <p className="cell-count">{frameFeatures.length} cells detected</p>
-                  <table className="features-table combined-table">
-                    <thead>
-                      <tr>
-                        <th>ID</th>
-                        <th>Area (px²)</th>
-                        <th>Aspect Ratio</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {frameFeatures.map((feature) => (
-                        <tr key={feature.id}>
-                          <td className="cell-id">{feature.cell_id}</td>
-                          <td>{formatValue(feature.area, 0)}</td>
-                          {/* <td>{formatValue(feature.aspect_ratio, 2)}</td> */}
+                <div className="cell-features-panel">
+                  <div className="cell-features-summary">
+                    <div className="summary-stat">
+                      <span className="stat-number">{frameFeatures.length}</span>
+                      <span className="stat-label">Cells</span>
+                    </div>
+                    <div className="summary-stat">
+                      <span className="stat-number">
+                        {formatValue(frameFeatures.reduce((sum, f) => sum + (f.area || 0), 0) / frameFeatures.length, 0)}
+                      </span>
+                      <span className="stat-label">Avg Area</span>
+                    </div>
+                    <div className="summary-stat">
+                      <span className="stat-number">
+                        {formatValue(frameFeatures.reduce((sum, f) => sum + (f.mean_intensity || 0), 0) / frameFeatures.length, 1)}
+                      </span>
+                      <span className="stat-label">Avg Intensity</span>
+                    </div>
+                  </div>
+                  <div className="cell-features-table-wrapper">
+                    <table className="cell-features-table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Area</th>
+                          <th>Intensity</th>
+                          <th>Position</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {frameFeatures.map((feature) => (
+                          <tr key={feature.id}>
+                            <td className="cell-id-col">{feature.cell_id}</td>
+                            <td className="area-col">{formatValue(feature.area, 0)}</td>
+                            <td className="intensity-col">{formatValue(feature.mean_intensity, 1)}</td>
+                            <td className="position-col">
+                              ({formatValue(feature.centroid_col, 0)}, {formatValue(feature.centroid_row, 0)})
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>

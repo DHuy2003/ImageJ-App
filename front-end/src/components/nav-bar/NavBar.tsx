@@ -73,6 +73,10 @@ const handleOpenSubtractBackground = () => {
     window.dispatchEvent(new Event('openSubtractBackground'));
 };
 
+const handleToggleArticleSearch = () => {
+    window.dispatchEvent(new CustomEvent('toggle-article-search'));
+};
+
 const NavBar = () => {
     const navigate = useNavigate();
     return (
@@ -139,7 +143,6 @@ const NavBar = () => {
                                 { label: "RGB Color", onClick: () => handleConvertBitDepth(24, 0, true) },
                             ]
                         },
-                        { label: "Color" },
                         {
                             label: "Zoom", subItems: [
                                 { label: "In (+)", onClick: handleZoomIn },
@@ -231,7 +234,7 @@ const NavBar = () => {
                     <span>Result</span>
                 </div>
 
-                <div className="navbar-menu-item">
+                <div className="navbar-menu-item" onClick={handleToggleArticleSearch}>
                     <Search className="menu-icon" />
                     <span>Article</span>
                 </div>

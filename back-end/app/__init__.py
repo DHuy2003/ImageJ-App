@@ -14,7 +14,9 @@ def create_app():
     db.init_app(app)
 
     from app.routes.image_routes import image_bp
+    from app.routes.article_routes import article_bp
     app.register_blueprint(image_bp, url_prefix='/api/images')
+    app.register_blueprint(article_bp, url_prefix='/api/articles')
 
     @app.before_request
     def log_request_info():

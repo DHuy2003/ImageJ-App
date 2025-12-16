@@ -4,6 +4,7 @@ import ToolBar from '../../components/tool-bar/ToolBar';
 import ImageView from '../../components/image-view/ImageView';
 import CellFeaturesTable from '../../components/cell-features-table/CellFeaturesTable';
 import AnalysisResults from '../../components/analysis-results/AnalysisResults';
+import ArticleSearch from '../../components/article-search/ArticleSearch';
 import ClusteringDialog from '../../components/clustering-dialog/ClusteringDialog';
 import ProgressDialog from '../../components/progress-dialog/ProgressDialog';
 import { FaFileCircleXmark } from "react-icons/fa6"
@@ -36,6 +37,7 @@ const DisplayImagesPage = () => {
   const [showVirtualImport, setShowVirtualImport] = useState(false);
   const [showVirtualPlayer, setShowVirtualPlayer] = useState(false);
   const [sequenceFrames, setSequenceFrames] = useState<SequenceFrame[]>([]);
+  const [showArticleSearch, setShowArticleSearch] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -127,6 +129,17 @@ const DisplayImagesPage = () => {
     window.addEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
     return () => {
       window.removeEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleToggleArticleSearch = () => {
+      setShowArticleSearch(prev => !prev);
+    };
+
+    window.addEventListener('toggle-article-search', handleToggleArticleSearch);
+    return () => {
+      window.removeEventListener('toggle-article-search', handleToggleArticleSearch);
     };
   }, []);
 
@@ -234,6 +247,10 @@ const DisplayImagesPage = () => {
           onClose={handleCloseVirtualPlayer}
           frames={sequenceFrames}
         />
+        <ArticleSearch
+          isOpen={showArticleSearch}
+          onClose={() => setShowArticleSearch(false)}
+        />
       </div>
     );
   }
@@ -273,10 +290,14 @@ const DisplayImagesPage = () => {
           onClose={handleCloseVirtualPlayer}
           frames={sequenceFrames}
         />
+        <ArticleSearch
+          isOpen={showArticleSearch}
+          onClose={() => setShowArticleSearch(false)}
+        />
       </div>
     );
   }
-  
+
   return (
     <div className="display-images-page">
       <NavBar />
@@ -309,6 +330,10 @@ const DisplayImagesPage = () => {
         isOpen={showVirtualPlayer}
         onClose={handleCloseVirtualPlayer}
         frames={sequenceFrames}
+      />
+      <ArticleSearch
+        isOpen={showArticleSearch}
+        onClose={() => setShowArticleSearch(false)}
       />
     </div>
   );

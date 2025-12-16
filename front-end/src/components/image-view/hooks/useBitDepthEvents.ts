@@ -183,9 +183,9 @@ const useBitDepthEvents = ({
             }
 
             const rawData = rawImageDataRef.current;
-            let resultImageData: ImageData;
-            let newMin: number;
-            let newMax: number;
+            let resultImageData: ImageData = imageData; // Default to original
+            let newMin: number = 0;
+            let newMax: number = 255;
 
             // Get current raw data based on stored bit depth
             const getCurrentData = (): Uint8ClampedArray | Uint16Array | Float32Array => {
@@ -304,11 +304,18 @@ const useBitDepthEvents = ({
                     rawData.max
                     );
                 }
-            } else {
-                // RGB Color (24-bit) - convert back to color display
+            } else if (targetBitDepth === 24) {
+                // RGB Color (24-bit) - this is actually display as RGB, not grayscale
+                // For now, just keep the original color data as-is
+                // The image is already in RGBA format in ImageData
                 newMin = 0;
                 newMax = 255;
                 resultImageData = imageData; // Keep original color data
+
+                // Reset raw data since we're going back to color mode
+                rawData.currentBitDepth = 8;
+                rawData.min = 0;
+                rawData.max = 255;
             }
 
             // Update display range

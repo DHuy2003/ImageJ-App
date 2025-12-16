@@ -166,65 +166,192 @@ html {
   border-bottom: none;
 }
 
-/* Features Table */
-.features-table-container {
-  margin-top: 8px;
-  max-height: 350px;
+/* ============ Cell Features Section - Improved ============ */
+.cell-features-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.cell-features-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.cell-features-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px;
+  background: linear-gradient(135deg, #e8f4fd 0%, #d6eaf8 100%);
+  border-radius: 8px;
+  border: 1px solid #aed6f1;
+}
+
+.cell-features-summary .summary-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.cell-features-summary .stat-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2980b9;
+}
+
+.cell-features-summary .stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #5d6d7e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cell-features-table-wrapper {
+  flex: 1;
+  max-height: 280px;
   overflow-y: auto;
+  border: 1px solid #d5dbdb;
+  border-radius: 8px;
+  background: #fff;
   scrollbar-width: thin;
 }
 
-.cell-count {
+.cell-features-table-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cell-features-table-wrapper::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.cell-features-table-wrapper::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  border-radius: 4px;
+}
+
+.cell-features-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.cell-features-table thead {
+  background: linear-gradient(180deg, #4a90e2 0%, #357abd 100%);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.cell-features-table th {
+  padding: 10px 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #fff;
   font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cell-features-table td {
+  padding: 10px 8px;
+  text-align: center;
+  border-bottom: 1px solid #ecf0f1;
+  color: #2c3e50;
+  font-size: 13px;
+}
+
+.cell-features-table tbody tr:hover {
+  background: linear-gradient(90deg, #ebf5fb 0%, #d6eaf8 100%);
+}
+
+.cell-features-table tbody tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+.cell-features-table tbody tr:nth-child(even):hover {
+  background: linear-gradient(90deg, #ebf5fb 0%, #d6eaf8 100%);
+}
+
+.cell-features-table .cell-id-col {
+  font-weight: 700;
+  color: #2980b9;
+  font-size: 14px;
+}
+
+.cell-features-table .area-col {
   font-weight: 600;
   color: #27ae60;
-  margin-bottom: 8px;
-  padding: 5px 8px;
-  background: linear-gradient(135deg, #e8f8ef 0%, #d4f1e1 100%);
-  border-radius: 6px;
+}
+
+.cell-features-table .intensity-col {
+  font-weight: 500;
+  color: #8e44ad;
+}
+
+.cell-features-table .position-col {
+  font-size: 11px;
+  color: #7f8c8d;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* Old features table - keep for compatibility */
+.features-table-container {
+  margin-top: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.cell-count {
+  font-size: 9px;
+  font-weight: 600;
+  color: #27ae60;
+  margin-bottom: 3px;
+  padding: 2px 5px;
+  background: #e8f8ef;
+  border-radius: 3px;
   text-align: center;
-  border: 1px solid #c8e6d8;
 }
 
 .features-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
   background: #fff;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid #e8ecf0;
   table-layout: fixed;
 }
 
 .features-table thead {
-  background: linear-gradient(180deg, #f5f7fa 0%, #eef1f5 100%);
+  background: #f5f7fa;
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
 .features-table th {
-  padding: 6px 4px;
+  padding: 3px 4px;
   text-align: center;
   font-weight: 600;
   color: #4a90e2;
-  border-bottom: 2px solid #e8ecf0;
+  border-bottom: 1px solid #e8ecf0;
   font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
 }
 
 .features-table td {
-  padding: 5px 3px;
+  padding: 2px 4px;
   text-align: center;
   border-bottom: 1px solid #f0f2f5;
-  color: #555;
+  color: #333;
   font-size: 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .features-table tbody tr:hover {
@@ -244,7 +371,7 @@ html {
 }
 
 .features-table .cell-id {
-  font-weight: 600;
+  font-weight: 700;
   color: #4a90e2;
   font-size: 11px;
 }
