@@ -118,7 +118,7 @@ export const handleScale = () => {
   const html = renderScaleSelectionDialog({ width, height });
 
   Swal.fire({
-    title: "Scale...",
+    title: "Scale Selection",
     html,
     showCancelButton: true,
     confirmButtonText: "Apply",
@@ -184,7 +184,7 @@ export const handleRotate = () => {
   });
 
   Swal.fire({
-    title: "Rotate...",
+    title: "Rotate Selection",
     html,
     showCancelButton: true,
     confirmButtonText: "Rotate",
