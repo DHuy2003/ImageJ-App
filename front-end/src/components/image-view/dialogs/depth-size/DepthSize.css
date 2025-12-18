@@ -1,40 +1,102 @@
 .stack-window {
-  position: fixed;
-  top: 40px;
-  left: 50px;
-  width: 350px;
-  border: 1px solid black;
-  background: #e6e6e6;
-  z-index: 99999;
-  font-family: sans-serif;
+    position: fixed;
+    top: 40px;
+    left: 50px;
+    width: 380px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    z-index: 99999;
+    font-family: system-ui, -apple-system, sans-serif;
+    overflow: hidden;
 }
 
 .stack-header {
-  display: flex;
-  justify-content: space-between;
-  background: #d6d6d6;
-  padding: 4px 8px;
-  font-weight: bold;
-  border-bottom: 1px solid black;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 12px 16px;
+    font-weight: 600;
+    color: #fff;
+    cursor: move;
+}
+
+.stack-header button {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.stack-header button:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .stack-body {
-  background: black;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 256px;
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 280px;
+    border-top: 1px solid #e8ecf0;
+    border-bottom: 1px solid #e8ecf0;
 }
 
 .stack-body img {
-  max-width: 100%;
-  max-height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
 }
 
 .stack-controls {
-  background: #d6d6d6;
-  padding: 5px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+    background: #f8f9fa;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-top: 1px solid #e8ecf0;
+}
+
+.stack-controls input[type="range"] {
+    flex: 1;
+    accent-color: #667eea;
+    height: 6px;
+    cursor: pointer;
+}
+
+.stack-controls span {
+    font-size: 13px;
+    color: #666;
+    font-weight: 500;
+    min-width: 60px;
+    text-align: center;
+}
+
+.stack-controls button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.stack-controls button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.stack-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }

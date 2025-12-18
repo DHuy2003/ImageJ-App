@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, forwardRef } from 'react';
 import axios from 'axios';
 import { Download, TrendingUp, Activity, BarChart3, Target } from 'lucide-react';
 import './AnalysisResults.css';
@@ -64,6 +64,30 @@ interface AnalysisResultsProps {
 
 type TabType = 'overview' | 'charts' | 'statistics' | 'motility' | 'zscore';
 
+// All available features for Z-Score analysis
+const ALL_ZSCORE_FEATURES = [
+    { key: 'area', label: 'Area', category: 'morphology' },
+    { key: 'eccentricity', label: 'Eccentricity', category: 'morphology' },
+    { key: 'solidity', label: 'Solidity', category: 'morphology' },
+    { key: 'circularity', label: 'Circularity', category: 'morphology' },
+    { key: 'aspect_ratio', label: 'Aspect Ratio', category: 'morphology' },
+    { key: 'convexity_deficit', label: 'Convexity Deficit', category: 'morphology' },
+    { key: 'perimeter', label: 'Perimeter', category: 'morphology' },
+    { key: 'extent', label: 'Extent', category: 'morphology' },
+    { key: 'major_axis_length', label: 'Major Axis', category: 'morphology' },
+    { key: 'minor_axis_length', label: 'Minor Axis', category: 'morphology' },
+    { key: 'mean_intensity', label: 'Mean Intensity', category: 'intensity' },
+    { key: 'max_intensity', label: 'Max Intensity', category: 'intensity' },
+    { key: 'min_intensity', label: 'Min Intensity', category: 'intensity' },
+    { key: 'intensity_ratio_max_mean', label: 'Max/Mean Ratio', category: 'intensity' },
+    { key: 'intensity_ratio_mean_min', label: 'Mean/Min Ratio', category: 'intensity' },
+    { key: 'speed', label: 'Speed', category: 'motility' },
+    { key: 'displacement', label: 'Displacement', category: 'motility' },
+    { key: 'turning', label: 'Turning', category: 'motility' },
+];
+
+const DEFAULT_ZSCORE_FEATURES = ['area', 'eccentricity', 'solidity', 'circularity', 'mean_intensity', 'speed'];
+
 const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [features, setFeatures] = useState<CellFeature[]>([]);
@@ -71,8 +95,36 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
     const [zScoreData, setZScoreData] = useState<ZScoreData[]>([]);
     const [featureChanges, setFeatureChanges] = useState<FeatureChange[]>([]);
+    const [selectedZScoreFeatures, setSelectedZScoreFeatures] = useState<string[]>(DEFAULT_ZSCORE_FEATURES);
+    const [showFeatureSelector, setShowFeatureSelector] = useState(false);
+    // Motility tab states
+    const [selectedTracks, setSelectedTracks] = useState<number[]>([]);
+    const [showTrackSelector, setShowTrackSelector] = useState(false);
+    const [frameRange, setFrameRange] = useState<[number, number]>([0, 100]);
+    const [maxFrame, setMaxFrame] = useState(100);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const trajectoryCanvasRef = useRef<HTMLCanvasElement>(null);
+
+    // Export dialog states
+    const [showExportDialog, setShowExportDialog] = useState(false);
+    const [exportOptions, setExportOptions] = useState({
+        csvData: true,
+        areaHistogram: false,
+        intensityHistogram: false,
+        clusterPCA: false,
+        clusterDistribution: false,
+        zscoreHeatmap: false,
+        motilityChart: false,
+        trajectory3D: false
+    });
+    const [exporting, setExporting] = useState(false);
+
+    // Refs for chart canvases
+    const areaHistogramRef = useRef<HTMLCanvasElement>(null);
+    const intensityHistogramRef = useRef<HTMLCanvasElement>(null);
+    const clusterPCARef = useRef<HTMLCanvasElement>(null);
+    const clusterDistributionRef = useRef<HTMLCanvasElement>(null);
+    const zscoreHeatmapRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -89,6 +141,18 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
             calculateOverviewStats(allFeatures);
             calculateZScores(allFeatures);
             calculateFeatureChanges(allFeatures);
+
+            // Initialize motility tab data
+            const trackedCells = allFeatures.filter((f: CellFeature) => f.track_id !== null);
+            const uniqueTracks = [...new Set(trackedCells.map((f: CellFeature) => f.track_id))] as number[];
+            const frames = allFeatures.map((f: CellFeature) => f.frame_num);
+            const minFrame = frames.length > 0 ? Math.min(...frames) : 0;
+            const maxFrameVal = frames.length > 0 ? Math.max(...frames) : 100;
+
+            setMaxFrame(maxFrameVal);
+            setFrameRange([minFrame, maxFrameVal]);
+            // Select first 10 tracks by default (or all if less than 10)
+            setSelectedTracks(uniqueTracks.slice(0, 10));
         } catch (err) {
             console.error('Error fetching features:', err);
         } finally {
@@ -136,14 +200,12 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         });
     };
 
-    const calculateZScores = (data: CellFeature[]) => {
+    const calculateZScores = (data: CellFeature[], featureKeys: string[] = selectedZScoreFeatures) => {
         const clusteredData = data.filter(d => d.hmm_state !== null || d.gmm_state !== null);
         if (clusteredData.length === 0) {
             setZScoreData([]);
             return;
         }
-
-        const featureKeys = ['area', 'mean_intensity', 'eccentricity', 'solidity', 'circularity', 'speed'];
 
         // Calculate global mean and std for each feature
         const globalStats: { [key: string]: { mean: number; std: number } } = {};
@@ -181,6 +243,13 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
 
         setZScoreData(zScores.sort((a, b) => a.cluster - b.cluster));
     };
+
+    // Recalculate z-scores when selected features change
+    useEffect(() => {
+        if (features.length > 0) {
+            calculateZScores(features, selectedZScoreFeatures);
+        }
+    }, [selectedZScoreFeatures]);
 
     const calculateFeatureChanges = (data: CellFeature[]) => {
         const keys = ['area', 'mean_intensity', 'eccentricity', 'solidity', 'circularity', 'speed', 'displacement'];
@@ -269,7 +338,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         if (activeTab === 'motility' && trajectoryCanvasRef.current && features.length > 0) {
             draw3DTrajectory();
         }
-    }, [activeTab, features]);
+    }, [activeTab, features, selectedTracks, frameRange]);
 
     const drawCellCountChart = () => {
         const canvas = canvasRef.current;
@@ -407,8 +476,23 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
             return;
         }
 
-        // Only use cells with valid track_id for trajectory visualization
-        const pathCells = trackedCells;
+        // Filter by selected tracks and frame range
+        const pathCells = trackedCells.filter(f => {
+            const inTrackSelection = selectedTracks.length === 0 || selectedTracks.includes(f.track_id as number);
+            const inFrameRange = f.frame_num >= frameRange[0] && f.frame_num <= frameRange[1];
+            return inTrackSelection && inFrameRange;
+        });
+
+        if (pathCells.length === 0) {
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('No data in selected range.', canvas.width / 2, canvas.height / 2 - 15);
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText('Adjust track selection or frame range.', canvas.width / 2, canvas.height / 2 + 15);
+            return;
+        }
 
         // Group by track_id only (each track spans multiple frames/images)
         const uniqueTrackIds = [...new Set(pathCells.map(f => f.track_id))].sort((a, b) => (a ?? 0) - (b ?? 0));
@@ -515,6 +599,27 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
         ctx.lineTo(zAxisEnd.x, zAxisEnd.y);
         ctx.stroke();
 
+        // Add tick marks every 10 frames on Z axis (Frame)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'right';
+
+        const tickInterval = 10;
+        const startTick = Math.ceil(minZ / tickInterval) * tickInterval;
+        for (let frame = startTick; frame <= maxZ; frame += tickInterval) {
+            const tickPos = project3D(minX, maxY, frame);
+            // Draw tick mark
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(tickPos.x - 5, tickPos.y);
+            ctx.lineTo(tickPos.x + 5, tickPos.y);
+            ctx.stroke();
+            // Draw tick label
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillText(String(frame), tickPos.x - 8, tickPos.y + 3);
+        }
+
         // Axis labels
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.font = '13px Arial';
@@ -585,21 +690,102 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     };
 
     const handleExport = async () => {
+        setShowExportDialog(true);
+    };
+
+    const downloadCanvas = (canvas: HTMLCanvasElement | null, filename: string) => {
+        if (!canvas) return;
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    };
+
+    const performExport = async () => {
+        setExporting(true);
         try {
-            const response = await axios.get(`${API_BASE_URL}/features/export`, {
-                responseType: 'blob'
-            });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', 'analysis_results.csv');
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
+            const timestamp = new Date().toISOString().split('T')[0];
+
+            // Export CSV data
+            if (exportOptions.csvData) {
+                const response = await axios.get(`${API_BASE_URL}/features/export`, {
+                    responseType: 'blob'
+                });
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `analysis_results_${timestamp}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            }
+
+            // Export chart images
+            if (exportOptions.areaHistogram && areaHistogramRef.current) {
+                downloadCanvas(areaHistogramRef.current, `area_histogram_${timestamp}.png`);
+            }
+
+            if (exportOptions.intensityHistogram && intensityHistogramRef.current) {
+                downloadCanvas(intensityHistogramRef.current, `intensity_histogram_${timestamp}.png`);
+            }
+
+            if (exportOptions.clusterPCA && clusterPCARef.current) {
+                downloadCanvas(clusterPCARef.current, `cluster_pca_${timestamp}.png`);
+            }
+
+            if (exportOptions.clusterDistribution && clusterDistributionRef.current) {
+                downloadCanvas(clusterDistributionRef.current, `cluster_distribution_${timestamp}.png`);
+            }
+
+            if (exportOptions.zscoreHeatmap && zscoreHeatmapRef.current) {
+                downloadCanvas(zscoreHeatmapRef.current, `zscore_heatmap_${timestamp}.png`);
+            }
+
+            if (exportOptions.motilityChart && canvasRef.current) {
+                downloadCanvas(canvasRef.current, `motility_chart_${timestamp}.png`);
+            }
+
+            if (exportOptions.trajectory3D && trajectoryCanvasRef.current) {
+                downloadCanvas(trajectoryCanvasRef.current, `trajectory_3d_${timestamp}.png`);
+            }
+
+            setShowExportDialog(false);
         } catch (err) {
             console.error('Export failed:', err);
-            alert('Failed to export data');
+            alert('Failed to export some items');
+        } finally {
+            setExporting(false);
         }
+    };
+
+    const toggleExportOption = (key: keyof typeof exportOptions) => {
+        setExportOptions(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const selectAllExports = () => {
+        setExportOptions({
+            csvData: true,
+            areaHistogram: true,
+            intensityHistogram: true,
+            clusterPCA: true,
+            clusterDistribution: true,
+            zscoreHeatmap: true,
+            motilityChart: true,
+            trajectory3D: true
+        });
+    };
+
+    const deselectAllExports = () => {
+        setExportOptions({
+            csvData: false,
+            areaHistogram: false,
+            intensityHistogram: false,
+            clusterPCA: false,
+            clusterDistribution: false,
+            zscoreHeatmap: false,
+            motilityChart: false,
+            trajectory3D: false
+        });
     };
 
     const formatValue = (value: number | null | undefined, decimals: number = 2): string => {
@@ -657,6 +843,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     ];
 
     return (
+        <>
         <div className="analysis-overlay">
             <div className="analysis-container">
                 <div className="analysis-header">
@@ -732,25 +919,54 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
 
                             {activeTab === 'charts' && (
                                 <div className="charts-tab">
-                                    <div className="charts-grid">
-                                        <div className="chart-card">
-                                            <h3>Area Distribution</h3>
-                                            <div className="chart-placeholder">
+                                    <div className="charts-section">
+                                        <h3 className="section-title">Distribution Charts</h3>
+                                        <div className="charts-grid">
+                                            <div className="chart-card">
+                                                <div className="chart-content">
+                                                    {features.length > 0 ? (
+                                                        <AreaHistogram ref={areaHistogramRef} data={features} />
+                                                    ) : (
+                                                        <p className="no-data-msg">No data available</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="chart-card">
+                                                <div className="chart-content">
+                                                    {features.length > 0 ? (
+                                                        <IntensityHistogram ref={intensityHistogramRef} data={features} />
+                                                    ) : (
+                                                        <p className="no-data-msg">No data available</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="charts-section">
+                                        <h3 className="section-title">Cluster Space (PCA)</h3>
+                                        <div className="chart-card full-width">
+                                            <div className="chart-content pca-chart">
                                                 {features.length > 0 ? (
-                                                    <AreaHistogram data={features} />
+                                                    <ClusterScatterPlot ref={clusterPCARef} data={features} />
                                                 ) : (
-                                                    <p>No data available</p>
+                                                    <p className="no-data-msg">No data available</p>
                                                 )}
                                             </div>
                                         </div>
-                                        <div className="chart-card">
-                                            <h3>Intensity Distribution</h3>
-                                            <div className="chart-placeholder">
-                                                {features.length > 0 ? (
-                                                    <IntensityHistogram data={features} />
-                                                ) : (
-                                                    <p>No data available</p>
-                                                )}
+                                    </div>
+
+                                    <div className="charts-section">
+                                        <h3 className="section-title">Cluster Distribution</h3>
+                                        <div className="charts-grid">
+                                            <div className="chart-card">
+                                                <div className="chart-content">
+                                                    {features.length > 0 ? (
+                                                        <ClusterDistributionChart ref={clusterDistributionRef} data={features} />
+                                                    ) : (
+                                                        <p className="no-data-msg">No data available</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -914,6 +1130,102 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
 
                             {activeTab === 'motility' && (
                                 <div className="motility-tab">
+                                    {/* Controls Panel */}
+                                    <div className="motility-controls">
+                                        <div className="control-group">
+                                            <label>Frame Range:</label>
+                                            <div className="dual-range-container">
+                                                <span className="frame-value">{frameRange[0]}</span>
+                                                <div className="dual-range-slider">
+                                                    <div className="dual-range-track"></div>
+                                                    <div
+                                                        className="dual-range-highlight"
+                                                        style={{
+                                                            left: `${(frameRange[0] / maxFrame) * 100}%`,
+                                                            width: `${((frameRange[1] - frameRange[0]) / maxFrame) * 100}%`
+                                                        }}
+                                                    ></div>
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={maxFrame}
+                                                        value={frameRange[0]}
+                                                        onChange={(e) => {
+                                                            const newVal = parseInt(e.target.value);
+                                                            if (newVal <= frameRange[1]) {
+                                                                setFrameRange([newVal, frameRange[1]]);
+                                                            }
+                                                        }}
+                                                        className="dual-range-input dual-range-min"
+                                                    />
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={maxFrame}
+                                                        value={frameRange[1]}
+                                                        onChange={(e) => {
+                                                            const newVal = parseInt(e.target.value);
+                                                            if (newVal >= frameRange[0]) {
+                                                                setFrameRange([frameRange[0], newVal]);
+                                                            }
+                                                        }}
+                                                        className="dual-range-input dual-range-max"
+                                                    />
+                                                </div>
+                                                <span className="frame-value">{frameRange[1]}</span>
+                                            </div>
+                                        </div>
+                                        <div className="control-group">
+                                            <button
+                                                className="track-selector-btn"
+                                                onClick={() => setShowTrackSelector(!showTrackSelector)}
+                                            >
+                                                {showTrackSelector ? '✕ Close' : '⚙ Select Tracks'} ({selectedTracks.length})
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Track Selector Panel */}
+                                    {showTrackSelector && (
+                                        <div className="track-selector-panel">
+                                            <div className="track-selector-header">
+                                                <span>Select tracks to display:</span>
+                                                <div className="track-selector-actions">
+                                                    <button onClick={() => {
+                                                        const allTracks = [...new Set(features.filter(f => f.track_id !== null).map(f => f.track_id))] as number[];
+                                                        setSelectedTracks(allTracks);
+                                                    }}>Select All</button>
+                                                    <button onClick={() => {
+                                                        const allTracks = [...new Set(features.filter(f => f.track_id !== null).map(f => f.track_id))] as number[];
+                                                        setSelectedTracks(allTracks.slice(0, 10));
+                                                    }}>First 10</button>
+                                                    <button onClick={() => setSelectedTracks([])}>Clear All</button>
+                                                </div>
+                                            </div>
+                                            <div className="track-checkboxes">
+                                                {(() => {
+                                                    const allTracks = [...new Set(features.filter(f => f.track_id !== null).map(f => f.track_id))] as number[];
+                                                    return allTracks.sort((a, b) => a - b).map(trackId => (
+                                                        <label key={trackId} className="track-checkbox">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedTracks.includes(trackId)}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setSelectedTracks([...selectedTracks, trackId]);
+                                                                    } else {
+                                                                        setSelectedTracks(selectedTracks.filter(t => t !== trackId));
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <span>Track {trackId}</span>
+                                                        </label>
+                                                    ));
+                                                })()}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="trajectory-container">
                                         <canvas ref={trajectoryCanvasRef} width={800} height={500} />
                                     </div>
@@ -921,19 +1233,20 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                         <h3>Motility Statistics</h3>
                                         <div className="motility-grid">
                                             {(() => {
-                                                const speeds = features.filter(f => f.speed !== null).map(f => f.speed as number);
-                                                const displacements = features.filter(f => f.displacement !== null).map(f => f.displacement as number);
-                                                const tracks = [...new Set(
-                                                    features
-                                                        .filter(f => (f.track_id !== null || f.cell_id !== null))
-                                                        .map(f => `${f.image_id ?? 'img'}-${f.track_id ?? `cell-${f.cell_id}`}`)
-                                                )];
+                                                const filteredFeatures = features.filter(f => {
+                                                    const inTrack = selectedTracks.length === 0 || (f.track_id !== null && selectedTracks.includes(f.track_id));
+                                                    const inFrame = f.frame_num >= frameRange[0] && f.frame_num <= frameRange[1];
+                                                    return inTrack && inFrame;
+                                                });
+                                                const speeds = filteredFeatures.filter(f => f.speed !== null).map(f => f.speed as number);
+                                                const displacements = filteredFeatures.filter(f => f.displacement !== null).map(f => f.displacement as number);
+                                                const trackCount = [...new Set(filteredFeatures.filter(f => f.track_id !== null).map(f => f.track_id))].length;
 
                                                 return (
                                                     <>
                                                         <div className="motility-stat">
-                                                            <span className="label">Total Tracks</span>
-                                                            <span className="value">{tracks.length}</span>
+                                                            <span className="label">Displayed Tracks</span>
+                                                            <span className="value">{trackCount}</span>
                                                         </div>
                                                         <div className="motility-stat">
                                                             <span className="label">Avg Speed</span>
@@ -968,99 +1281,166 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                             {activeTab === 'zscore' && (
                                 <div className="zscore-tab">
                                     <div className="zscore-header">
-                                        <h3>Z-Score Normalized Features by Cluster</h3>
+                                        <div className="zscore-title-row">
+                                            <h3>Z-Score Normalized Features by Cluster</h3>
+                                            <button
+                                                className="feature-selector-btn"
+                                                onClick={() => setShowFeatureSelector(!showFeatureSelector)}
+                                            >
+                                                {showFeatureSelector ? '✕ Close' : '⚙ Select Features'} ({selectedZScoreFeatures.length})
+                                            </button>
+                                        </div>
                                         <p className="zscore-description">
                                             Standardized mean values (z = (x̄<sub>cluster</sub> - μ) / σ) showing how each cluster deviates from the population mean.
-                                            Values represent standard deviations from the mean.
                                         </p>
                                     </div>
+
+                                    {showFeatureSelector && (
+                                        <div className="zscore-feature-selector">
+                                            <div className="feature-selector-header">
+                                                <span>Select features to display:</span>
+                                                <div className="selector-actions">
+                                                    <button onClick={() => setSelectedZScoreFeatures(ALL_ZSCORE_FEATURES.map(f => f.key))}>
+                                                        Select All
+                                                    </button>
+                                                    <button onClick={() => setSelectedZScoreFeatures(DEFAULT_ZSCORE_FEATURES)}>
+                                                        Reset Default
+                                                    </button>
+                                                    <button onClick={() => setSelectedZScoreFeatures([])}>
+                                                        Clear All
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="feature-categories">
+                                                {['morphology', 'intensity', 'motility'].map(category => (
+                                                    <div key={category} className="feature-category">
+                                                        <div className={`category-label ${category}`}>
+                                                            {category.charAt(0).toUpperCase() + category.slice(1)}
+                                                        </div>
+                                                        <div className="category-features">
+                                                            {ALL_ZSCORE_FEATURES.filter(f => f.category === category).map(feature => (
+                                                                <label key={feature.key} className="feature-checkbox">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedZScoreFeatures.includes(feature.key)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) {
+                                                                                setSelectedZScoreFeatures([...selectedZScoreFeatures, feature.key]);
+                                                                            } else {
+                                                                                setSelectedZScoreFeatures(selectedZScoreFeatures.filter(k => k !== feature.key));
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <span>{feature.label}</span>
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {zScoreData.length === 0 ? (
                                         <p className="no-data">No clustering data available. Run clustering first.</p>
+                                    ) : selectedZScoreFeatures.length === 0 ? (
+                                        <p className="no-data">Please select at least one feature to display.</p>
                                     ) : (
                                         <div className="zscore-table-container scientific">
-                                            <table className="zscore-table scientific-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th rowSpan={2} className="header-cluster">Cluster</th>
-                                                        <th colSpan={4} className="header-group morphology">Morphological Features</th>
-                                                        <th colSpan={1} className="header-group intensity">Intensity</th>
-                                                        <th colSpan={1} className="header-group motility">Motility</th>
-                                                    </tr>
-                                                    <tr className="subheader">
-                                                        <th>Area</th>
-                                                        <th>Eccentricity</th>
-                                                        <th>Solidity</th>
-                                                        <th>Circularity</th>
-                                                        <th>Mean Int.</th>
-                                                        <th>Speed</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {zScoreData.map((row, idx) => {
-                                                        // Count cells in this cluster
-                                                        const clusterCells = features.filter(f =>
-                                                            (f.hmm_state ?? f.gmm_state) === row.cluster
-                                                        ).length;
+                                            <div className="zscore-table-scroll">
+                                                <table className="zscore-table scientific-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th rowSpan={2} className="header-cluster">Cluster</th>
+                                                            {['morphology', 'intensity', 'motility'].map(category => {
+                                                                const categoryFeatures = selectedZScoreFeatures.filter(key =>
+                                                                    ALL_ZSCORE_FEATURES.find(f => f.key === key)?.category === category
+                                                                );
+                                                                if (categoryFeatures.length === 0) return null;
+                                                                return (
+                                                                    <th
+                                                                        key={category}
+                                                                        colSpan={categoryFeatures.length}
+                                                                        className={`header-group ${category}`}
+                                                                    >
+                                                                        {category.charAt(0).toUpperCase() + category.slice(1)}
+                                                                    </th>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                        <tr className="subheader">
+                                                            {selectedZScoreFeatures.map(key => {
+                                                                const feature = ALL_ZSCORE_FEATURES.find(f => f.key === key);
+                                                                return <th key={key}>{feature?.label || key}</th>;
+                                                            })}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {zScoreData.map((row) => {
+                                                            const clusterCells = features.filter(f =>
+                                                                (f.hmm_state ?? f.gmm_state) === row.cluster
+                                                            ).length;
 
-                                                        return (
-                                                            <tr key={row.cluster}>
-                                                                <td className="cluster-cell">
-                                                                    <div className="cluster-info">
-                                                                        <span
-                                                                            className="cluster-badge"
-                                                                            style={{
-                                                                                backgroundColor: `hsl(${row.cluster * 60}, 70%, 45%)`
-                                                                            }}
-                                                                        >
-                                                                            {row.cluster}
-                                                                        </span>
-                                                                        <span className="cluster-n">(n={clusterCells})</span>
-                                                                    </div>
-                                                                </td>
-                                                                {['area', 'eccentricity', 'solidity', 'circularity', 'mean_intensity', 'speed'].map(key => {
-                                                                    const value = row.features[key] || 0;
-                                                                    const absValue = Math.abs(value);
-                                                                    const significance = absValue >= 1.96 ? '**' : absValue >= 1.64 ? '*' : '';
-
-                                                                    return (
-                                                                        <td
-                                                                            key={key}
-                                                                            className={`zscore-cell ${value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'}`}
-                                                                            style={{
-                                                                                backgroundColor: getZScoreBg(value)
-                                                                            }}
-                                                                        >
-                                                                            <span className="zscore-value" style={{ color: getZScoreColor(value) }}>
-                                                                                {value > 0 ? '+' : ''}{value.toFixed(2)}
+                                                            return (
+                                                                <tr key={row.cluster}>
+                                                                    <td className="cluster-cell">
+                                                                        <div className="cluster-info">
+                                                                            <span
+                                                                                className="cluster-badge"
+                                                                                style={{
+                                                                                    backgroundColor: `hsl(${row.cluster * 60}, 70%, 45%)`
+                                                                                }}
+                                                                            >
+                                                                                {row.cluster}
                                                                             </span>
-                                                                            {significance && <sup className="significance">{significance}</sup>}
-                                                                        </td>
-                                                                    );
-                                                                })}
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
+                                                                            <span className="cluster-n">(n={clusterCells})</span>
+                                                                        </div>
+                                                                    </td>
+                                                                    {selectedZScoreFeatures.map(key => {
+                                                                        const value = row.features[key] || 0;
+                                                                        const absValue = Math.abs(value);
+                                                                        const significance = absValue >= 1.96 ? '**' : absValue >= 1.64 ? '*' : '';
+
+                                                                        return (
+                                                                            <td
+                                                                                key={key}
+                                                                                className={`zscore-cell ${value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'}`}
+                                                                                style={{
+                                                                                    backgroundColor: getZScoreBg(value)
+                                                                                }}
+                                                                            >
+                                                                                <span className="zscore-value" style={{ color: getZScoreColor(value) }}>
+                                                                                    {value > 0 ? '+' : ''}{value.toFixed(2)}
+                                                                                </span>
+                                                                                {significance && <sup className="significance">{significance}</sup>}
+                                                                            </td>
+                                                                        );
+                                                                    })}
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
 
                                             <div className="zscore-footer">
                                                 <div className="zscore-legend scientific">
                                                     <div className="legend-section">
                                                         <span className="legend-title">Interpretation:</span>
                                                         <span className="legend-item">
-                                                            <span className="color-box high"></span> z &gt; +1.5 (significantly above mean)
+                                                            <span className="color-box high"></span> z &gt; +1.5 (above mean)
                                                         </span>
                                                         <span className="legend-item">
-                                                            <span className="color-box mid-high"></span> +0.5 to +1.5 (above mean)
+                                                            <span className="color-box mid-high"></span> +0.5 to +1.5
                                                         </span>
                                                         <span className="legend-item">
                                                             <span className="color-box normal"></span> -0.5 to +0.5 (near mean)
                                                         </span>
                                                         <span className="legend-item">
-                                                            <span className="color-box mid-low"></span> -1.5 to -0.5 (below mean)
+                                                            <span className="color-box mid-low"></span> -1.5 to -0.5
                                                         </span>
                                                         <span className="legend-item">
-                                                            <span className="color-box low"></span> z &lt; -1.5 (significantly below mean)
+                                                            <span className="color-box low"></span> z &lt; -1.5 (below mean)
                                                         </span>
                                                     </div>
                                                     <div className="legend-section significance-legend">
@@ -1081,13 +1461,164 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                     )}
                 </div>
             </div>
+
         </div>
+
+        {/* Export Dialog */}
+        {showExportDialog && (
+            <div className="export-dialog-overlay">
+                <div className="export-dialog">
+                    <div className="export-dialog-header">
+                        <h3>Export Analysis Results</h3>
+                        <button className="export-dialog-close" onClick={() => setShowExportDialog(false)}>×</button>
+                    </div>
+                    <div className="export-dialog-body">
+                        <div className="export-section">
+                            <div className="export-section-header">
+                                <span className="section-label">Data</span>
+                                <div className="section-actions">
+                                    <button onClick={selectAllExports}>Select All</button>
+                                    <button onClick={deselectAllExports}>Deselect All</button>
+                                </div>
+                            </div>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.csvData}
+                                    onChange={() => toggleExportOption('csvData')}
+                                />
+                                <span className="option-icon">📊</span>
+                                <span className="option-text">
+                                    <strong>CSV Data File</strong>
+                                    <small>All cell features and analysis data</small>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div className="export-section">
+                            <span className="section-label">Distribution Charts</span>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.areaHistogram}
+                                    onChange={() => toggleExportOption('areaHistogram')}
+                                />
+                                <span className="option-icon">📈</span>
+                                <span className="option-text">
+                                    <strong>Area Distribution</strong>
+                                    <small>Histogram of cell areas</small>
+                                </span>
+                            </label>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.intensityHistogram}
+                                    onChange={() => toggleExportOption('intensityHistogram')}
+                                />
+                                <span className="option-icon">📈</span>
+                                <span className="option-text">
+                                    <strong>Intensity Distribution</strong>
+                                    <small>Histogram of mean intensities</small>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div className="export-section">
+                            <span className="section-label">Cluster Analysis</span>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.clusterPCA}
+                                    onChange={() => toggleExportOption('clusterPCA')}
+                                />
+                                <span className="option-icon">🎯</span>
+                                <span className="option-text">
+                                    <strong>Cluster Space (PCA)</strong>
+                                    <small>2D PCA scatter plot with clusters</small>
+                                </span>
+                            </label>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.clusterDistribution}
+                                    onChange={() => toggleExportOption('clusterDistribution')}
+                                />
+                                <span className="option-icon">📊</span>
+                                <span className="option-text">
+                                    <strong>Cluster Distribution</strong>
+                                    <small>Bar chart of cells per cluster</small>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div className="export-section">
+                            <span className="section-label">Z-Score & Motility</span>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.zscoreHeatmap}
+                                    onChange={() => toggleExportOption('zscoreHeatmap')}
+                                />
+                                <span className="option-icon">🌡️</span>
+                                <span className="option-text">
+                                    <strong>Z-Score Heatmap</strong>
+                                    <small>Feature deviation by cluster</small>
+                                </span>
+                            </label>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.motilityChart}
+                                    onChange={() => toggleExportOption('motilityChart')}
+                                />
+                                <span className="option-icon">📉</span>
+                                <span className="option-text">
+                                    <strong>Motility Over Time</strong>
+                                    <small>Cell movement chart</small>
+                                </span>
+                            </label>
+                            <label className="export-option">
+                                <input
+                                    type="checkbox"
+                                    checked={exportOptions.trajectory3D}
+                                    onChange={() => toggleExportOption('trajectory3D')}
+                                />
+                                <span className="option-icon">🗺️</span>
+                                <span className="option-text">
+                                    <strong>3D Trajectory</strong>
+                                    <small>Cell trajectories visualization</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    <div className="export-dialog-footer">
+                        <span className="export-count">
+                            {Object.values(exportOptions).filter(Boolean).length} items selected
+                        </span>
+                        <div className="export-dialog-actions">
+                            <button className="cancel-btn" onClick={() => setShowExportDialog(false)}>
+                                Cancel
+                            </button>
+                            <button
+                                className="export-confirm-btn"
+                                onClick={performExport}
+                                disabled={exporting || Object.values(exportOptions).every(v => !v)}
+                            >
+                                {exporting ? 'Exporting...' : 'Export Selected'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 };
 
-// Simple histogram components
-const AreaHistogram = ({ data }: { data: CellFeature[] }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+// Histogram with proper axes
+const AreaHistogram = forwardRef<HTMLCanvasElement, { data: CellFeature[] }>(({ data }, ref) => {
+    const internalRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -1100,8 +1631,8 @@ const AreaHistogram = ({ data }: { data: CellFeature[] }) => {
 
         const min = Math.min(...areas);
         const max = Math.max(...areas);
-        const binCount = 20;
-        const binSize = (max - min) / binCount;
+        const binCount = 15;
+        const binSize = (max - min) / binCount || 1;
         const bins = new Array(binCount).fill(0);
 
         areas.forEach(area => {
@@ -1111,27 +1642,93 @@ const AreaHistogram = ({ data }: { data: CellFeature[] }) => {
 
         const maxBin = Math.max(...bins);
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#4a90e2';
+        // Layout
+        const padding = { top: 30, right: 20, bottom: 50, left: 55 };
+        const plotWidth = canvas.width - padding.left - padding.right;
+        const plotHeight = canvas.height - padding.top - padding.bottom;
 
-        const barWidth = (canvas.width - 60) / binCount;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = padding.top + (plotHeight * i) / 4;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(canvas.width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Draw bars
+        const barWidth = plotWidth / binCount;
+        ctx.fillStyle = '#4a90e2';
         bins.forEach((count, i) => {
-            const barHeight = (count / maxBin) * (canvas.height - 40);
-            ctx.fillRect(30 + i * barWidth, canvas.height - 20 - barHeight, barWidth - 2, barHeight);
+            const barHeight = (count / maxBin) * plotHeight;
+            const x = padding.left + i * barWidth;
+            const y = padding.top + plotHeight - barHeight;
+            ctx.fillRect(x + 1, y, barWidth - 2, barHeight);
         });
 
-        ctx.fillStyle = '#666';
-        ctx.font = '10px Arial';
+        // Draw axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Y axis
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, canvas.height - padding.bottom);
+        // X axis
+        ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
+        ctx.stroke();
+
+        // Y axis labels (Count)
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+            const value = Math.round((maxBin * (4 - i)) / 4);
+            const y = padding.top + (plotHeight * i) / 4;
+            ctx.fillText(String(value), padding.left - 8, y + 4);
+        }
+
+        // X axis labels (Area values)
         ctx.textAlign = 'center';
-        ctx.fillText(String(Math.round(min)), 30, canvas.height - 5);
-        ctx.fillText(String(Math.round(max)), canvas.width - 30, canvas.height - 5);
+        const xLabels = 5;
+        for (let i = 0; i <= xLabels; i++) {
+            const value = min + (max - min) * (i / xLabels);
+            const x = padding.left + (plotWidth * i) / xLabels;
+            ctx.fillText(String(Math.round(value)), x, canvas.height - padding.bottom + 18);
+        }
+
+        // Axis titles
+        ctx.font = 'bold 12px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText('Area (px²)', canvas.width / 2, canvas.height - 8);
+
+        // Y axis title (rotated)
+        ctx.save();
+        ctx.translate(14, canvas.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Count', 0, 0);
+        ctx.restore();
+
+        // Title
+        ctx.font = 'bold 13px Arial';
+        ctx.fillText('Area Distribution', canvas.width / 2, 16);
+
     }, [data]);
 
-    return <canvas ref={canvasRef} width={350} height={200} />;
-};
+    return <canvas ref={canvasRef} width={400} height={250} />;
+});
 
-const IntensityHistogram = ({ data }: { data: CellFeature[] }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+const IntensityHistogram = forwardRef<HTMLCanvasElement, { data: CellFeature[] }>(({ data }, ref) => {
+    const internalRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -1144,7 +1741,7 @@ const IntensityHistogram = ({ data }: { data: CellFeature[] }) => {
 
         const min = Math.min(...intensities);
         const max = Math.max(...intensities);
-        const binCount = 20;
+        const binCount = 15;
         const binSize = (max - min) / binCount || 1;
         const bins = new Array(binCount).fill(0);
 
@@ -1155,23 +1752,492 @@ const IntensityHistogram = ({ data }: { data: CellFeature[] }) => {
 
         const maxBin = Math.max(...bins);
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#27ae60';
+        // Layout
+        const padding = { top: 30, right: 20, bottom: 50, left: 55 };
+        const plotWidth = canvas.width - padding.left - padding.right;
+        const plotHeight = canvas.height - padding.top - padding.bottom;
 
-        const barWidth = (canvas.width - 60) / binCount;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = padding.top + (plotHeight * i) / 4;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(canvas.width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Draw bars
+        const barWidth = plotWidth / binCount;
+        ctx.fillStyle = '#27ae60';
         bins.forEach((count, i) => {
-            const barHeight = (count / maxBin) * (canvas.height - 40);
-            ctx.fillRect(30 + i * barWidth, canvas.height - 20 - barHeight, barWidth - 2, barHeight);
+            const barHeight = (count / maxBin) * plotHeight;
+            const x = padding.left + i * barWidth;
+            const y = padding.top + plotHeight - barHeight;
+            ctx.fillRect(x + 1, y, barWidth - 2, barHeight);
         });
 
-        ctx.fillStyle = '#666';
-        ctx.font = '10px Arial';
+        // Draw axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Y axis
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, canvas.height - padding.bottom);
+        // X axis
+        ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
+        ctx.stroke();
+
+        // Y axis labels (Count)
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+            const value = Math.round((maxBin * (4 - i)) / 4);
+            const y = padding.top + (plotHeight * i) / 4;
+            ctx.fillText(String(value), padding.left - 8, y + 4);
+        }
+
+        // X axis labels (Intensity values)
         ctx.textAlign = 'center';
-        ctx.fillText(String(Math.round(min)), 30, canvas.height - 5);
-        ctx.fillText(String(Math.round(max)), canvas.width - 30, canvas.height - 5);
+        const xLabels = 5;
+        for (let i = 0; i <= xLabels; i++) {
+            const value = min + (max - min) * (i / xLabels);
+            const x = padding.left + (plotWidth * i) / xLabels;
+            ctx.fillText(value.toFixed(1), x, canvas.height - padding.bottom + 18);
+        }
+
+        // Axis titles
+        ctx.font = 'bold 12px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText('Mean Intensity', canvas.width / 2, canvas.height - 8);
+
+        // Y axis title (rotated)
+        ctx.save();
+        ctx.translate(14, canvas.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Count', 0, 0);
+        ctx.restore();
+
+        // Title
+        ctx.font = 'bold 13px Arial';
+        ctx.fillText('Intensity Distribution', canvas.width / 2, 16);
+
     }, [data]);
 
-    return <canvas ref={canvasRef} width={350} height={200} />;
+    return <canvas ref={canvasRef} width={400} height={250} />;
+});
+
+// PCA implementation for 2D visualization
+const computePCA = (data: number[][]): { pc1: number[], pc2: number[], variance: [number, number] } => {
+    const n = data.length;
+    const m = data[0].length;
+
+    // Calculate mean for each feature
+    const means = new Array(m).fill(0);
+    for (let j = 0; j < m; j++) {
+        for (let i = 0; i < n; i++) {
+            means[j] += data[i][j];
+        }
+        means[j] /= n;
+    }
+
+    // Center the data and calculate std
+    const stds = new Array(m).fill(0);
+    const centered = data.map(row => row.map((val, j) => val - means[j]));
+    for (let j = 0; j < m; j++) {
+        for (let i = 0; i < n; i++) {
+            stds[j] += centered[i][j] * centered[i][j];
+        }
+        stds[j] = Math.sqrt(stds[j] / n) || 1;
+    }
+
+    // Standardize (z-score normalization)
+    const standardized = centered.map(row => row.map((val, j) => val / stds[j]));
+
+    // Calculate covariance matrix
+    const cov: number[][] = [];
+    for (let i = 0; i < m; i++) {
+        cov[i] = [];
+        for (let j = 0; j < m; j++) {
+            let sum = 0;
+            for (let k = 0; k < n; k++) {
+                sum += standardized[k][i] * standardized[k][j];
+            }
+            cov[i][j] = sum / (n - 1);
+        }
+    }
+
+    // Power iteration to find first two eigenvectors
+    const powerIteration = (matrix: number[][], numIterations: number = 100): number[] => {
+        let vec = new Array(matrix.length).fill(0).map(() => Math.random());
+        const norm = (v: number[]) => Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+        vec = vec.map(x => x / norm(vec));
+
+        for (let iter = 0; iter < numIterations; iter++) {
+            const newVec = new Array(matrix.length).fill(0);
+            for (let i = 0; i < matrix.length; i++) {
+                for (let j = 0; j < matrix.length; j++) {
+                    newVec[i] += matrix[i][j] * vec[j];
+                }
+            }
+            const n = norm(newVec);
+            vec = newVec.map(x => x / n);
+        }
+        return vec;
+    };
+
+    // Get first eigenvector
+    const ev1 = powerIteration(cov);
+
+    // Deflate matrix to get second eigenvector
+    const eigenvalue1 = ev1.reduce((sum, _, i) =>
+        sum + ev1.reduce((s, _, j) => s + cov[i][j] * ev1[j], 0) * ev1[i], 0
+    );
+
+    const deflated: number[][] = cov.map((row, i) =>
+        row.map((val, j) => val - eigenvalue1 * ev1[i] * ev1[j])
+    );
+
+    const ev2 = powerIteration(deflated);
+
+    // Project data onto principal components
+    const pc1: number[] = [];
+    const pc2: number[] = [];
+
+    for (let i = 0; i < n; i++) {
+        let p1 = 0, p2 = 0;
+        for (let j = 0; j < m; j++) {
+            p1 += standardized[i][j] * ev1[j];
+            p2 += standardized[i][j] * ev2[j];
+        }
+        pc1.push(p1);
+        pc2.push(p2);
+    }
+
+    // Calculate variance explained (approximate)
+    const totalVar = cov.reduce((s, row, i) => s + row[i], 0);
+    const eigenvalue2 = ev2.reduce((sum, _, i) =>
+        sum + ev2.reduce((s, _, j) => s + deflated[i][j] * ev2[j], 0) * ev2[i], 0
+    );
+
+    const var1 = (eigenvalue1 / totalVar) * 100;
+    const var2 = (Math.abs(eigenvalue2) / totalVar) * 100;
+
+    return { pc1, pc2, variance: [var1, var2] };
 };
+
+// Cluster Space Scatter Plot using PCA (2D visualization)
+const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }>(({ data }, ref) => {
+    const internalRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Filter cells with cluster assignments and required features
+        const featureKeys = ['area', 'mean_intensity', 'eccentricity', 'solidity', 'circularity', 'aspect_ratio'];
+
+        const clusteredData = data.filter(d => {
+            if (d.gmm_state === null && d.hmm_state === null) return false;
+            return featureKeys.every(key => (d as any)[key] !== null && (d as any)[key] !== undefined);
+        });
+
+        if (clusteredData.length < 3) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#666';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Insufficient data for PCA.', canvas.width / 2, canvas.height / 2 - 10);
+            ctx.fillText('Need at least 3 clustered cells with features.', canvas.width / 2, canvas.height / 2 + 15);
+            return;
+        }
+
+        // Extract feature matrix
+        const featureMatrix = clusteredData.map(d =>
+            featureKeys.map(key => (d as any)[key] as number)
+        );
+
+        // Compute PCA
+        const { pc1, pc2, variance } = computePCA(featureMatrix);
+        const clusters = clusteredData.map(d => d.hmm_state ?? d.gmm_state ?? 0);
+
+        const minX = Math.min(...pc1), maxX = Math.max(...pc1);
+        const minY = Math.min(...pc2), maxY = Math.max(...pc2);
+        const rangeX = maxX - minX || 1;
+        const rangeY = maxY - minY || 1;
+
+        // Add padding to ranges
+        const padX = rangeX * 0.1;
+        const padY = rangeY * 0.1;
+
+        // Layout
+        const padding = { top: 40, right: 80, bottom: 55, left: 65 };
+        const plotWidth = canvas.width - padding.left - padding.right;
+        const plotHeight = canvas.height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+        // Grid lines
+        ctx.strokeStyle = '#e8e8e8';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding.top + (plotHeight * i) / 5;
+            const x = padding.left + (plotWidth * i) / 5;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(canvas.width - padding.right, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, padding.top);
+            ctx.lineTo(x, canvas.height - padding.bottom);
+            ctx.stroke();
+        }
+
+        // Get unique clusters and colors
+        const uniqueClusters = [...new Set(clusters)].sort((a, b) => a - b);
+        const clusterColors: { [key: number]: string } = {};
+        const colorPalette = [
+            '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
+            '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b'
+        ];
+        uniqueClusters.forEach((cluster, i) => {
+            clusterColors[cluster] = colorPalette[i % colorPalette.length];
+        });
+
+        // Draw points
+        clusteredData.forEach((_, i) => {
+            const x = padding.left + ((pc1[i] - minX + padX) / (rangeX + 2 * padX)) * plotWidth;
+            const y = padding.top + plotHeight - ((pc2[i] - minY + padY) / (rangeY + 2 * padY)) * plotHeight;
+            const cluster = clusters[i];
+
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = clusterColors[cluster] + 'cc';
+            ctx.fill();
+            ctx.strokeStyle = clusterColors[cluster];
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+
+        // Draw axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, canvas.height - padding.bottom);
+        ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
+        ctx.stroke();
+
+        // Y axis labels
+        ctx.fillStyle = '#333';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = (minY - padY) + ((rangeY + 2 * padY) * (5 - i)) / 5;
+            const y = padding.top + (plotHeight * i) / 5;
+            ctx.fillText(value.toFixed(1), padding.left - 8, y + 3);
+        }
+
+        // X axis labels
+        ctx.textAlign = 'center';
+        for (let i = 0; i <= 5; i++) {
+            const value = (minX - padX) + ((rangeX + 2 * padX) * i) / 5;
+            const x = padding.left + (plotWidth * i) / 5;
+            ctx.fillText(value.toFixed(1), x, canvas.height - padding.bottom + 15);
+        }
+
+        // Axis titles with variance explained
+        ctx.font = 'bold 11px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText(`PC1 (${variance[0].toFixed(1)}% var)`, padding.left + plotWidth / 2, canvas.height - 8);
+
+        ctx.save();
+        ctx.translate(14, padding.top + plotHeight / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(`PC2 (${variance[1].toFixed(1)}% var)`, 0, 0);
+        ctx.restore();
+
+        // Title
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('Cluster Space (PCA)', canvas.width / 2 - 20, 18);
+
+        // Subtitle with features used
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#666';
+        ctx.fillText(`Features: ${featureKeys.length} morphology + intensity`, canvas.width / 2 - 20, 32);
+
+        // Legend
+        const legendX = canvas.width - padding.right + 10;
+        let legendY = padding.top + 10;
+        ctx.font = 'bold 10px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'left';
+        ctx.fillText('Clusters:', legendX, legendY);
+        legendY += 16;
+
+        ctx.font = '10px Arial';
+        uniqueClusters.forEach((cluster) => {
+            ctx.fillStyle = clusterColors[cluster];
+            ctx.beginPath();
+            ctx.arc(legendX + 6, legendY - 3, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.fillText(`State ${cluster}`, legendX + 16, legendY);
+            legendY += 14;
+        });
+
+        // Total cells info
+        ctx.fillStyle = '#888';
+        ctx.font = '9px Arial';
+        ctx.fillText(`n=${clusteredData.length}`, legendX, legendY + 5);
+
+    }, [data]);
+
+    return <canvas ref={canvasRef} width={700} height={400} />;
+});
+
+// Cluster Distribution Bar Chart
+const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeature[] }>(({ data }, ref) => {
+    const internalRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Count cells per cluster
+        const clusteredData = data.filter(d => d.gmm_state !== null || d.hmm_state !== null);
+
+        if (clusteredData.length === 0) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#666';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('No clustering data available.', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+
+        const clusterCounts: { [key: number]: number } = {};
+        clusteredData.forEach(d => {
+            const cluster = d.hmm_state ?? d.gmm_state ?? 0;
+            clusterCounts[cluster] = (clusterCounts[cluster] || 0) + 1;
+        });
+
+        const clusters = Object.keys(clusterCounts).map(Number).sort((a, b) => a - b);
+        const counts = clusters.map(c => clusterCounts[c]);
+        const maxCount = Math.max(...counts);
+
+        // Layout
+        const padding = { top: 35, right: 20, bottom: 55, left: 55 };
+        const plotWidth = canvas.width - padding.left - padding.right;
+        const plotHeight = canvas.height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = padding.top + (plotHeight * i) / 4;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(canvas.width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Colors
+        const colorPalette = [
+            '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
+            '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b'
+        ];
+
+        // Draw bars
+        const barWidth = plotWidth / clusters.length;
+        const barPadding = barWidth * 0.2;
+        clusters.forEach((cluster, i) => {
+            const count = clusterCounts[cluster];
+            const barHeight = (count / maxCount) * plotHeight;
+            const x = padding.left + i * barWidth + barPadding / 2;
+            const y = padding.top + plotHeight - barHeight;
+
+            ctx.fillStyle = colorPalette[i % colorPalette.length];
+            ctx.fillRect(x, y, barWidth - barPadding, barHeight);
+
+            // Count label on top of bar
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(count), x + (barWidth - barPadding) / 2, y - 5);
+        });
+
+        // Draw axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, canvas.height - padding.bottom);
+        ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
+        ctx.stroke();
+
+        // Y axis labels
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 4; i++) {
+            const value = Math.round((maxCount * (4 - i)) / 4);
+            const y = padding.top + (plotHeight * i) / 4;
+            ctx.fillText(String(value), padding.left - 8, y + 4);
+        }
+
+        // X axis labels (cluster numbers)
+        ctx.textAlign = 'center';
+        clusters.forEach((cluster, i) => {
+            const x = padding.left + i * barWidth + barWidth / 2;
+            ctx.fillText(`State ${cluster}`, x, canvas.height - padding.bottom + 18);
+        });
+
+        // Axis titles
+        ctx.font = 'bold 12px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText('Cluster State', canvas.width / 2, canvas.height - 8);
+
+        ctx.save();
+        ctx.translate(14, canvas.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Cell Count', 0, 0);
+        ctx.restore();
+
+        // Title
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('Cluster Distribution', canvas.width / 2, 18);
+
+    }, [data]);
+
+    return <canvas ref={canvasRef} width={400} height={280} />;
+});
 
 export default AnalysisResults;

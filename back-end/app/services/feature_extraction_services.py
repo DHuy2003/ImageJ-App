@@ -203,13 +203,13 @@ def get_all_features():
 
 def export_features_to_csv(image_id=None):
     """
-    Export features to CSV format
+    Export features to CSV format (Excel compatible with semicolon delimiter)
 
     Args:
         image_id: Optional - export only for specific image
 
     Returns:
-        CSV string
+        CSV string with BOM for Excel compatibility
     """
     if image_id:
         features = CellFeature.query.filter_by(image_id=image_id).all()
@@ -217,7 +217,8 @@ def export_features_to_csv(image_id=None):
         features = CellFeature.query.all()
 
     output = StringIO()
-    writer = csv.writer(output)
+    # Use semicolon delimiter for better Excel compatibility
+    writer = csv.writer(output, delimiter=';')
 
     # Header
     header = [
@@ -234,20 +235,27 @@ def export_features_to_csv(image_id=None):
     writer.writerow(header)
 
     for f in features:
+        # Format values - replace None with 0 for motion features
+        def format_val(val, is_motion=False):
+            if val is None:
+                return 0 if is_motion else ''
+            return val
+
         row = [
-            f.id, f.image_id, f.cell_id, f.frame_num, f.track_id,
-            f.centroid_row, f.centroid_col, f.area,
-            f.major_axis_length, f.minor_axis_length, f.aspect_ratio,
-            f.eccentricity, f.solidity, f.extent, f.perimeter, f.circularity,
-            f.convex_area, f.convexity_deficit,
-            f.mean_intensity, f.max_intensity, f.min_intensity,
-            f.intensity_ratio_max_mean, f.intensity_ratio_mean_min,
-            f.delta_x, f.delta_y, f.displacement, f.speed, f.turning,
-            f.gmm_state, f.hmm_state
+            f.id, f.image_id, f.cell_id, f.frame_num, format_val(f.track_id),
+            format_val(f.centroid_row), format_val(f.centroid_col), format_val(f.area),
+            format_val(f.major_axis_length), format_val(f.minor_axis_length), format_val(f.aspect_ratio),
+            format_val(f.eccentricity), format_val(f.solidity), format_val(f.extent), format_val(f.perimeter), format_val(f.circularity),
+            format_val(f.convex_area), format_val(f.convexity_deficit),
+            format_val(f.mean_intensity), format_val(f.max_intensity), format_val(f.min_intensity),
+            format_val(f.intensity_ratio_max_mean), format_val(f.intensity_ratio_mean_min),
+            format_val(f.delta_x, True), format_val(f.delta_y, True), format_val(f.displacement, True), format_val(f.speed, True), format_val(f.turning, True),
+            format_val(f.gmm_state), format_val(f.hmm_state)
         ]
         writer.writerow(row)
 
-    return output.getvalue()
+    # Add BOM for Excel to recognize UTF-8
+    return '\ufeff' + output.getvalue()
 
 
 def convert_colored_to_labels(colored_mask):

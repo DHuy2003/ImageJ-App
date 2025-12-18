@@ -4,11 +4,12 @@ import ToolBar from '../../components/tool-bar/ToolBar';
 import ImageView from '../../components/image-view/ImageView';
 import CellFeaturesTable from '../../components/cell-features-table/CellFeaturesTable';
 import AnalysisResults from '../../components/analysis-results/AnalysisResults';
+import ArticleSearch from '../../components/article-search/ArticleSearch';
 import ClusteringDialog from '../../components/clustering-dialog/ClusteringDialog';
 import ProgressDialog from '../../components/progress-dialog/ProgressDialog';
 import { FaFileCircleXmark } from "react-icons/fa6"
 import './DisplayImagesPage.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { ImageInfo } from '../../types/image';
 import axios from 'axios';
 import { TOOL_EVENT_NAME, TOOL_PROGRESS_EVENT, type ToolActionPayload, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
@@ -36,7 +37,23 @@ const DisplayImagesPage = () => {
   const [showVirtualImport, setShowVirtualImport] = useState(false);
   const [showVirtualPlayer, setShowVirtualPlayer] = useState(false);
   const [sequenceFrames, setSequenceFrames] = useState<SequenceFrame[]>([]);
+  const [showArticleSearch, setShowArticleSearch] = useState(false);
   const location = useLocation();
+
+  // Refetch images function - can be called after segmentation
+  const refetchImages = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/`, {
+        headers: {
+          "X-Session-Id": getSessionId()
+        },
+      });
+      const images: ImageInfo[] = res.data.images ?? [];
+      setImageArray(images);
+    } catch (err: any) {
+      console.error("Failed to refetch images:", err);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchImages = async () => {
@@ -45,8 +62,8 @@ const DisplayImagesPage = () => {
         setError(null);
 
         const res = await axios.get(`${API_BASE_URL}/`, {
-          headers: { 
-            "X-Session-Id": getSessionId() 
+          headers: {
+            "X-Session-Id": getSessionId()
           },
         });
         const images: ImageInfo[] = res.data.images ?? [];
@@ -122,11 +139,27 @@ const DisplayImagesPage = () => {
         console.log('Setting showClusteringDialog to true');
         setShowClusteringDialog(true);
       }
+      // After segmentation completes, reload images to get updated mask data
+      if (e.detail.type === 'SEGMENTATION') {
+        console.log('Segmentation completed, refetching images to load masks...');
+        refetchImages();
+      }
     };
 
     window.addEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
     return () => {
       window.removeEventListener(TOOL_EVENT_NAME, handleToolAction as EventListener);
+    };
+  }, [refetchImages]);
+
+  useEffect(() => {
+    const handleToggleArticleSearch = () => {
+      setShowArticleSearch(prev => !prev);
+    };
+
+    window.addEventListener('toggle-article-search', handleToggleArticleSearch);
+    return () => {
+      window.removeEventListener('toggle-article-search', handleToggleArticleSearch);
     };
   }, []);
 
@@ -234,6 +267,10 @@ const DisplayImagesPage = () => {
           onClose={handleCloseVirtualPlayer}
           frames={sequenceFrames}
         />
+        <ArticleSearch
+          isOpen={showArticleSearch}
+          onClose={() => setShowArticleSearch(false)}
+        />
       </div>
     );
   }
@@ -273,10 +310,14 @@ const DisplayImagesPage = () => {
           onClose={handleCloseVirtualPlayer}
           frames={sequenceFrames}
         />
+        <ArticleSearch
+          isOpen={showArticleSearch}
+          onClose={() => setShowArticleSearch(false)}
+        />
       </div>
     );
   }
-  
+
   return (
     <div className="display-images-page">
       <NavBar />
@@ -309,6 +350,10 @@ const DisplayImagesPage = () => {
         isOpen={showVirtualPlayer}
         onClose={handleCloseVirtualPlayer}
         frames={sequenceFrames}
+      />
+      <ArticleSearch
+        isOpen={showArticleSearch}
+        onClose={() => setShowArticleSearch(false)}
       />
     </div>
   );

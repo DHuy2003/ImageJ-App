@@ -153,8 +153,15 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
         }
     };
 
-    const formatValue = (value: number | null | undefined): string => {
-        if (value === null || value === undefined) return '-';
+    const formatValue = (value: number | null | undefined, columnKey?: string): string => {
+        // Motion features default to 0 instead of '-'
+        const motionKeys = ['delta_x', 'delta_y', 'displacement', 'speed', 'turning'];
+        if (value === null || value === undefined) {
+            if (columnKey && motionKeys.includes(columnKey)) {
+                return '0';
+            }
+            return '-';
+        }
         if (Number.isInteger(value)) return value.toString();
         return value.toFixed(2);
     };
@@ -307,7 +314,7 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
                                     <tr key={f.id}>
                                         {activeColumns.map(col => (
                                             <td key={col.key}>
-                                                {formatValue((f as any)[col.key])}
+                                                {formatValue((f as any)[col.key], col.key)}
                                             </td>
                                         ))}
                                     </tr>

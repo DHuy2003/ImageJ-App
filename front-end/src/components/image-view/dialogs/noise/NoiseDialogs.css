@@ -1,7 +1,7 @@
 .noise-dialog-backdrop {
-    position: absolute;    
+    position: absolute;
     inset: 0;
-    pointer-events: none;  
+    pointer-events: none;
     background: transparent;
     backdrop-filter: none;
     z-index: 10;
@@ -9,72 +9,75 @@
 
 .noise-dialog {
     position: absolute;
-    min-width: 320px;
-    max-width: 420px;
-    pointer-events: auto;  
+    min-width: 340px;
+    max-width: 440px;
+    pointer-events: auto;
     border-radius: 12px;
-    background: #1f2937;
-    box-shadow: 0 10px 30px rgba(0,0,0,.35);
-    color: #e5e7eb;
+    background: #fff;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    color: #333;
     top: 20px;
     left: 20px;
+    overflow: hidden;
 }
 
 .noise-dialog-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
-    cursor: move;          
+    padding: 12px 16px;
+    cursor: move;
     user-select: none;
-    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .noise-dialog-title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
+    color: #fff;
 }
 
 .noise-dialog-close {
     appearance: none;
     border: 0;
-    background: transparent;
-    color: #9ca3af;
-    font-size: 30px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 24px;
     line-height: 1;
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.2s;
 }
 
 .noise-dialog-close:hover {
-    background: rgba(255,255,255,0.06);
-    color: red;
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .noise-dialog-body {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    margin-bottom: 20px;
-    padding: 12px;
+    gap: 16px;
+    margin-bottom: 0;
+    padding: 18px;
 }
 
 .noise-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 
 .noise-field-label {
-    font-size: 13px;
-    color: #9ca3af;
+    font-size: 14px;
+    font-weight: 500;
+    color: #555;
 }
 
 .noise-field-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
 }
 
 .noise-range {
@@ -82,119 +85,151 @@
 }
 
 .noise-number-input {
-    width: 72px;
-    padding: 5px 8px;
-    border-radius: 8px;
-    border: 1px solid #374151;
-    background: #0f172a;
-    color: #e5e7eb;
-    font-size: 13px;
+    width: 80px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    background: #fff;
+    color: #333;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .noise-number-input:focus {
     outline: none;
-    border-color: #3b82f6;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .noise-select {
-    padding: 6px 10px;
-    border-radius: 8px;
-    border: 1px solid #374151;
-    background: #0f172a;
-    color: #e5e7eb;
-    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    background: #fff;
+    color: #333;
+    font-size: 14px;
     cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.noise-select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .noise-preview-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     margin-top: 8px;
-    font-size: 13px;
-    color: #d1d5db;
+    font-size: 14px;
+    color: #555;
     cursor: pointer;
 }
 
 .noise-dialog-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 0 12px 12px 12px;
+    gap: 10px;
+    padding: 12px 18px 16px;
+    background: #f8f9fa;
+    border-top: 1px solid #e8ecf0;
 }
 
 .noise-btn {
-    border-radius: 999px;
-    padding: 6px 16px;
-    font-size: 13px;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
     border: none;
     cursor: pointer;
+    transition: all 0.2s;
 }
 
 .noise-btn-secondary {
-    background: #111827;
-    color: #e5e7eb;
+    background: #fff;
+    border: 1px solid #ddd;
+    color: #666;
 }
+
 .noise-btn-secondary:hover {
-    background: #1f2937;
+    background: #f5f5f5;
+    border-color: #ccc;
 }
 
 .noise-btn-primary {
-    background: #2563eb;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #ffffff;
 }
+
 .noise-btn-primary:disabled {
-    opacity: 0.4;
-    cursor: default;
+    opacity: 0.5;
+    cursor: not-allowed;
 }
+
 .noise-btn-primary:not(:disabled):hover {
-    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 .noise-btn-help {
     margin-right: auto;
     background: transparent;
-    color: #9ca3af;
+    border: 1px solid #ddd;
+    color: #666;
 }
+
 .noise-btn-help:hover {
-    color: #e5e7eb;
+    background: #f5f5f5;
+    color: #333;
 }
 
 .noise-checkbox {
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
+    accent-color: #667eea;
+    cursor: pointer;
 }
 
 .noise-range[type="range"] {
     -webkit-appearance: none;
     appearance: none;
-    height: 4px;
-    border-radius: 999px;
-    background: #374151;
+    height: 6px;
+    border-radius: 3px;
+    background: #e8ecf0;
     cursor: pointer;
 }
 
 .noise-range[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 999px;
-    background: #2563eb;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
     cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.noise-range[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
 }
 
 .noise-range[type="range"]::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    border-radius: 999px;
-    background: #2563eb;
-    border: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
     cursor: pointer;
 }
 
 .noise-help-text {
     margin-top: 4px;
-    font-size: 11px;
-    color: #9ca3af;
+    font-size: 12px;
+    color: #888;
 }

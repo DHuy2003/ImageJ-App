@@ -54,12 +54,15 @@ const VirtualSequenceImportDialog = ({
       const dirHandle = await (window as any).showDirectoryPicker();
       const collected: File[] = [];
 
+      // Accept all common image formats by extension (fallback for browsers not recognizing MIME types)
+      const imageExtensions = /\.(tif|tiff|png|jpg|jpeg|gif|bmp|webp|ico|svg)$/i;
+
       for await (const entry of dirHandle.values()) {
         if (entry.kind === "file") {
           const file = await entry.getFile();
           if (
             file.type.startsWith("image/") ||
-            /\.(tif|tiff)$/i.test(file.name)
+            imageExtensions.test(file.name)
           ) {
             collected.push(file);
           }
