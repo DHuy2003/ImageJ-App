@@ -22,6 +22,41 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
   const lastEraserCommitTimeRef = useRef(0);
   const [eraserCursorUrl, setEraserCursorUrl] = useState<string | null>(null);
 
+  const getVisibleClipRectInCanvasPx = () => {
+    const img = imgRef.current;
+    const canvas = canvasRef.current;
+    if (!img || !canvas) return null;
+
+    const wrapper = img.closest('#image-wrapper') as HTMLElement | null;
+    if (!wrapper) return null;
+
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+
+    const left = Math.max(wrapperRect.left, canvasRect.left);
+    const top = Math.max(wrapperRect.top, canvasRect.top);
+    const right = Math.min(wrapperRect.right, canvasRect.right);
+    const bottom = Math.min(wrapperRect.bottom, canvasRect.bottom);
+
+    const w = right - left;
+    const h = bottom - top;
+    if (w <= 0 || h <= 0) return null;
+
+    const scaleX = canvas.width / (canvasRect.width || 1);
+    const scaleY = canvas.height / (canvasRect.height || 1);
+
+    return {
+      x: (left - canvasRect.left) * scaleX,
+      y: (top - canvasRect.top) * scaleY,
+      w: w * scaleX,
+      h: h * scaleY,
+    };
+  };
+
+  const isPointInClip = (p: { x: number; y: number }, clip: { x: number; y: number; w: number; h: number }) => {
+    return p.x >= clip.x && p.x <= clip.x + clip.w && p.y >= clip.y && p.y <= clip.y + clip.h;
+  };
+
   useEffect(() => {
     const listener = (e: Event) => {
       const action = (e as CustomEvent<ToolbarAction>).detail;
@@ -145,9 +180,18 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const clip = getVisibleClipRectInCanvasPx();
+
     if (tool === 'brush') {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+
+      ctx.save();
+      if (clip) {
+        ctx.beginPath();
+        ctx.rect(clip.x, clip.y, clip.w, clip.h);
+        ctx.clip();
+      }
 
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = brushColor;
@@ -159,6 +203,8 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
       ctx.moveTo(from.x, from.y);
       ctx.lineTo(to.x, to.y);
       ctx.stroke();
+
+      ctx.restore();
       return;
     }
 
@@ -167,17 +213,26 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
       if (!maskCanvas) return;
       const mctx = maskCanvas.getContext('2d');
       if (!mctx) return;
-    
+
+      mctx.save();
+      if (clip) {
+        mctx.beginPath();
+        mctx.rect(clip.x, clip.y, clip.w, clip.h);
+        mctx.clip();
+      }
+
       mctx.globalCompositeOperation = 'source-over';
       mctx.strokeStyle = 'rgba(0,0,0,1)';
-      mctx.lineWidth = eraserSize;   
+      mctx.lineWidth = eraserSize;
       mctx.lineCap = 'round';
       mctx.lineJoin = 'round';
-    
+
       mctx.beginPath();
       mctx.moveTo(from.x, from.y);
       mctx.lineTo(to.x, to.y);
       mctx.stroke();
+
+      mctx.restore();
     }
   };
 
@@ -185,6 +240,12 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
     if (disabled || (tool !== 'brush' && tool !== 'eraser')) return;
     e.preventDefault();
     const pos = getLocalPos(e);
+    const clip = getVisibleClipRectInCanvasPx();
+    if (clip && !isPointInClip(pos, clip)) {
+      lastPosRef.current = null;
+      setIsDrawing(false);
+      return;
+    }
     lastPosRef.current = pos;
     hasDrawnRef.current = false;
     setIsDrawing(true);
@@ -194,6 +255,11 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
   const handleMouseMove = (e: MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || disabled || (tool !== 'brush' && tool !== 'eraser')) return;
     const pos = getLocalPos(e);
+    const clip = getVisibleClipRectInCanvasPx();
+    if (clip && !isPointInClip(pos, clip)) {
+      lastPosRef.current = null;
+      return;
+    }
     const last = lastPosRef.current;
     if (last) {
       drawLine(last, pos);
