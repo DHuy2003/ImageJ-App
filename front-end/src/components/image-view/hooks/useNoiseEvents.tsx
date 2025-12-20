@@ -46,6 +46,8 @@ const useNoiseEvents = (
   const [gaussianPreview, setGaussianPreview] = useState(false);
   const [gaussianBase, setGaussianBase] = useState<ImageData | null>(null);
 
+  const gaussianLastPreviewRef = useRef<{ stdDev: number; image: ImageData } | null>(null);
+
   const applyGaussianFromBase = (saveToHistory: boolean, stdDevValue?: number) => {
     if (!gaussianBase) return;
     const std = stdDevValue ?? gaussianStdDev;
@@ -57,9 +59,23 @@ const useNoiseEvents = (
     const ctx = tempCanvas.getContext('2d');
     if (!ctx) return;
 
-    const fresh = cloneImageData(gaussianBase);
-    const processed = processAddSpecifiedNoise(fresh, { stdDev: std });
-    if (!processed) return;
+    let processed: ImageData | null = null;
+    if (saveToHistory && gaussianPreview) {
+      const cached = gaussianLastPreviewRef.current;
+      if (cached && cached.stdDev === std) {
+        processed = cloneImageData(cached.image);
+      }
+    }
+
+    if (!processed) {
+      const fresh = cloneImageData(gaussianBase);
+      processed = processAddSpecifiedNoise(fresh, { stdDev: std });
+      if (!processed) return;
+    }
+
+    if (!saveToHistory) {
+      gaussianLastPreviewRef.current = { stdDev: std, image: cloneImageData(processed) };
+    }
 
     ctx.putImageData(processed, 0, 0);
     updateImageFromCanvas(tempCanvas, saveToHistory);
@@ -82,20 +98,26 @@ const useNoiseEvents = (
   };
   const onGaussianTogglePreview = (enabled: boolean) => {
     setGaussianPreview(enabled);
-    if (enabled) applyGaussianFromBase(false);
-    else restoreGaussianBase();
+    if (enabled) {
+      applyGaussianFromBase(false);
+    } else {
+      gaussianLastPreviewRef.current = null;
+      restoreGaussianBase();
+    }
   };
   const onGaussianApply = () => {
     applyGaussianFromBase(true);
     setGaussianOpen(false);
     setGaussianPreview(false);
     setGaussianBase(null);
+    gaussianLastPreviewRef.current = null;
   };
   const onGaussianCancel = () => {
     if (gaussianPreview) restoreGaussianBase();
     setGaussianOpen(false);
     setGaussianPreview(false);
     setGaussianBase(null);
+    gaussianLastPreviewRef.current = null;
   };
 
   const [spOpen, setSpOpen] = useState(false);
@@ -103,9 +125,12 @@ const useNoiseEvents = (
   const [spPreview, setSpPreview] = useState(false);
   const [spBase, setSpBase] = useState<ImageData | null>(null);
 
+  const spLastPreviewRef = useRef<{ densityPercent: number; image: ImageData } | null>(null);
+
   const applySaltPepperFromBase = (save: boolean, densityPercent?: number) => {
     if (!spBase) return;
-    const density = (densityPercent ?? spDensity) / 100;
+    const densityPct = densityPercent ?? spDensity;
+    const density = densityPct / 100;
     if (!isFinite(density) || density <= 0 || density > 1) return;
 
     const tempCanvas = document.createElement('canvas');
@@ -113,9 +138,23 @@ const useNoiseEvents = (
     tempCanvas.height = spBase.height;
     const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
 
-    const fresh = cloneImageData(spBase);
-    const processed = processSaltAndPepperNoise(fresh, density);
-    if (!processed) return;
+    let processed: ImageData | null = null;
+    if (save && spPreview) {
+      const cached = spLastPreviewRef.current;
+      if (cached && cached.densityPercent === densityPct) {
+        processed = cloneImageData(cached.image);
+      }
+    }
+
+    if (!processed) {
+      const fresh = cloneImageData(spBase);
+      processed = processSaltAndPepperNoise(fresh, density);
+      if (!processed) return;
+    }
+
+    if (!save) {
+      spLastPreviewRef.current = { densityPercent: densityPct, image: cloneImageData(processed) };
+    }
 
     ctx.putImageData(processed, 0, 0);
     updateImageFromCanvas(tempCanvas, save);
@@ -135,20 +174,26 @@ const useNoiseEvents = (
   };
   const onSpTogglePreview = (enabled: boolean) => {
     setSpPreview(enabled);
-    if (enabled) applySaltPepperFromBase(false);
-    else restoreSaltPepperBase();
+    if (enabled) {
+      applySaltPepperFromBase(false);
+    } else {
+      spLastPreviewRef.current = null;
+      restoreSaltPepperBase();
+    }
   };
   const onSpApply = () => {
     applySaltPepperFromBase(true);
     setSpOpen(false);
     setSpPreview(false);
     setSpBase(null);
+    spLastPreviewRef.current = null;
   };
   const onSpCancel = () => {
     if (spPreview) restoreSaltPepperBase();
     setSpOpen(false);
     setSpPreview(false);
     setSpBase(null);
+    spLastPreviewRef.current = null;
   };
 
   const [roOpen, setRoOpen] = useState(false);
@@ -353,6 +398,7 @@ const useNoiseEvents = (
         setGaussianOpen(false);
         setGaussianPreview(false);
         setGaussianBase(null);
+        gaussianLastPreviewRef.current = null;
       } else if (spOpen && spBase) {
         baseForNext = spBase;
         if (spPreview) {
@@ -361,6 +407,7 @@ const useNoiseEvents = (
         setSpOpen(false);
         setSpPreview(false);
         setSpBase(null);
+        spLastPreviewRef.current = null;
       } else if (roOpen && roBase) {
         baseForNext = roBase;
         if (roPreview) {
@@ -392,6 +439,7 @@ const useNoiseEvents = (
         setGaussianStdDev(25);
         setGaussianPreview(false);
         setGaussianOpen(true);
+        gaussianLastPreviewRef.current = null;
         return;
       }
 
@@ -402,6 +450,7 @@ const useNoiseEvents = (
         setSpDensity(5);
         setSpPreview(false);
         setSpOpen(true);
+        spLastPreviewRef.current = null;
         return;
       }
 

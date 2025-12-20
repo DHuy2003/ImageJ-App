@@ -17,7 +17,7 @@ import VirtualSequencePlayer, { type SequenceFrame } from "../../components/virt
 import VirtualSequenceImportDialog from "../../components/virtual-sequence/VirtualSequenceImportDialog";
 import {  VIRTUAL_SEQUENCE_IMPORT_EVENT } from "../../utils/nav-bar/fileUtils";
 import { getSessionId } from '../../utils/common/getSessionId';
-import { useResetCurrentSessionOnClose } from '../../utils/common/apiClient';
+import { useResetCurrentSessionOnClose } from '../../utils/common/sessionLifecycle';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -40,7 +40,6 @@ const DisplayImagesPage = () => {
   const [showArticleSearch, setShowArticleSearch] = useState(false);
   const location = useLocation();
 
-  // Refetch images function - can be called after segmentation
   const refetchImages = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/`, {
