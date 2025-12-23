@@ -132,14 +132,14 @@ const ImageSizeDialog: React.FC<ImageSizeDialogProps> = ({
           </div>
 
           {/* DEPTH */}
-          <div className="input-group">
+          {/* <div className="input-group">
             <label>Depth (images):</label>
             <input
               type="number"
               value={depth}
               onChange={(e) => setDepth(parseInt(e.target.value) || 1)}
             />
-          </div>
+          </div> */}
 
           {/* CONSTRAIN */}
           <div className="checkbox-group">
