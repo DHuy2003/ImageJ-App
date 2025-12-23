@@ -125,7 +125,7 @@ const SubtractDialog: React.FC<SubtractDialogProps> = ({
                     </label>
                 </div>
 
-                <div className="subtract-row subtract-checkbox-row">
+                {/* <div className="subtract-row subtract-checkbox-row">
                     <label className="subtract-checkbox-label">
                         <input
                             type="checkbox"
@@ -134,7 +134,7 @@ const SubtractDialog: React.FC<SubtractDialogProps> = ({
                         />
                         Create background (don&apos;t subtract)
                     </label>
-                </div>
+                </div> */}
 
                 <div className="subtract-row subtract-checkbox-row">
                     <label className="subtract-checkbox-label">
