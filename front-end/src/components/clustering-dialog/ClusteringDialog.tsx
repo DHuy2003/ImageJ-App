@@ -132,6 +132,18 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
             window.dispatchEvent(new CustomEvent('clusteringComplete'));
 
             const gmmResult = response.data.result?.gmm || {};
+
+            // Save clustering info to localStorage for BIC/AIC visualization
+            if (gmmResult.scores) {
+                const clusteringInfo = {
+                    scores: gmmResult.scores,
+                    optimal_components: gmmResult.optimal_components,
+                    optimal_k_by_bic: gmmResult.optimal_k_by_bic,
+                    optimal_k_by_aic: gmmResult.optimal_k_by_aic,
+                    selection_method: gmmResult.selection_method
+                };
+                localStorage.setItem('clusteringInfo', JSON.stringify(clusteringInfo));
+            }
             void response.data.result?.hmm; // HMM result available but not used yet
 
             const statsHtml = `
@@ -141,8 +153,16 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
                         <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.optimal_components || 0}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-                        <span style="color:#666;font-size:13px;">Cells Classified</span>
-                        <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.cells_classified || 'N/A'}</span>
+                        <span style="color:#666;font-size:13px;">Selection Method</span>
+                        <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.selection_method || 'N/A'}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+                        <span style="color:#666;font-size:13px;">Optimal k (BIC)</span>
+                        <span style="font-weight:600;color:#e74c3c;font-size:14px;">${gmmResult.optimal_k_by_bic || 'N/A'}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+                        <span style="color:#666;font-size:13px;">Optimal k (AIC)</span>
+                        <span style="font-weight:600;color:#3498db;font-size:14px;">${gmmResult.optimal_k_by_aic || 'N/A'}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
                         <span style="color:#666;font-size:13px;">Features Used</span>
@@ -153,8 +173,8 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
                         <span style="font-weight:600;color:#333;font-size:14px;">${useHMM ? 'Applied' : 'Disabled'}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;padding:8px 0;">
-                        <span style="color:#666;font-size:13px;">BIC Score</span>
-                        <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.bic ? gmmResult.bic.toFixed(2) : 'N/A'}</span>
+                        <span style="color:#666;font-size:13px;">Total Cells</span>
+                        <span style="font-weight:600;color:#333;font-size:14px;">${gmmResult.total_cells || 'N/A'}</span>
                     </div>
                 </div>
             `;
@@ -363,7 +383,7 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
                                         e.target.value === 'auto' ? 'auto' : parseInt(e.target.value)
                                     )}
                                 >
-                                    <option value="auto">Auto (BIC)</option>
+                                    <option value="auto">Auto (BIC + AIC)</option>
                                     <option value="2">2 clusters</option>
                                     <option value="3">3 clusters</option>
                                     <option value="4">4 clusters</option>

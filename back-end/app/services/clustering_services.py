@@ -47,7 +47,7 @@ def get_available_features():
 
 def run_gmm_clustering(selected_features=None, max_components=10, min_components=2):
     """
-    Run GMM clustering on cell features
+    Run GMM clustering on cell features using combined AIC and BIC criteria
 
     Args:
         selected_features: List of feature names to use
@@ -103,23 +103,57 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
     # Handle NaN/Inf
     X_scaled = np.nan_to_num(X_scaled, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # Find optimal number of components using BIC
-    best_bic = np.inf
-    best_n = min_components
-    bic_scores = []
+    # Find optimal number of components using combined AIC and BIC
+    scores = []
+    bic_values = []
+    aic_values = []
 
     for n in range(min_components, min(max_components + 1, len(feature_matrix))):
         try:
             gmm = GaussianMixture(n_components=n, covariance_type='full', random_state=42, n_init=3)
             gmm.fit(X_scaled)
+
+            # Calculate both BIC and AIC
             bic = gmm.bic(X_scaled)
-            bic_scores.append({'n_components': n, 'bic': bic})
-            if bic < best_bic:
-                best_bic = bic
-                best_n = n
+            aic = gmm.aic(X_scaled)
+
+            scores.append({
+                'n_components': n,
+                'bic': float(bic),
+                'aic': float(aic)
+            })
+            bic_values.append((n, bic))
+            aic_values.append((n, aic))
+
         except Exception as e:
             print(f"GMM failed for n={n}: {e}")
             continue
+
+    if not scores:
+        return {"error": "GMM fitting failed for all component values"}
+
+    # Find optimal k from BIC (lowest BIC)
+    best_n_bic = min(bic_values, key=lambda x: x[1])[0]
+
+    # Find optimal k from AIC (lowest AIC)
+    best_n_aic = min(aic_values, key=lambda x: x[1])[0]
+
+    # Combined decision: use consensus or weighted approach
+    # Strategy: If BIC and AIC agree, use that value
+    # If they disagree, prefer BIC (more conservative, penalizes complexity more)
+    # but also consider if AIC suggests fewer clusters
+    if best_n_bic == best_n_aic:
+        best_n = best_n_bic
+        selection_method = "consensus"
+    else:
+        # Use the average rounded, or prefer the more conservative (higher penalty)
+        # BIC penalizes complexity more, so it tends to choose fewer clusters
+        # We take the value that both criteria support most
+        avg_n = (best_n_bic + best_n_aic) / 2
+        best_n = round(avg_n)
+        # Ensure best_n is within valid range
+        best_n = max(min_components, min(best_n, max_components))
+        selection_method = f"combined (BIC={best_n_bic}, AIC={best_n_aic}, avg={avg_n:.1f})"
 
     # Fit final model with optimal components
     final_gmm = GaussianMixture(n_components=best_n, covariance_type='full', random_state=42, n_init=3)
@@ -145,10 +179,17 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
             'percentage': float(np.sum(mask) / len(labels) * 100)
         })
 
+    # Get best BIC and AIC values for the selected k
+    best_scores = next((s for s in scores if s['n_components'] == best_n), {})
+
     return {
         "optimal_components": best_n,
-        "best_bic": float(best_bic),
-        "bic_scores": bic_scores,
+        "selection_method": selection_method,
+        "optimal_k_by_bic": best_n_bic,
+        "optimal_k_by_aic": best_n_aic,
+        "best_bic": best_scores.get('bic'),
+        "best_aic": best_scores.get('aic'),
+        "scores": scores,
         "total_cells": len(cell_ids),
         "cluster_stats": cluster_stats,
         "features_used": selected_features

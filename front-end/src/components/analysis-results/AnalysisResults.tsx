@@ -57,6 +57,20 @@ interface FeatureChange {
     samples: number;
 }
 
+interface ClusteringScore {
+    n_components: number;
+    bic: number;
+    aic: number;
+}
+
+interface ClusteringInfo {
+    scores: ClusteringScore[];
+    optimal_components: number;
+    optimal_k_by_bic: number;
+    optimal_k_by_aic: number;
+    selection_method: string;
+}
+
 interface AnalysisResultsProps {
     isOpen: boolean;
     onClose: () => void;
@@ -97,6 +111,8 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const [featureChanges, setFeatureChanges] = useState<FeatureChange[]>([]);
     const [selectedZScoreFeatures, setSelectedZScoreFeatures] = useState<string[]>(DEFAULT_ZSCORE_FEATURES);
     const [showFeatureSelector, setShowFeatureSelector] = useState(false);
+    // Clustering scores for BIC/AIC visualization
+    const [clusteringInfo, setClusteringInfo] = useState<ClusteringInfo | null>(null);
     // Motility tab states
     const [selectedTracks, setSelectedTracks] = useState<number[]>([]);
     const [showTrackSelector, setShowTrackSelector] = useState(false);
@@ -125,6 +141,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const clusterPCARef = useRef<HTMLCanvasElement>(null);
     const clusterDistributionRef = useRef<HTMLCanvasElement>(null);
     const zscoreHeatmapRef = useRef<HTMLCanvasElement>(null);
+    const bicAicChartRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -153,6 +170,17 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
             setFrameRange([minFrame, maxFrameVal]);
             // Select first 10 tracks by default (or all if less than 10)
             setSelectedTracks(uniqueTracks.slice(0, 10));
+
+            // Load clustering info from localStorage if available
+            const savedClusteringInfo = localStorage.getItem('clusteringInfo');
+            if (savedClusteringInfo) {
+                try {
+                    const parsed = JSON.parse(savedClusteringInfo);
+                    setClusteringInfo(parsed);
+                } catch {
+                    console.warn('Failed to parse clustering info from localStorage');
+                }
+            }
         } catch (err) {
             console.error('Error fetching features:', err);
         } finally {
@@ -967,6 +995,19 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                                         <p className="no-data-msg">No data available</p>
                                                     )}
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="charts-section">
+                                        <h3 className="section-title">Model Selection (BIC/AIC)</h3>
+                                        <div className="chart-card full-width">
+                                            <div className="chart-content">
+                                                {clusteringInfo && clusteringInfo.scores && clusteringInfo.scores.length > 0 ? (
+                                                    <BicAicChart ref={bicAicChartRef} clusteringInfo={clusteringInfo} />
+                                                ) : (
+                                                    <p className="no-data-msg">No clustering scores available. Run clustering first.</p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -2238,6 +2279,237 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
     }, [data]);
 
     return <canvas ref={canvasRef} width={400} height={280} />;
+});
+
+// BIC/AIC Chart for model selection visualization
+const BicAicChart = forwardRef<HTMLCanvasElement, { clusteringInfo: ClusteringInfo }>(({ clusteringInfo }, ref) => {
+    const internalRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const { scores, optimal_components, optimal_k_by_bic, optimal_k_by_aic, selection_method } = clusteringInfo;
+
+        if (!scores || scores.length === 0) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#666';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('No BIC/AIC data available.', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+
+        // Extract data
+        const kValues = scores.map(s => s.n_components);
+        const bicValues = scores.map(s => s.bic);
+        const aicValues = scores.map(s => s.aic);
+
+        // Layout
+        const padding = { top: 50, right: 120, bottom: 60, left: 80 };
+        const plotWidth = canvas.width - padding.left - padding.right;
+        const plotHeight = canvas.height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+        // Calculate scales
+        const minK = Math.min(...kValues);
+        const maxK = Math.max(...kValues);
+        const allValues = [...bicValues, ...aicValues];
+        const minY = Math.min(...allValues);
+        const maxY = Math.max(...allValues);
+        const rangeY = maxY - minY || 1;
+        const padY = rangeY * 0.1;
+
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding.top + (plotHeight * i) / 5;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(canvas.width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Helper to map data to canvas coordinates
+        const xScale = (k: number) => padding.left + ((k - minK) / (maxK - minK || 1)) * plotWidth;
+        const yScale = (v: number) => padding.top + plotHeight - ((v - minY + padY) / (rangeY + 2 * padY)) * plotHeight;
+
+        // Draw BIC line
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        scores.forEach((s, i) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.bic);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Draw BIC points
+        scores.forEach((s) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.bic);
+            ctx.beginPath();
+            ctx.arc(x, y, s.n_components === optimal_k_by_bic ? 8 : 5, 0, Math.PI * 2);
+            ctx.fillStyle = s.n_components === optimal_k_by_bic ? '#c0392b' : '#e74c3c';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        // Draw AIC line
+        ctx.strokeStyle = '#3498db';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        scores.forEach((s, i) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.aic);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Draw AIC points
+        scores.forEach((s) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.aic);
+            ctx.beginPath();
+            ctx.arc(x, y, s.n_components === optimal_k_by_aic ? 8 : 5, 0, Math.PI * 2);
+            ctx.fillStyle = s.n_components === optimal_k_by_aic ? '#2980b9' : '#3498db';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        // Draw vertical line at optimal k
+        const optimalX = xScale(optimal_components);
+        ctx.strokeStyle = '#2ecc71';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(optimalX, padding.top);
+        ctx.lineTo(optimalX, padding.top + plotHeight);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, canvas.height - padding.bottom);
+        ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
+        ctx.stroke();
+
+        // X axis labels (k values)
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        kValues.forEach(k => {
+            const x = xScale(k);
+            ctx.fillText(String(k), x, canvas.height - padding.bottom + 18);
+        });
+
+        // Y axis labels
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = minY - padY + ((rangeY + 2 * padY) * (5 - i)) / 5;
+            const y = padding.top + (plotHeight * i) / 5;
+            ctx.fillText(value.toFixed(0), padding.left - 10, y + 4);
+        }
+
+        // Axis titles
+        ctx.font = 'bold 12px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText('Number of Clusters (k)', padding.left + plotWidth / 2, canvas.height - 10);
+
+        ctx.save();
+        ctx.translate(18, padding.top + plotHeight / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Information Criterion Score', 0, 0);
+        ctx.restore();
+
+        // Title
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('BIC & AIC vs Number of Clusters', canvas.width / 2 - 30, 20);
+
+        // Subtitle with selection info
+        ctx.font = '11px Arial';
+        ctx.fillStyle = '#666';
+        ctx.fillText(`Selected k=${optimal_components} (${selection_method})`, canvas.width / 2 - 30, 36);
+
+        // Legend
+        const legendX = canvas.width - padding.right + 15;
+        let legendY = padding.top + 10;
+
+        ctx.font = 'bold 11px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'left';
+        ctx.fillText('Legend:', legendX, legendY);
+        legendY += 20;
+
+        // BIC legend
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(legendX + 6, legendY - 3, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.font = '10px Arial';
+        ctx.fillText(`BIC (k*=${optimal_k_by_bic})`, legendX + 16, legendY);
+        legendY += 18;
+
+        // AIC legend
+        ctx.fillStyle = '#3498db';
+        ctx.beginPath();
+        ctx.arc(legendX + 6, legendY - 3, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.fillText(`AIC (k*=${optimal_k_by_aic})`, legendX + 16, legendY);
+        legendY += 18;
+
+        // Selected k legend
+        ctx.strokeStyle = '#2ecc71';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(legendX, legendY - 3);
+        ctx.lineTo(legendX + 12, legendY - 3);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#333';
+        ctx.fillText(`Selected (k=${optimal_components})`, legendX + 16, legendY);
+        legendY += 25;
+
+        // Info box
+        ctx.fillStyle = '#f8f9fa';
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        const infoBoxY = legendY;
+        ctx.fillRect(legendX - 5, infoBoxY, 105, 55);
+        ctx.strokeRect(legendX - 5, infoBoxY, 105, 55);
+
+        ctx.fillStyle = '#666';
+        ctx.font = '9px Arial';
+        ctx.fillText('Lower = Better', legendX, infoBoxY + 14);
+        ctx.fillText('BIC penalizes more', legendX, infoBoxY + 28);
+        ctx.fillText('(conservative)', legendX, infoBoxY + 40);
+
+    }, [clusteringInfo]);
+
+    return <canvas ref={canvasRef} width={700} height={350} />;
 });
 
 export default AnalysisResults;
