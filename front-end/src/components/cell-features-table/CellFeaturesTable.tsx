@@ -28,11 +28,6 @@ interface CellFeature {
     min_col_bb: number | null;
     max_row_bb: number | null;
     max_col_bb: number | null;
-    bb_height: number | null;
-    bb_width: number | null;
-    bb_area: number | null;
-    bb_extent: number | null;
-    bb_aspect_ratio: number | null;
     // Intensity
     mean_intensity: number | null;
     max_intensity: number | null;
@@ -53,6 +48,7 @@ interface CellFeature {
 interface CellFeaturesTableProps {
     isOpen: boolean;
     onClose: () => void;
+    refreshTrigger?: number;
 }
 
 // Define all available columns with their display names
@@ -79,11 +75,6 @@ const ALL_COLUMNS = [
     { key: 'min_col_bb', label: 'BB Min Col', category: 'bounding_box' },
     { key: 'max_row_bb', label: 'BB Max Row', category: 'bounding_box' },
     { key: 'max_col_bb', label: 'BB Max Col', category: 'bounding_box' },
-    { key: 'bb_height', label: 'BB Height', category: 'bounding_box' },
-    { key: 'bb_width', label: 'BB Width', category: 'bounding_box' },
-    { key: 'bb_area', label: 'BB Area', category: 'bounding_box' },
-    { key: 'bb_extent', label: 'BB Extent', category: 'bounding_box' },
-    { key: 'bb_aspect_ratio', label: 'BB Aspect Ratio', category: 'bounding_box' },
     // Intensity
     { key: 'mean_intensity', label: 'Mean Int.', category: 'intensity' },
     { key: 'max_intensity', label: 'Max Int.', category: 'intensity' },
@@ -107,7 +98,7 @@ const DEFAULT_VISIBLE_COLUMNS = [
     'centroid_col', 'centroid_row', 'mean_intensity', 'speed', 'gmm_state', 'hmm_state'
 ];
 
-const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
+const CellFeaturesTable = ({ isOpen, onClose, refreshTrigger = 0 }: CellFeaturesTableProps) => {
     const [features, setFeatures] = useState<CellFeature[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -115,11 +106,20 @@ const CellFeaturesTable = ({ isOpen, onClose }: CellFeaturesTableProps) => {
     const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
     const [showColumnSelector, setShowColumnSelector] = useState(false);
 
+    // Fetch features when dialog opens
     useEffect(() => {
         if (isOpen) {
             fetchFeatures();
         }
     }, [isOpen]);
+
+    // Auto-refresh when refreshTrigger changes (after extract features, tracking, clustering)
+    useEffect(() => {
+        if (isOpen && refreshTrigger > 0) {
+            console.log('CellFeaturesTable: refreshTrigger changed, fetching new data...');
+            fetchFeatures();
+        }
+    }, [refreshTrigger]);
 
     const fetchFeatures = async () => {
         try {

@@ -2159,14 +2159,25 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
     const internalRef = useRef<HTMLCanvasElement>(null);
     const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
 
+    // Count clusters first to determine canvas size
+    const clusteredData = data.filter(d => d.gmm_state !== null || d.hmm_state !== null);
+    const clusterCounts: { [key: number]: number } = {};
+    clusteredData.forEach(d => {
+        const cluster = d.hmm_state ?? d.gmm_state ?? 0;
+        clusterCounts[cluster] = (clusterCounts[cluster] || 0) + 1;
+    });
+    const clusterCount = Object.keys(clusterCounts).length;
+
+    // Dynamic canvas width: minimum 400px, or 80px per cluster (minimum bar width for readability)
+    const minBarSpace = 80;
+    const baseWidth = 400;
+    const dynamicWidth = Math.max(baseWidth, clusterCount * minBarSpace + 75); // 75 for padding
+
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
-        // Count cells per cluster
-        const clusteredData = data.filter(d => d.gmm_state !== null || d.hmm_state !== null);
 
         if (clusteredData.length === 0) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2177,18 +2188,12 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
             return;
         }
 
-        const clusterCounts: { [key: number]: number } = {};
-        clusteredData.forEach(d => {
-            const cluster = d.hmm_state ?? d.gmm_state ?? 0;
-            clusterCounts[cluster] = (clusterCounts[cluster] || 0) + 1;
-        });
-
         const clusters = Object.keys(clusterCounts).map(Number).sort((a, b) => a - b);
         const counts = clusters.map(c => clusterCounts[c]);
         const maxCount = Math.max(...counts);
 
-        // Layout
-        const padding = { top: 35, right: 20, bottom: 55, left: 55 };
+        // Layout with more padding for labels
+        const padding = { top: 40, right: 25, bottom: 65, left: 60 };
         const plotWidth = canvas.width - padding.left - padding.right;
         const plotHeight = canvas.height - padding.top - padding.bottom;
 
@@ -2209,29 +2214,44 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
             ctx.stroke();
         }
 
-        // Colors
+        // Colors - more distinct palette
         const colorPalette = [
             '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
-            '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b'
+            '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+            '#8e44ad', '#27ae60', '#d35400', '#2980b9', '#c0392b'
         ];
 
-        // Draw bars
-        const barWidth = plotWidth / clusters.length;
-        const barPadding = barWidth * 0.2;
+        // Draw bars with better spacing
+        const totalBarSpace = plotWidth;
+        const barWidth = totalBarSpace / clusters.length;
+        const barPadding = Math.min(barWidth * 0.25, 15); // Max 15px padding between bars
+        const actualBarWidth = barWidth - barPadding;
+
         clusters.forEach((cluster, i) => {
             const count = clusterCounts[cluster];
             const barHeight = (count / maxCount) * plotHeight;
             const x = padding.left + i * barWidth + barPadding / 2;
             const y = padding.top + plotHeight - barHeight;
 
-            ctx.fillStyle = colorPalette[i % colorPalette.length];
-            ctx.fillRect(x, y, barWidth - barPadding, barHeight);
+            // Draw bar with gradient effect
+            const gradient = ctx.createLinearGradient(x, y, x, y + barHeight);
+            const baseColor = colorPalette[cluster % colorPalette.length];
+            gradient.addColorStop(0, baseColor);
+            gradient.addColorStop(1, adjustColor(baseColor, -20));
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, actualBarWidth, barHeight);
+
+            // Bar border for definition
+            ctx.strokeStyle = adjustColor(baseColor, -30);
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, actualBarWidth, barHeight);
 
             // Count label on top of bar
             ctx.fillStyle = '#333';
-            ctx.font = 'bold 11px Arial';
+            ctx.font = 'bold 12px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(String(count), x + (barWidth - barPadding) / 2, y - 5);
+            const labelY = y - 8;
+            ctx.fillText(String(count), x + actualBarWidth / 2, labelY < padding.top ? y + 15 : labelY);
         });
 
         // Draw axes
@@ -2250,36 +2270,46 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
         for (let i = 0; i <= 4; i++) {
             const value = Math.round((maxCount * (4 - i)) / 4);
             const y = padding.top + (plotHeight * i) / 4;
-            ctx.fillText(String(value), padding.left - 8, y + 4);
+            ctx.fillText(String(value), padding.left - 10, y + 4);
         }
 
-        // X axis labels (cluster numbers)
+        // X axis labels (cluster numbers) - positioned better
         ctx.textAlign = 'center';
+        ctx.font = '11px Arial';
         clusters.forEach((cluster, i) => {
             const x = padding.left + i * barWidth + barWidth / 2;
-            ctx.fillText(`State ${cluster}`, x, canvas.height - padding.bottom + 18);
+            ctx.fillText(`State ${cluster}`, x, canvas.height - padding.bottom + 20);
         });
 
         // Axis titles
         ctx.font = 'bold 12px Arial';
         ctx.fillStyle = '#333';
         ctx.textAlign = 'center';
-        ctx.fillText('Cluster State', canvas.width / 2, canvas.height - 8);
+        ctx.fillText('Cluster State', canvas.width / 2, canvas.height - 10);
 
         ctx.save();
-        ctx.translate(14, canvas.height / 2);
+        ctx.translate(16, canvas.height / 2);
         ctx.rotate(-Math.PI / 2);
         ctx.fillText('Cell Count', 0, 0);
         ctx.restore();
 
         // Title
         ctx.font = 'bold 14px Arial';
-        ctx.fillText('Cluster Distribution', canvas.width / 2, 18);
+        ctx.fillText('Cluster Distribution', canvas.width / 2, 22);
 
-    }, [data]);
+    }, [data, clusteredData, clusterCounts]);
 
-    return <canvas ref={canvasRef} width={400} height={280} />;
+    return <canvas ref={canvasRef} width={dynamicWidth} height={300} style={{ maxWidth: '100%' }} />;
 });
+
+// Helper function to adjust color brightness
+function adjustColor(color: string, amount: number): string {
+    const hex = color.replace('#', '');
+    const r = Math.max(0, Math.min(255, parseInt(hex.substring(0, 2), 16) + amount));
+    const g = Math.max(0, Math.min(255, parseInt(hex.substring(2, 4), 16) + amount));
+    const b = Math.max(0, Math.min(255, parseInt(hex.substring(4, 6), 16) + amount));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
 
 // BIC/AIC Chart for model selection visualization
 const BicAicChart = forwardRef<HTMLCanvasElement, { clusteringInfo: ClusteringInfo }>(({ clusteringInfo }, ref) => {

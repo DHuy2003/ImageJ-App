@@ -27,6 +27,7 @@ const DisplayImagesPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFeaturesTable, setShowFeaturesTable] = useState(false);
+  const [featuresRefreshKey, setFeaturesRefreshKey] = useState(0);
   const [showAnalysisResults, setShowAnalysisResults] = useState(false);
   const [showClusteringDialog, setShowClusteringDialog] = useState(false);
   const [progressState, setProgressState] = useState<{ open: boolean; title?: string; message?: string }>({
@@ -142,6 +143,21 @@ const DisplayImagesPage = () => {
       if (e.detail.type === 'SEGMENTATION') {
         console.log('Segmentation completed, refetching images to load masks...');
         refetchImages();
+      }
+      // After feature extraction completes, trigger refresh for CellFeaturesTable
+      if (e.detail.type === 'EXTRACT_FEATURES') {
+        console.log('Feature extraction completed, triggering features table refresh...');
+        setFeaturesRefreshKey(prev => prev + 1);
+      }
+      // After tracking completes, also refresh features (tracking updates motion features)
+      if (e.detail.type === 'TRACKING') {
+        console.log('Tracking completed, triggering features table refresh...');
+        setFeaturesRefreshKey(prev => prev + 1);
+      }
+      // After clustering completes, also refresh features (clustering updates gmm_state/hmm_state)
+      if (e.detail.type === 'CLUSTERING') {
+        console.log('Clustering completed, triggering features table refresh...');
+        setFeaturesRefreshKey(prev => prev + 1);
       }
     };
 
@@ -325,6 +341,7 @@ const DisplayImagesPage = () => {
       <CellFeaturesTable
         isOpen={showFeaturesTable}
         onClose={() => setShowFeaturesTable(false)}
+        refreshTrigger={featuresRefreshKey}
       />
       <AnalysisResults
         isOpen={showAnalysisResults}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { X, Play, Settings } from 'lucide-react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { TOOL_PROGRESS_EVENT, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
+import { TOOL_PROGRESS_EVENT, TOOL_EVENT_NAME, type ToolProgressPayload } from '../../utils/nav-bar/toolUtils';
 import './ClusteringDialog.css';
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
@@ -42,11 +42,6 @@ const AVAILABLE_FEATURES: FeatureOption[] = [
     { key: 'min_col_bb', label: 'BB Min Col', description: 'Bounding box left edge', category: 'bounding_box' },
     { key: 'max_row_bb', label: 'BB Max Row', description: 'Bounding box bottom edge', category: 'bounding_box' },
     { key: 'max_col_bb', label: 'BB Max Col', description: 'Bounding box right edge', category: 'bounding_box' },
-    { key: 'bb_height', label: 'BB Height', description: 'Bounding box height', category: 'bounding_box' },
-    { key: 'bb_width', label: 'BB Width', description: 'Bounding box width', category: 'bounding_box' },
-    { key: 'bb_area', label: 'BB Area', description: 'Bounding box area', category: 'bounding_box' },
-    { key: 'bb_extent', label: 'BB Extent', description: 'Cell area / BB area ratio', category: 'bounding_box' },
-    { key: 'bb_aspect_ratio', label: 'BB Aspect Ratio', description: 'BB width / BB height', category: 'bounding_box' },
 
     // Motion features
     { key: 'speed', label: 'Speed', description: 'Cell movement speed (px/frame)', category: 'motion' },
@@ -128,8 +123,9 @@ const ClusteringDialog = ({ isOpen, onClose, onSuccess }: ClusteringDialogProps)
             onSuccess(response.data);
             onClose();
 
-            // Dispatch event to update UI
+            // Dispatch event to update UI (both old event for backward compatibility and new standardized event)
             window.dispatchEvent(new CustomEvent('clusteringComplete'));
+            window.dispatchEvent(new CustomEvent(TOOL_EVENT_NAME, { detail: { type: 'CLUSTERING', data: response.data } }));
 
             const gmmResult = response.data.result?.gmm || {};
 

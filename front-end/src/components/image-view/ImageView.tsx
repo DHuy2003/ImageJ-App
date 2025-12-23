@@ -6,6 +6,7 @@ import type { ImageInfo, ImageViewProps } from '../../types/image';
 import { type RoiTool } from '../../types/roi';
 import { formatFileSize } from '../../utils/common/formatFileSize';
 import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
+import { TOOL_EVENT_NAME } from '../../utils/nav-bar/toolUtils';
 import {
   analyzeColorChannelHistogram,
   analyzeImageHistogram,
@@ -202,6 +203,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [circularMasksIndex, setCircularMasksIndex] = useState(0);
   const [circularMasksPlaying, setCircularMasksPlaying] = useState(false);
   const circularMasksTimerRef = useRef<number | null>(null);
+
 
     useEffect(() => {
     return () => {
@@ -446,6 +448,36 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
 
     window.addEventListener('clusteringComplete', handleClusteringComplete);
     return () => window.removeEventListener('clusteringComplete', handleClusteringComplete);
+  }, [currentFile?.id]);
+
+  // Listen for EXTRACT_FEATURES and TRACKING events to refetch features
+  useEffect(() => {
+    const handleToolEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ type: string }>;
+      const eventType = customEvent.detail?.type;
+
+      if (eventType === 'EXTRACT_FEATURES' || eventType === 'TRACKING' || eventType === 'CLUSTERING') {
+        // Refetch features and contours to get updated data
+        if (currentFile?.id) {
+          Promise.all([
+            axios.get(`${API_BASE_URL}/features/${currentFile.id}`),
+            axios.get(`${API_BASE_URL}/segmentation/contours/${currentFile.id}`)
+          ])
+            .then(([featuresRes, contoursRes]) => {
+              const features = featuresRes.data.features || [];
+              const contours = contoursRes.data.contours || [];
+              setFrameFeatures(features);
+              setCellContours(contours);
+              const hasClustering = features.some((f: CellFeature) => f.gmm_state !== null || f.hmm_state !== null);
+              setClusteringAvailable(hasClustering);
+            })
+            .catch(err => console.error('Error refetching data after tool event:', err));
+        }
+      }
+    };
+
+    window.addEventListener(TOOL_EVENT_NAME, handleToolEvent);
+    return () => window.removeEventListener(TOOL_EVENT_NAME, handleToolEvent);
   }, [currentFile?.id]);
 
   // Reset showClustering when changing frames
