@@ -32,15 +32,34 @@ def extract_features_from_mask(image_id):
         raise ValueError(f"No mask found for image {image_id}")
 
     # Try to load the original labels mask first (preserves true cell IDs)
+    # Support multiple image formats
     mask_dir = os.path.dirname(img_record.mask_filepath)
     mask_basename = os.path.splitext(os.path.basename(img_record.mask_filepath))[0]
-    labels_mask_path = os.path.join(mask_dir, mask_basename + '_labels.png')
 
-    if os.path.exists(labels_mask_path):
-        # Use the original labels mask (has true cell IDs like 1, 5, 7, 11...)
+    # Try different extensions for labels mask
+    labels_mask_path = None
+    for ext in ['.png', '.tif', '.tiff', '.jpg', '.jpeg', '.bmp']:
+        candidate = os.path.join(mask_dir, mask_basename + '_labels' + ext)
+        if os.path.exists(candidate):
+            labels_mask_path = candidate
+            break
+
+    if labels_mask_path:
+        # Use the original labels mask (has true cell IDs encoded in RGB channels)
         mask_img = Image.open(labels_mask_path)
-        mask_array = np.array(mask_img).astype(np.int32)
-        print(f"Using labels mask: {labels_mask_path}")
+        mask_raw = np.array(mask_img)
+        print(f"Using labels mask: {labels_mask_path}, shape: {mask_raw.shape}")
+
+        # Decode labels from RGBA format: label = R + G*256 + B*65536
+        if len(mask_raw.shape) == 3:
+            # RGBA or RGB format - decode the label from RGB channels
+            mask_array = (mask_raw[:, :, 0].astype(np.int32) +
+                         mask_raw[:, :, 1].astype(np.int32) * 256 +
+                         mask_raw[:, :, 2].astype(np.int32) * 65536)
+        else:
+            # Already grayscale
+            mask_array = mask_raw.astype(np.int32)
+
         print(f"Unique labels in mask: {np.unique(mask_array)}")
     else:
         # Fall back to colored mask
@@ -259,26 +278,67 @@ def export_features_to_csv(image_id=None):
 
 
 def convert_colored_to_labels(colored_mask):
-    """Convert colored mask back to label mask"""
+    """
+    Convert colored mask back to label mask.
+    Uses connected component labeling to properly separate cells that may have same color.
+    """
+    from scipy import ndimage
+
     # Create unique identifier for each color
     if len(colored_mask.shape) == 2:
-        return colored_mask
+        # Grayscale mask - use connected components directly
+        binary = colored_mask > 0
+        labels, num_features = ndimage.label(binary)
+        print(f"Grayscale mask: found {num_features} connected components")
+        return labels
 
     h, w = colored_mask.shape[:2]
-    labels = np.zeros((h, w), dtype=np.int32)
 
-    # Get unique colors
+    # First, create a binary mask of all non-background pixels
+    # Background is black (0, 0, 0)
+    if colored_mask.shape[-1] == 4:  # RGBA
+        non_background = np.any(colored_mask[:, :, :3] > 0, axis=-1)
+    else:  # RGB
+        non_background = np.any(colored_mask > 0, axis=-1)
+
+    # Get unique colors (excluding background)
     flat = colored_mask.reshape(-1, colored_mask.shape[-1])
     unique_colors = np.unique(flat, axis=0)
 
-    label_id = 1
-    for color in unique_colors:
-        if np.all(color == 0):  # Skip background (black)
-            continue
-        mask = np.all(colored_mask == color, axis=-1)
-        labels[mask] = label_id
-        label_id += 1
+    # Count non-background colors
+    non_bg_colors = [c for c in unique_colors if not np.all(c[:3] == 0)]
 
+    # If only one non-background color or all same color, use connected components
+    # This handles the case where frontend creates mask with single gray color
+    if len(non_bg_colors) <= 1:
+        print(f"Single color mask detected, using connected component labeling")
+        labels, num_features = ndimage.label(non_background)
+        print(f"Found {num_features} separate cells via connected components")
+        return labels
+
+    # Multiple colors - assign labels by color first, then separate connected components
+    labels = np.zeros((h, w), dtype=np.int32)
+    current_label = 0
+
+    for color in unique_colors:
+        if np.all(color[:3] == 0):  # Skip background (black)
+            continue
+
+        # Get mask for this color
+        if colored_mask.shape[-1] == 4:
+            color_mask = np.all(colored_mask[:, :, :3] == color[:3], axis=-1)
+        else:
+            color_mask = np.all(colored_mask == color, axis=-1)
+
+        # Use connected components to separate cells with same color
+        color_labels, num_components = ndimage.label(color_mask)
+
+        # Assign unique labels to each component
+        for comp_id in range(1, num_components + 1):
+            current_label += 1
+            labels[color_labels == comp_id] = current_label
+
+    print(f"Multi-color mask: found {current_label} separate cells")
     return labels
 
 

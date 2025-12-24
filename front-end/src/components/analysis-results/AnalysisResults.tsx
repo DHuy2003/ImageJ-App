@@ -57,6 +57,20 @@ interface FeatureChange {
     samples: number;
 }
 
+interface ClusteringScore {
+    n_components: number;
+    bic: number;
+    aic: number;
+}
+
+interface ClusteringInfo {
+    scores: ClusteringScore[];
+    optimal_components: number;
+    optimal_k_by_bic: number;
+    optimal_k_by_aic: number;
+    selection_method: string;
+}
+
 interface AnalysisResultsProps {
     isOpen: boolean;
     onClose: () => void;
@@ -97,6 +111,8 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const [featureChanges, setFeatureChanges] = useState<FeatureChange[]>([]);
     const [selectedZScoreFeatures, setSelectedZScoreFeatures] = useState<string[]>(DEFAULT_ZSCORE_FEATURES);
     const [showFeatureSelector, setShowFeatureSelector] = useState(false);
+    // Clustering scores for BIC/AIC visualization
+    const [clusteringInfo, setClusteringInfo] = useState<ClusteringInfo | null>(null);
     // Motility tab states
     const [selectedTracks, setSelectedTracks] = useState<number[]>([]);
     const [showTrackSelector, setShowTrackSelector] = useState(false);
@@ -125,6 +141,7 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const clusterPCARef = useRef<HTMLCanvasElement>(null);
     const clusterDistributionRef = useRef<HTMLCanvasElement>(null);
     const zscoreHeatmapRef = useRef<HTMLCanvasElement>(null);
+    const bicAicChartRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -153,6 +170,17 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
             setFrameRange([minFrame, maxFrameVal]);
             // Select first 10 tracks by default (or all if less than 10)
             setSelectedTracks(uniqueTracks.slice(0, 10));
+
+            // Load clustering info from localStorage if available
+            const savedClusteringInfo = localStorage.getItem('clusteringInfo');
+            if (savedClusteringInfo) {
+                try {
+                    const parsed = JSON.parse(savedClusteringInfo);
+                    setClusteringInfo(parsed);
+                } catch {
+                    console.warn('Failed to parse clustering info from localStorage');
+                }
+            }
         } catch (err) {
             console.error('Error fetching features:', err);
         } finally {
@@ -967,6 +995,19 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                                         <p className="no-data-msg">No data available</p>
                                                     )}
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="charts-section">
+                                        <h3 className="section-title">Model Selection (BIC/AIC)</h3>
+                                        <div className="chart-card full-width">
+                                            <div className="chart-content">
+                                                {clusteringInfo && clusteringInfo.scores && clusteringInfo.scores.length > 0 ? (
+                                                    <BicAicChart ref={bicAicChartRef} clusteringInfo={clusteringInfo} />
+                                                ) : (
+                                                    <p className="no-data-msg">No clustering scores available. Run clustering first.</p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -2118,14 +2159,25 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
     const internalRef = useRef<HTMLCanvasElement>(null);
     const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
 
+    // Count clusters first to determine canvas size
+    const clusteredData = data.filter(d => d.gmm_state !== null || d.hmm_state !== null);
+    const clusterCounts: { [key: number]: number } = {};
+    clusteredData.forEach(d => {
+        const cluster = d.hmm_state ?? d.gmm_state ?? 0;
+        clusterCounts[cluster] = (clusterCounts[cluster] || 0) + 1;
+    });
+    const clusterCount = Object.keys(clusterCounts).length;
+
+    // Dynamic canvas width: minimum 400px, or 80px per cluster (minimum bar width for readability)
+    const minBarSpace = 80;
+    const baseWidth = 400;
+    const dynamicWidth = Math.max(baseWidth, clusterCount * minBarSpace + 75); // 75 for padding
+
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
-        // Count cells per cluster
-        const clusteredData = data.filter(d => d.gmm_state !== null || d.hmm_state !== null);
 
         if (clusteredData.length === 0) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2136,18 +2188,12 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
             return;
         }
 
-        const clusterCounts: { [key: number]: number } = {};
-        clusteredData.forEach(d => {
-            const cluster = d.hmm_state ?? d.gmm_state ?? 0;
-            clusterCounts[cluster] = (clusterCounts[cluster] || 0) + 1;
-        });
-
         const clusters = Object.keys(clusterCounts).map(Number).sort((a, b) => a - b);
         const counts = clusters.map(c => clusterCounts[c]);
         const maxCount = Math.max(...counts);
 
-        // Layout
-        const padding = { top: 35, right: 20, bottom: 55, left: 55 };
+        // Layout with more padding for labels
+        const padding = { top: 40, right: 25, bottom: 65, left: 60 };
         const plotWidth = canvas.width - padding.left - padding.right;
         const plotHeight = canvas.height - padding.top - padding.bottom;
 
@@ -2168,29 +2214,44 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
             ctx.stroke();
         }
 
-        // Colors
+        // Colors - more distinct palette
         const colorPalette = [
             '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
-            '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b'
+            '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+            '#8e44ad', '#27ae60', '#d35400', '#2980b9', '#c0392b'
         ];
 
-        // Draw bars
-        const barWidth = plotWidth / clusters.length;
-        const barPadding = barWidth * 0.2;
+        // Draw bars with better spacing
+        const totalBarSpace = plotWidth;
+        const barWidth = totalBarSpace / clusters.length;
+        const barPadding = Math.min(barWidth * 0.25, 15); // Max 15px padding between bars
+        const actualBarWidth = barWidth - barPadding;
+
         clusters.forEach((cluster, i) => {
             const count = clusterCounts[cluster];
             const barHeight = (count / maxCount) * plotHeight;
             const x = padding.left + i * barWidth + barPadding / 2;
             const y = padding.top + plotHeight - barHeight;
 
-            ctx.fillStyle = colorPalette[i % colorPalette.length];
-            ctx.fillRect(x, y, barWidth - barPadding, barHeight);
+            // Draw bar with gradient effect
+            const gradient = ctx.createLinearGradient(x, y, x, y + barHeight);
+            const baseColor = colorPalette[cluster % colorPalette.length];
+            gradient.addColorStop(0, baseColor);
+            gradient.addColorStop(1, adjustColor(baseColor, -20));
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, actualBarWidth, barHeight);
+
+            // Bar border for definition
+            ctx.strokeStyle = adjustColor(baseColor, -30);
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, actualBarWidth, barHeight);
 
             // Count label on top of bar
             ctx.fillStyle = '#333';
-            ctx.font = 'bold 11px Arial';
+            ctx.font = 'bold 12px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(String(count), x + (barWidth - barPadding) / 2, y - 5);
+            const labelY = y - 8;
+            ctx.fillText(String(count), x + actualBarWidth / 2, labelY < padding.top ? y + 15 : labelY);
         });
 
         // Draw axes
@@ -2209,35 +2270,276 @@ const ClusterDistributionChart = forwardRef<HTMLCanvasElement, { data: CellFeatu
         for (let i = 0; i <= 4; i++) {
             const value = Math.round((maxCount * (4 - i)) / 4);
             const y = padding.top + (plotHeight * i) / 4;
-            ctx.fillText(String(value), padding.left - 8, y + 4);
+            ctx.fillText(String(value), padding.left - 10, y + 4);
         }
 
-        // X axis labels (cluster numbers)
+        // X axis labels (cluster numbers) - positioned better
         ctx.textAlign = 'center';
+        ctx.font = '11px Arial';
         clusters.forEach((cluster, i) => {
             const x = padding.left + i * barWidth + barWidth / 2;
-            ctx.fillText(`State ${cluster}`, x, canvas.height - padding.bottom + 18);
+            ctx.fillText(`State ${cluster}`, x, canvas.height - padding.bottom + 20);
         });
 
         // Axis titles
         ctx.font = 'bold 12px Arial';
         ctx.fillStyle = '#333';
         ctx.textAlign = 'center';
-        ctx.fillText('Cluster State', canvas.width / 2, canvas.height - 8);
+        ctx.fillText('Cluster State', canvas.width / 2, canvas.height - 10);
 
         ctx.save();
-        ctx.translate(14, canvas.height / 2);
+        ctx.translate(16, canvas.height / 2);
         ctx.rotate(-Math.PI / 2);
         ctx.fillText('Cell Count', 0, 0);
         ctx.restore();
 
         // Title
         ctx.font = 'bold 14px Arial';
-        ctx.fillText('Cluster Distribution', canvas.width / 2, 18);
+        ctx.fillText('Cluster Distribution', canvas.width / 2, 22);
 
-    }, [data]);
+    }, [data, clusteredData, clusterCounts]);
 
-    return <canvas ref={canvasRef} width={400} height={280} />;
+    return <canvas ref={canvasRef} width={dynamicWidth} height={300} style={{ maxWidth: '100%' }} />;
+});
+
+// Helper function to adjust color brightness
+function adjustColor(color: string, amount: number): string {
+    const hex = color.replace('#', '');
+    const r = Math.max(0, Math.min(255, parseInt(hex.substring(0, 2), 16) + amount));
+    const g = Math.max(0, Math.min(255, parseInt(hex.substring(2, 4), 16) + amount));
+    const b = Math.max(0, Math.min(255, parseInt(hex.substring(4, 6), 16) + amount));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+// BIC/AIC Chart for model selection visualization
+const BicAicChart = forwardRef<HTMLCanvasElement, { clusteringInfo: ClusteringInfo }>(({ clusteringInfo }, ref) => {
+    const internalRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const { scores, optimal_components, optimal_k_by_bic, optimal_k_by_aic, selection_method } = clusteringInfo;
+
+        if (!scores || scores.length === 0) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#666';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('No BIC/AIC data available.', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+
+        // Extract data
+        const kValues = scores.map(s => s.n_components);
+        const bicValues = scores.map(s => s.bic);
+        const aicValues = scores.map(s => s.aic);
+
+        // Layout
+        const padding = { top: 50, right: 120, bottom: 60, left: 80 };
+        const plotWidth = canvas.width - padding.left - padding.right;
+        const plotHeight = canvas.height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+        // Calculate scales
+        const minK = Math.min(...kValues);
+        const maxK = Math.max(...kValues);
+        const allValues = [...bicValues, ...aicValues];
+        const minY = Math.min(...allValues);
+        const maxY = Math.max(...allValues);
+        const rangeY = maxY - minY || 1;
+        const padY = rangeY * 0.1;
+
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding.top + (plotHeight * i) / 5;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(canvas.width - padding.right, y);
+            ctx.stroke();
+        }
+
+        // Helper to map data to canvas coordinates
+        const xScale = (k: number) => padding.left + ((k - minK) / (maxK - minK || 1)) * plotWidth;
+        const yScale = (v: number) => padding.top + plotHeight - ((v - minY + padY) / (rangeY + 2 * padY)) * plotHeight;
+
+        // Draw BIC line
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        scores.forEach((s, i) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.bic);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Draw BIC points
+        scores.forEach((s) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.bic);
+            ctx.beginPath();
+            ctx.arc(x, y, s.n_components === optimal_k_by_bic ? 8 : 5, 0, Math.PI * 2);
+            ctx.fillStyle = s.n_components === optimal_k_by_bic ? '#c0392b' : '#e74c3c';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        // Draw AIC line
+        ctx.strokeStyle = '#3498db';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        scores.forEach((s, i) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.aic);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Draw AIC points
+        scores.forEach((s) => {
+            const x = xScale(s.n_components);
+            const y = yScale(s.aic);
+            ctx.beginPath();
+            ctx.arc(x, y, s.n_components === optimal_k_by_aic ? 8 : 5, 0, Math.PI * 2);
+            ctx.fillStyle = s.n_components === optimal_k_by_aic ? '#2980b9' : '#3498db';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        // Draw vertical line at optimal k
+        const optimalX = xScale(optimal_components);
+        ctx.strokeStyle = '#2ecc71';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(optimalX, padding.top);
+        ctx.lineTo(optimalX, padding.top + plotHeight);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, canvas.height - padding.bottom);
+        ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
+        ctx.stroke();
+
+        // X axis labels (k values)
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        kValues.forEach(k => {
+            const x = xScale(k);
+            ctx.fillText(String(k), x, canvas.height - padding.bottom + 18);
+        });
+
+        // Y axis labels
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = minY - padY + ((rangeY + 2 * padY) * (5 - i)) / 5;
+            const y = padding.top + (plotHeight * i) / 5;
+            ctx.fillText(value.toFixed(0), padding.left - 10, y + 4);
+        }
+
+        // Axis titles
+        ctx.font = 'bold 12px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText('Number of Clusters (k)', padding.left + plotWidth / 2, canvas.height - 10);
+
+        ctx.save();
+        ctx.translate(18, padding.top + plotHeight / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Information Criterion Score', 0, 0);
+        ctx.restore();
+
+        // Title
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('BIC & AIC vs Number of Clusters', canvas.width / 2 - 30, 20);
+
+        // Subtitle with selection info
+        ctx.font = '11px Arial';
+        ctx.fillStyle = '#666';
+        ctx.fillText(`Selected k=${optimal_components} (${selection_method})`, canvas.width / 2 - 30, 36);
+
+        // Legend
+        const legendX = canvas.width - padding.right + 15;
+        let legendY = padding.top + 10;
+
+        ctx.font = 'bold 11px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'left';
+        ctx.fillText('Legend:', legendX, legendY);
+        legendY += 20;
+
+        // BIC legend
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(legendX + 6, legendY - 3, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.font = '10px Arial';
+        ctx.fillText(`BIC (k*=${optimal_k_by_bic})`, legendX + 16, legendY);
+        legendY += 18;
+
+        // AIC legend
+        ctx.fillStyle = '#3498db';
+        ctx.beginPath();
+        ctx.arc(legendX + 6, legendY - 3, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.fillText(`AIC (k*=${optimal_k_by_aic})`, legendX + 16, legendY);
+        legendY += 18;
+
+        // Selected k legend
+        ctx.strokeStyle = '#2ecc71';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(legendX, legendY - 3);
+        ctx.lineTo(legendX + 12, legendY - 3);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#333';
+        ctx.fillText(`Selected (k=${optimal_components})`, legendX + 16, legendY);
+        legendY += 25;
+
+        // Info box
+        ctx.fillStyle = '#f8f9fa';
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        const infoBoxY = legendY;
+        ctx.fillRect(legendX - 5, infoBoxY, 105, 55);
+        ctx.strokeRect(legendX - 5, infoBoxY, 105, 55);
+
+        ctx.fillStyle = '#666';
+        ctx.font = '9px Arial';
+        ctx.fillText('Lower = Better', legendX, infoBoxY + 14);
+        ctx.fillText('BIC penalizes more', legendX, infoBoxY + 28);
+        ctx.fillText('(conservative)', legendX, infoBoxY + 40);
+
+    }, [clusteringInfo]);
+
+    return <canvas ref={canvasRef} width={700} height={350} />;
 });
 
 export default AnalysisResults;
