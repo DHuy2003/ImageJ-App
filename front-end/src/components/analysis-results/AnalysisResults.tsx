@@ -71,6 +71,22 @@ interface ClusteringInfo {
     selection_method: string;
 }
 
+interface TSNEPoint {
+    id: number;
+    x: number;
+    y: number;
+    gmm_state: number;
+    hmm_state: number;
+}
+
+interface TSNEData {
+    embedding: TSNEPoint[];
+    centroids: { [key: number]: { x: number; y: number } };
+    n_cells: number;
+    perplexity: number;
+    features_used: string[];
+}
+
 interface AnalysisResultsProps {
     isOpen: boolean;
     onClose: () => void;
@@ -113,6 +129,10 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
     const [showFeatureSelector, setShowFeatureSelector] = useState(false);
     // Clustering scores for BIC/AIC visualization
     const [clusteringInfo, setClusteringInfo] = useState<ClusteringInfo | null>(null);
+    // t-SNE data for cluster visualization
+    const [tsneData, setTsneData] = useState<TSNEData | null>(null);
+    const [tsneLoading, setTsneLoading] = useState(false);
+    const [tsneError, setTsneError] = useState<string | null>(null);
     // Motility tab states
     const [selectedTracks, setSelectedTracks] = useState<number[]>([]);
     const [showTrackSelector, setShowTrackSelector] = useState(false);
@@ -181,10 +201,42 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                     console.warn('Failed to parse clustering info from localStorage');
                 }
             }
+
+            // Fetch t-SNE data for cluster visualization
+            fetchTSNEData();
         } catch (err) {
             console.error('Error fetching features:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchTSNEData = async () => {
+        setTsneLoading(true);
+        setTsneError(null);
+        try {
+            const response = await axios.post(`${API_BASE_URL}/clustering/tsne`, {
+                perplexity: 30,
+                n_iter: 1000
+            });
+            if (response.data.embedding && response.data.embedding.length > 0) {
+                setTsneData(response.data);
+                setTsneError(null);
+            } else if (response.data.error) {
+                console.warn('t-SNE error:', response.data.error);
+                setTsneError(response.data.error);
+                setTsneData(null);
+            } else {
+                setTsneError('No t-SNE data returned');
+                setTsneData(null);
+            }
+        } catch (err: any) {
+            const errorMsg = err?.response?.data?.error || 'Failed to compute t-SNE';
+            console.error('Error fetching t-SNE data:', errorMsg);
+            setTsneError(errorMsg);
+            setTsneData(null);
+        } finally {
+            setTsneLoading(false);
         }
     };
 
@@ -972,11 +1024,20 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
                                     </div>
 
                                     <div className="charts-section">
-                                        <h3 className="section-title">Cluster Space (PCA)</h3>
+                                        <h3 className="section-title">Cluster Space (t-SNE)</h3>
                                         <div className="chart-card full-width">
                                             <div className="chart-content pca-chart">
-                                                {features.length > 0 ? (
-                                                    <ClusterScatterPlot ref={clusterPCARef} data={features} />
+                                                {tsneLoading ? (
+                                                    <div className="loading-tsne">
+                                                        <div className="spinner"></div>
+                                                        <p>Computing t-SNE embedding...</p>
+                                                    </div>
+                                                ) : tsneData ? (
+                                                    <ClusterScatterPlot ref={clusterPCARef} tsneData={tsneData} />
+                                                ) : tsneError ? (
+                                                    <p className="no-data-msg">{tsneError}</p>
+                                                ) : features.length > 0 ? (
+                                                    <p className="no-data-msg">No clustering data available. Run clustering first.</p>
                                                 ) : (
                                                     <p className="no-data-msg">No data available</p>
                                                 )}
@@ -1976,8 +2037,8 @@ const computePCA = (data: number[][]): { pc1: number[], pc2: number[], variance:
     return { pc1, pc2, variance: [var1, var2] };
 };
 
-// Cluster Space Scatter Plot using PCA (2D visualization)
-const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }>(({ data }, ref) => {
+// Cluster Space Scatter Plot using t-SNE (2D visualization)
+const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { tsneData: TSNEData }>(({ tsneData }, ref) => {
     const internalRef = useRef<HTMLCanvasElement>(null);
     const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
 
@@ -1987,35 +2048,23 @@ const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Filter cells with cluster assignments and required features
-        const featureKeys = ['area', 'mean_intensity', 'eccentricity', 'solidity', 'circularity', 'aspect_ratio'];
+        const { embedding, centroids, n_cells, perplexity, features_used } = tsneData;
 
-        const clusteredData = data.filter(d => {
-            if (d.gmm_state === null && d.hmm_state === null) return false;
-            return featureKeys.every(key => (d as any)[key] !== null && (d as any)[key] !== undefined);
-        });
-
-        if (clusteredData.length < 3) {
+        if (embedding.length < 3) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#666';
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('Insufficient data for PCA.', canvas.width / 2, canvas.height / 2 - 10);
-            ctx.fillText('Need at least 3 clustered cells with features.', canvas.width / 2, canvas.height / 2 + 15);
+            ctx.fillText('Insufficient data for t-SNE.', canvas.width / 2, canvas.height / 2 - 10);
+            ctx.fillText('Need at least 3 clustered cells.', canvas.width / 2, canvas.height / 2 + 15);
             return;
         }
 
-        // Extract feature matrix
-        const featureMatrix = clusteredData.map(d =>
-            featureKeys.map(key => (d as any)[key] as number)
-        );
-
-        // Compute PCA
-        const { pc1, pc2, variance } = computePCA(featureMatrix);
-        const clusters = clusteredData.map(d => d.hmm_state ?? d.gmm_state ?? 0);
-
-        const minX = Math.min(...pc1), maxX = Math.max(...pc1);
-        const minY = Math.min(...pc2), maxY = Math.max(...pc2);
+        // Get x, y ranges
+        const xValues = embedding.map(p => p.x);
+        const yValues = embedding.map(p => p.y);
+        const minX = Math.min(...xValues), maxX = Math.max(...xValues);
+        const minY = Math.min(...yValues), maxY = Math.max(...yValues);
         const rangeX = maxX - minX || 1;
         const rangeY = maxY - minY || 1;
 
@@ -2051,6 +2100,7 @@ const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }
         }
 
         // Get unique clusters and colors
+        const clusters = embedding.map(p => p.hmm_state ?? p.gmm_state);
         const uniqueClusters = [...new Set(clusters)].sort((a, b) => a - b);
         const clusterColors: { [key: number]: string } = {};
         const colorPalette = [
@@ -2062,10 +2112,10 @@ const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }
         });
 
         // Draw points
-        clusteredData.forEach((_, i) => {
-            const x = padding.left + ((pc1[i] - minX + padX) / (rangeX + 2 * padX)) * plotWidth;
-            const y = padding.top + plotHeight - ((pc2[i] - minY + padY) / (rangeY + 2 * padY)) * plotHeight;
-            const cluster = clusters[i];
+        embedding.forEach((point) => {
+            const x = padding.left + ((point.x - minX + padX) / (rangeX + 2 * padX)) * plotWidth;
+            const y = padding.top + plotHeight - ((point.y - minY + padY) / (rangeY + 2 * padY)) * plotHeight;
+            const cluster = point.hmm_state ?? point.gmm_state;
 
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
@@ -2073,6 +2123,32 @@ const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }
             ctx.fill();
             ctx.strokeStyle = clusterColors[cluster];
             ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+
+        // Draw centroids (larger markers with X)
+        Object.entries(centroids).forEach(([clusterStr, centroid]) => {
+            const cluster = parseInt(clusterStr);
+            const cx = padding.left + ((centroid.x - minX + padX) / (rangeX + 2 * padX)) * plotWidth;
+            const cy = padding.top + plotHeight - ((centroid.y - minY + padY) / (rangeY + 2 * padY)) * plotHeight;
+
+            // Draw larger circle for centroid
+            ctx.beginPath();
+            ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+            ctx.fillStyle = clusterColors[cluster] || '#333';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw X mark
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx - 4, cy - 4);
+            ctx.lineTo(cx + 4, cy + 4);
+            ctx.moveTo(cx + 4, cy - 4);
+            ctx.lineTo(cx - 4, cy + 4);
             ctx.stroke();
         });
 
@@ -2085,44 +2161,29 @@ const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }
         ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
         ctx.stroke();
 
-        // Y axis labels
-        ctx.fillStyle = '#333';
-        ctx.font = '10px Arial';
-        ctx.textAlign = 'right';
-        for (let i = 0; i <= 5; i++) {
-            const value = (minY - padY) + ((rangeY + 2 * padY) * (5 - i)) / 5;
-            const y = padding.top + (plotHeight * i) / 5;
-            ctx.fillText(value.toFixed(1), padding.left - 8, y + 3);
-        }
-
-        // X axis labels
-        ctx.textAlign = 'center';
-        for (let i = 0; i <= 5; i++) {
-            const value = (minX - padX) + ((rangeX + 2 * padX) * i) / 5;
-            const x = padding.left + (plotWidth * i) / 5;
-            ctx.fillText(value.toFixed(1), x, canvas.height - padding.bottom + 15);
-        }
-
-        // Axis titles with variance explained
+        // Axis titles
         ctx.font = 'bold 11px Arial';
         ctx.fillStyle = '#333';
         ctx.textAlign = 'center';
-        ctx.fillText(`PC1 (${variance[0].toFixed(1)}% var)`, padding.left + plotWidth / 2, canvas.height - 8);
+        ctx.fillText('t-SNE 1', padding.left + plotWidth / 2, canvas.height - 8);
 
         ctx.save();
         ctx.translate(14, padding.top + plotHeight / 2);
         ctx.rotate(-Math.PI / 2);
-        ctx.fillText(`PC2 (${variance[1].toFixed(1)}% var)`, 0, 0);
+        ctx.fillText('t-SNE 2', 0, 0);
         ctx.restore();
 
         // Title
         ctx.font = 'bold 14px Arial';
-        ctx.fillText('Cluster Space (PCA)', canvas.width / 2 - 20, 18);
+        ctx.fillText('Cluster Space (t-SNE)', canvas.width / 2 - 20, 18);
 
-        // Subtitle with features used
+        // Subtitle with features used and perplexity
         ctx.font = '10px Arial';
         ctx.fillStyle = '#666';
-        ctx.fillText(`Features: ${featureKeys.length} morphology + intensity`, canvas.width / 2 - 20, 32);
+        const featuresText = features_used.length > 4
+            ? `${features_used.slice(0, 4).join(', ')}... (${features_used.length} features)`
+            : features_used.join(', ');
+        ctx.fillText(`Perplexity: ${perplexity} | ${featuresText}`, canvas.width / 2 - 20, 32);
 
         // Legend
         const legendX = canvas.width - padding.right + 10;
@@ -2144,12 +2205,30 @@ const ClusterScatterPlot = forwardRef<HTMLCanvasElement, { data: CellFeature[] }
             legendY += 14;
         });
 
+        // Centroid indicator
+        legendY += 8;
+        ctx.fillStyle = '#666';
+        ctx.beginPath();
+        ctx.arc(legendX + 6, legendY - 3, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(legendX + 3, legendY - 6);
+        ctx.lineTo(legendX + 9, legendY);
+        ctx.moveTo(legendX + 9, legendY - 6);
+        ctx.lineTo(legendX + 3, legendY);
+        ctx.stroke();
+        ctx.fillStyle = '#333';
+        ctx.fillText('Centroid', legendX + 16, legendY);
+
         // Total cells info
+        legendY += 18;
         ctx.fillStyle = '#888';
         ctx.font = '9px Arial';
-        ctx.fillText(`n=${clusteredData.length}`, legendX, legendY + 5);
+        ctx.fillText(`n=${n_cells}`, legendX, legendY);
 
-    }, [data]);
+    }, [tsneData]);
 
     return <canvas ref={canvasRef} width={700} height={400} />;
 });

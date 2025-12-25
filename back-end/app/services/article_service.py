@@ -21,6 +21,7 @@ BASE_KEYWORDS = [
 PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 SEMANTIC_SCHOLAR_API = "https://api.semanticscholar.org/graph/v1"
 CROSSREF_API = "https://api.crossref.org/works"
+BIORXIV_API = "https://api.biorxiv.org/details/biorxiv"
 
 
 @dataclass
@@ -390,22 +391,113 @@ async def search_crossref(session: aiohttp.ClientSession, keyword: str, max_resu
         return []
 
 
+def parse_biorxiv_article(item: Dict) -> Optional[Article]:
+    """Parse bioRxiv article"""
+    doi = item.get('doi', '')
+    title = item.get('title', 'Unknown Title')
+
+    # Filter out non-articles
+    if not is_valid_article(title, 'Preprint'):
+        return None
+
+    # Parse date to year
+    date_str = item.get('date', '')
+    year = datetime.now().year
+    if date_str:
+        year_match = re.search(r'\d{4}', date_str)
+        if year_match:
+            year = int(year_match.group())
+
+    # bioRxiv doesn't provide citation count directly
+    citations = 0
+
+    # Parse authors
+    authors_str = item.get('authors', '')
+    authors = [a.strip() for a in authors_str.split(';') if a.strip()] if authors_str else []
+
+    return Article(
+        id=f"biorxiv_{doi}",
+        title=title,
+        authors=authors,
+        abstract=item.get('abstract', '') or '',
+        journal='bioRxiv (Preprint)',
+        year=year,
+        citations=citations,
+        doi=doi,
+        url=f"https://www.biorxiv.org/content/{doi}",
+        article_type='Preprint',
+        keywords=item.get('category', '').split(';') if item.get('category') else [],
+        source='biorxiv',
+        q_rank='N/A'  # Preprints don't have Q ranking
+    )
+
+
+async def search_biorxiv(session: aiohttp.ClientSession, keyword: str, max_results: int = 20) -> List[Article]:
+    """
+    Tìm kiếm bioRxiv
+    bioRxiv API format: /details/biorxiv/{interval}/{cursor}
+    Sử dụng content API để search
+    """
+    try:
+        # bioRxiv content API for search
+        # Format: https://api.biorxiv.org/details/biorxiv/2020-01-01/2024-12-31
+        from datetime import timedelta
+
+        # Search recent papers (last 2 years)
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        start_date = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
+
+        url = f"{BIORXIV_API}/{start_date}/{end_date}"
+
+        async with session.get(url, params={'cursor': 0}) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json()
+
+        items = data.get('collection', []) or []
+        articles = []
+
+        # Filter by keyword in title or abstract
+        keyword_lower = keyword.lower()
+        for item in items:
+            title = item.get('title', '').lower()
+            abstract = item.get('abstract', '').lower()
+
+            if keyword_lower in title or keyword_lower in abstract:
+                try:
+                    article = parse_biorxiv_article(item)
+                    if article:
+                        articles.append(article)
+                        if len(articles) >= max_results:
+                            break
+                except Exception as e:
+                    print(f"Error parsing bioRxiv article: {e}")
+
+        return articles
+
+    except Exception as e:
+        print(f"bioRxiv search error: {e}")
+        return []
+
+
 async def search_all_sources_async(keyword: str, max_per_source: int = 20) -> Dict[str, Any]:
     """
     Tìm kiếm từ tất cả nguồn, hợp nhất và loại bỏ trùng lặp
     """
     async with aiohttp.ClientSession() as session:
-        # Gọi 3 API song song
+        # Gọi 4 API song song (bao gồm bioRxiv)
         results = await asyncio.gather(
             search_pubmed(session, keyword, max_per_source),
             search_semantic_scholar(session, keyword, max_per_source),
             search_crossref(session, keyword, max_per_source),
+            search_biorxiv(session, keyword, max_per_source),
             return_exceptions=True
         )
 
     pubmed_articles = results[0] if isinstance(results[0], list) else []
     ss_articles = results[1] if isinstance(results[1], list) else []
     crossref_articles = results[2] if isinstance(results[2], list) else []
+    biorxiv_articles = results[3] if isinstance(results[3], list) else []
 
     # Hợp nhất và loại bỏ trùng lặp theo DOI hoặc title
     seen = set()
@@ -422,6 +514,8 @@ async def search_all_sources_async(keyword: str, max_per_source: int = 20) -> Di
     for article in ss_articles:
         add_if_unique(article)
     for article in crossref_articles:
+        add_if_unique(article)
+    for article in biorxiv_articles:
         add_if_unique(article)
 
     return {

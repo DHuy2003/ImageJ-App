@@ -13,6 +13,9 @@ from app.services.image_services import (
     delete_image,
     get_current_session_id,
     delete_session_data,
+    export_masks_to_zip,
+    export_images_to_zip,
+    export_all_to_zip,
 )
 from app.services.segmentation_services import (
     run_cellpose_segmentation,
@@ -38,7 +41,9 @@ from app.services.clustering_services import (
     run_gmm_clustering,
     run_hmm_smoothing,
     run_full_clustering,
-    get_clustering_results
+    get_clustering_results,
+    compute_tsne_embedding,
+    compute_pca_embedding
 )
 from app import config
 
@@ -594,6 +599,72 @@ def export_for_gnn():
         return jsonify({"error": str(e)}), 500
 
 
+@image_bp.route('/export/masks', methods=['GET'])
+@cross_origin()
+def export_masks():
+    """Export all mask images to ZIP file (keeps original format)"""
+    try:
+        session_id = get_current_session_id()
+        zip_buffer = export_masks_to_zip(session_id=session_id)
+
+        return Response(
+            zip_buffer.read(),
+            mimetype='application/zip',
+            headers={
+                'Content-Disposition': 'attachment; filename="masks.zip"'
+            }
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        print(f"Error exporting masks: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@image_bp.route('/export/images', methods=['GET'])
+@cross_origin()
+def export_images_zip():
+    """Export all images to ZIP file (keeps original format)"""
+    try:
+        session_id = get_current_session_id()
+        zip_buffer = export_images_to_zip(session_id=session_id)
+
+        return Response(
+            zip_buffer.read(),
+            mimetype='application/zip',
+            headers={
+                'Content-Disposition': 'attachment; filename="images.zip"'
+            }
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        print(f"Error exporting images: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@image_bp.route('/export/all', methods=['GET'])
+@cross_origin()
+def export_all():
+    """Export all images, masks, and labels to ZIP file (keeps original format)"""
+    try:
+        session_id = get_current_session_id()
+        zip_buffer = export_all_to_zip(session_id=session_id)
+
+        return Response(
+            zip_buffer.read(),
+            mimetype='application/zip',
+            headers={
+                'Content-Disposition': 'attachment; filename="export_all.zip"'
+            }
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        print(f"Error exporting all: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ============ Cell Clustering Routes ============
 
 @image_bp.route('/clustering/features', methods=['GET'])
@@ -716,4 +787,48 @@ def get_cluster_results():
         return jsonify(result), 200
     except Exception as e:
         print(f"Error getting clustering results: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@image_bp.route('/clustering/tsne', methods=['POST'])
+@cross_origin()
+def get_tsne_embedding():
+    """Compute t-SNE embedding for cluster visualization"""
+    try:
+        data = request.get_json() or {}
+        selected_features = data.get('features')
+        perplexity = data.get('perplexity', 30)
+        n_iter = data.get('n_iter', 1000)
+
+        result = compute_tsne_embedding(
+            selected_features=selected_features,
+            perplexity=perplexity,
+            n_iter=n_iter
+        )
+
+        if "error" in result:
+            return jsonify(result), 400
+
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"Error computing t-SNE: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@image_bp.route('/clustering/pca', methods=['POST'])
+@cross_origin()
+def get_pca_embedding():
+    """Compute PCA embedding for cluster visualization"""
+    try:
+        data = request.get_json() or {}
+        selected_features = data.get('features')
+
+        result = compute_pca_embedding(selected_features=selected_features)
+
+        if "error" in result:
+            return jsonify(result), 400
+
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"Error computing PCA: {e}")
         return jsonify({"error": str(e)}), 500

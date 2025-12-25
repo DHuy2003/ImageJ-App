@@ -1379,3 +1379,35 @@
         width: 95%;
     }
 }
+
+/* t-SNE Loading State */
+.loading-tsne {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+    color: #666;
+    gap: 16px;
+}
+
+.loading-tsne .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #e0e0e0;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.loading-tsne p {
+    font-size: 14px;
+    color: #888;
+    margin: 0;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

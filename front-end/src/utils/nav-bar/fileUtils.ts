@@ -241,3 +241,114 @@ export const handleQuit = async (navigate: NavigateFunction) => {
 export const handleExportAll = () => {
   dispatchFileMenuAction('EXPORT_ALL');
 };
+
+export const handleExportMasks = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/export/masks`, {
+      headers: {
+        "X-Session-Id": getSessionId(),
+      },
+      responseType: 'blob'
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'masks.zip');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    Swal.fire({
+      title: 'Success',
+      text: 'Masks exported successfully!',
+      icon: 'success',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+  } catch (error: any) {
+    console.error("Error exporting masks:", error);
+    Swal.fire({
+      title: 'Error',
+      text: error.response?.data?.error || 'Failed to export masks. Make sure you have masks to export.',
+      icon: 'error',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+  }
+};
+
+export const handleExportImages = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/export/images`, {
+      headers: {
+        "X-Session-Id": getSessionId(),
+      },
+      responseType: 'blob'
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'images.zip');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    Swal.fire({
+      title: 'Success',
+      text: 'Images exported successfully!',
+      icon: 'success',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+  } catch (error: any) {
+    console.error("Error exporting images:", error);
+    Swal.fire({
+      title: 'Error',
+      text: error.response?.data?.error || 'Failed to export images. Make sure you have images to export.',
+      icon: 'error',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+  }
+};
+
+export const handleExportAllZip = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/export/all`, {
+      headers: {
+        "X-Session-Id": getSessionId(),
+      },
+      responseType: 'blob'
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'export_all.zip');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    Swal.fire({
+      title: 'Success',
+      text: 'All files exported successfully!',
+      icon: 'success',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+  } catch (error: any) {
+    console.error("Error exporting all:", error);
+    Swal.fire({
+      title: 'Error',
+      text: error.response?.data?.error || 'Failed to export files.',
+      icon: 'error',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#3085d6',
+    });
+  }
+};

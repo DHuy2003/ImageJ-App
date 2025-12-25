@@ -14,6 +14,9 @@ import {
     handleSave,
     handleSaveAll,
     handleExportAll,
+    handleExportMasks,
+    handleExportImages,
+    handleExportAllZip,
     handleQuit
 } from "../../utils/nav-bar/fileUtils";
 import {
@@ -102,7 +105,14 @@ const NavBar = () => {
                         { label: "Close All", onClick: handleCloseAll },
                         { label: "Save", onClick: handleSave },
                         { label: "Save All", onClick: handleSaveAll },
-                        { label: "Export...", onClick: handleExportAll },
+                        {
+                            label: "Export", subItems: [
+                                { label: "Export Current...", onClick: handleExportAll },
+                                { label: "Export Images", onClick: handleExportImages },
+                                { label: "Export Masks", onClick: handleExportMasks },
+                                { label: "Export All", onClick: handleExportAllZip },
+                            ]
+                        },
                         { label: "Quit", onClick: () => handleQuit(navigate) }
                     ]}
                 />
