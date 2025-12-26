@@ -97,14 +97,6 @@ const SaltPepperNoiseDialog: React.FC<SaltPepperNoiseDialogProps> = ({
     onDensityChange(clamped);
   };
 
-  // const handleHelpClick = () => {
-  //   window.open(
-  //     'https://imagej.net/ij/docs/menus/process.html#noise',
-  //     '_blank',
-  //     'noopener'
-  //   );
-  // };
-
   return (
     <div className="noise-dialog-backdrop">
       <div
