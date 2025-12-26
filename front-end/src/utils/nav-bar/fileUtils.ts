@@ -101,7 +101,6 @@ export const handleOpenFolder = async (navigate: NavigateFunction) => {
     const dirHandle = await (window as any).showDirectoryPicker();
     const files: File[] = [];
 
-    // Accept all common image formats by extension (fallback for browsers not recognizing MIME types)
     const imageExtensions = /\.(tif|tiff|png|jpg|jpeg|gif|bmp|webp|ico|svg)$/i;
 
     for await (const entry of dirHandle.values()) {
@@ -147,7 +146,6 @@ export const handleOpenMaskFolder = async (navigate: NavigateFunction) => {
     const dirHandle = await (window as any).showDirectoryPicker();
     const files: File[] = [];
 
-    // Accept all common image formats by extension (fallback for browsers not recognizing MIME types)
     const imageExtensions = /\.(tif|tiff|png|jpg|jpeg|gif|bmp|webp|ico|svg)$/i;
 
     for await (const entry of dirHandle.values()) {

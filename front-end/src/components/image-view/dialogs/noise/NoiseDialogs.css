@@ -173,18 +173,6 @@
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
-.noise-btn-help {
-    margin-right: auto;
-    background: transparent;
-    border: 1px solid #ddd;
-    color: #666;
-}
-
-.noise-btn-help:hover {
-    background: #f5f5f5;
-    color: #333;
-}
-
 .noise-checkbox {
     width: 18px;
     height: 18px;

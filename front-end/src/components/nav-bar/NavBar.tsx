@@ -95,7 +95,7 @@ const NavBar = () => {
                 <DropdownMenu
                     label="File"
                     items={[
-                        { label: "New file", onClick: () => handleNewFile(navigate) },
+                        { label: "New File", onClick: () => handleNewFile(navigate) },
                         { label: "Open Folder", onClick: () => handleOpenFolder(navigate) },
                         { label: "Open Mask Folder", onClick: () => handleOpenMaskFolder(navigate) },
                         { label: "Virtual Sequence...", onClick: handleVirtualSequence },
@@ -107,10 +107,10 @@ const NavBar = () => {
                         { label: "Save All", onClick: handleSaveAll },
                         {
                             label: "Export", subItems: [
-                                { label: "Export Current...", onClick: handleExportAll },
-                                { label: "Export Images", onClick: handleExportImages },
-                                { label: "Export Masks", onClick: handleExportMasks },
-                                { label: "Export All", onClick: handleExportAllZip },
+                                { label: "Export Images to Folder...", onClick: handleExportAll },        
+                                { label: "Export Images (ZIP)", onClick: handleExportImages },        
+                                { label: "Export Masks (ZIP)", onClick: handleExportMasks },         
+                                { label: "Export All (ZIP)", onClick: handleExportAllZip },           
                             ]
                         },
                         { label: "Quit", onClick: () => handleQuit(navigate) }
