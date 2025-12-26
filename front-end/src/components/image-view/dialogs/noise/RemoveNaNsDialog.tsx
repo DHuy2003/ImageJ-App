@@ -89,14 +89,6 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
     if (!isNaN(n)) onRadiusChange(n);
   };
 
-  const handleHelp = () => {
-    window.open(
-      "https://imagej.net/ij/docs/menus/process.html#nans",
-      "_blank",
-      "noopener"
-    );
-  };
-
   return (
     <div className="noise-dialog-backdrop">
       <div
@@ -155,14 +147,6 @@ const RemoveNaNsDialog: React.FC<RemoveNaNsDialogProps> = ({
         </div>
 
         <div className="noise-dialog-footer">
-          <button
-            type="button"
-            className="noise-btn noise-btn-help"
-            onClick={handleHelp}
-          >
-            Help
-          </button>
-
           <button
             type="button"
             className="noise-btn noise-btn-secondary"

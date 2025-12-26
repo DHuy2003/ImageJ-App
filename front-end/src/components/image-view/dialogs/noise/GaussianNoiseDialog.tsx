@@ -96,14 +96,6 @@ const GaussianNoiseDialog: React.FC<GaussianNoiseDialogProps> = ({
     onStdDevChange(clamped);
   };
 
-  const handleHelpClick = () => {
-    window.open(
-      'https://imagej.net/ij/docs/menus/process.html#noise',
-      '_blank',
-      'noopener'
-    );
-  };
-
   return (
     <div className="noise-dialog-backdrop">
       <div
@@ -162,13 +154,6 @@ const GaussianNoiseDialog: React.FC<GaussianNoiseDialogProps> = ({
         </div>
 
         <div className="noise-dialog-footer">
-          <button
-            type="button"
-            className="noise-btn noise-btn-help"
-            onClick={handleHelpClick}
-          >
-            Help
-          </button>
           <button
             type="button"
             className="noise-btn noise-btn-secondary"
