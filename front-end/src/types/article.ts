@@ -12,9 +12,9 @@ export interface Article {
     citations: number;
     doi?: string;
     url?: string;
-    type: 'Research Article' | 'Review' | 'Technical Report' | 'Conference Paper';
+    type: 'Research Article' | 'Review' | 'Technical Report' | 'Conference Paper' | 'Preprint';
     keywords: string[];
-    source: 'pubmed' | 'semantic_scholar' | 'crossref';
+    source: 'pubmed' | 'semantic_scholar' | 'crossref' | 'biorxiv';
     q_rank: QRank;
 }
 

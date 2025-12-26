@@ -649,3 +649,159 @@ def cleanup_database(app):
             print(f"Failed to clear imageJ table. Reason: {e}")
     print("DB cleanup complete.")
 
+
+def export_masks_to_zip(session_id=None):
+    """
+    Export all mask images to a ZIP file, keeping original format
+
+    Args:
+        session_id: Optional session ID to filter images
+
+    Returns:
+        BytesIO buffer containing the ZIP file
+    """
+    import zipfile
+
+    if session_id:
+        images = ImageModel.query.filter(
+            ImageModel.session_id == session_id,
+            ImageModel.mask_filepath.isnot(None)
+        ).order_by(ImageModel.id).all()
+    else:
+        images = ImageModel.query.filter(
+            ImageModel.mask_filepath.isnot(None)
+        ).order_by(ImageModel.id).all()
+
+    if not images:
+        raise ValueError("No masks found to export")
+
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for img in images:
+            if img.mask_filepath and os.path.exists(img.mask_filepath):
+                # Keep original filename and format
+                mask_filename = os.path.basename(img.mask_filepath)
+                with open(img.mask_filepath, 'rb') as f:
+                    zip_file.writestr(f"masks/{mask_filename}", f.read())
+
+                # Also export labels mask if exists
+                mask_dir = os.path.dirname(img.mask_filepath)
+                base_name = os.path.splitext(os.path.basename(img.mask_filepath))[0]
+
+                # Try to find labels file with any extension
+                for ext in ['.png', '.tif', '.tiff']:
+                    labels_path = os.path.join(mask_dir, f"{base_name}_labels{ext}")
+                    if os.path.exists(labels_path):
+                        labels_filename = os.path.basename(labels_path)
+                        with open(labels_path, 'rb') as f:
+                            zip_file.writestr(f"masks_labels/{labels_filename}", f.read())
+                        break
+
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+def export_images_to_zip(session_id=None, include_original=True, include_edited=True):
+    """
+    Export all images to a ZIP file, keeping original format
+
+    Args:
+        session_id: Optional session ID to filter images
+        include_original: Include original images
+        include_edited: Include edited images
+
+    Returns:
+        BytesIO buffer containing the ZIP file
+    """
+    import zipfile
+
+    if session_id:
+        images = ImageModel.query.filter(
+            ImageModel.session_id == session_id
+        ).order_by(ImageModel.id).all()
+    else:
+        images = ImageModel.query.all()
+
+    if not images:
+        raise ValueError("No images found to export")
+
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for img in images:
+            # Export original image - keep original format
+            if include_original and img.filepath and os.path.exists(img.filepath):
+                original_filename = os.path.basename(img.filepath)
+                with open(img.filepath, 'rb') as f:
+                    zip_file.writestr(f"original/{original_filename}", f.read())
+
+            # Export edited image - keep original format
+            if include_edited and img.edited_filepath and os.path.exists(img.edited_filepath):
+                edited_filename = os.path.basename(img.edited_filepath)
+                with open(img.edited_filepath, 'rb') as f:
+                    zip_file.writestr(f"edited/{edited_filename}", f.read())
+
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+def export_all_to_zip(session_id=None):
+    """
+    Export all images, masks, and labels to a single ZIP file, keeping original formats
+
+    Args:
+        session_id: Optional session ID to filter images
+
+    Returns:
+        BytesIO buffer containing the ZIP file
+    """
+    import zipfile
+
+    if session_id:
+        images = ImageModel.query.filter(
+            ImageModel.session_id == session_id
+        ).order_by(ImageModel.id).all()
+    else:
+        images = ImageModel.query.all()
+
+    if not images:
+        raise ValueError("No images found to export")
+
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for img in images:
+            # Original image - keep original format
+            if img.filepath and os.path.exists(img.filepath):
+                original_filename = os.path.basename(img.filepath)
+                with open(img.filepath, 'rb') as f:
+                    zip_file.writestr(f"original/{original_filename}", f.read())
+
+            # Edited image - keep original format
+            if img.edited_filepath and os.path.exists(img.edited_filepath):
+                edited_filename = os.path.basename(img.edited_filepath)
+                with open(img.edited_filepath, 'rb') as f:
+                    zip_file.writestr(f"edited/{edited_filename}", f.read())
+
+            # Mask image - keep original format
+            if img.mask_filepath and os.path.exists(img.mask_filepath):
+                mask_filename = os.path.basename(img.mask_filepath)
+                with open(img.mask_filepath, 'rb') as f:
+                    zip_file.writestr(f"masks/{mask_filename}", f.read())
+
+                # Labels mask
+                mask_dir = os.path.dirname(img.mask_filepath)
+                base_name = os.path.splitext(os.path.basename(img.mask_filepath))[0]
+
+                for ext in ['.png', '.tif', '.tiff']:
+                    labels_path = os.path.join(mask_dir, f"{base_name}_labels{ext}")
+                    if os.path.exists(labels_path):
+                        labels_filename = os.path.basename(labels_path)
+                        with open(labels_path, 'rb') as f:
+                            zip_file.writestr(f"masks_labels/{labels_filename}", f.read())
+                        break
+
+    zip_buffer.seek(0)
+    return zip_buffer
+

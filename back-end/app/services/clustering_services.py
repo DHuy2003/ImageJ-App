@@ -4,6 +4,8 @@ Clustering Services - GMM + HMM clustering for cell state classification
 import numpy as np
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 from hmmlearn import hmm
 from app import db
 from app.models import CellFeature
@@ -146,14 +148,10 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
         best_n = best_n_bic
         selection_method = "consensus"
     else:
-        # Use the average rounded, or prefer the more conservative (higher penalty)
-        # BIC penalizes complexity more, so it tends to choose fewer clusters
-        # We take the value that both criteria support most
-        avg_n = (best_n_bic + best_n_aic) / 2
-        best_n = round(avg_n)
-        # Ensure best_n is within valid range
-        best_n = max(min_components, min(best_n, max_components))
-        selection_method = f"combined (BIC={best_n_bic}, AIC={best_n_aic}, avg={avg_n:.1f})"
+        # BIC and AIC disagree - prefer BIC
+        # BIC penalizes complexity more and is generally more reliable for model selection
+        best_n = best_n_bic
+        selection_method = f"BIC preferred (BIC={best_n_bic}, AIC={best_n_aic})"
 
     # Fit final model with optimal components
     final_gmm = GaussianMixture(n_components=best_n, covariance_type='full', random_state=42, n_init=3)
@@ -386,4 +384,211 @@ def get_clustering_results():
         "total_gmm_clustered": sum(c for _, c in gmm_states),
         "total_hmm_smoothed": sum(c for _, c in hmm_states),
         "frames": frames_data
+    }
+
+
+def compute_tsne_embedding(selected_features=None, perplexity=30, n_iter=1000):
+    """
+    Compute t-SNE embedding for visualization
+
+    Args:
+        selected_features: Features to use for t-SNE
+        perplexity: t-SNE perplexity parameter (default 30)
+        n_iter: Number of iterations (default 1000)
+
+    Returns:
+        dict with t-SNE coordinates and cluster labels
+    """
+    # Basic features that are most likely to exist
+    BASIC_FEATURES = [
+        'area', 'eccentricity', 'solidity', 'circularity', 'aspect_ratio',
+        'mean_intensity', 'major_axis_length', 'minor_axis_length'
+    ]
+
+    if selected_features is None:
+        selected_features = BASIC_FEATURES
+
+    # Get clustered cells with features
+    features = CellFeature.query.filter(
+        CellFeature.gmm_state.isnot(None)
+    ).all()
+
+    if len(features) < 5:
+        return {"error": "Need at least 5 clustered cells for t-SNE"}
+
+    # First pass: find which features are actually available
+    available_features = []
+    for feat_name in selected_features:
+        has_values = False
+        for f in features[:10]:  # Check first 10 samples
+            val = getattr(f, feat_name, None)
+            if val is not None:
+                has_values = True
+                break
+        if has_values:
+            available_features.append(feat_name)
+
+    if len(available_features) < 2:
+        return {"error": f"Need at least 2 features with data. Available: {available_features}"}
+
+    # Extract feature matrix using only available features
+    feature_data = []
+    cell_ids = []
+    gmm_states = []
+    hmm_states = []
+
+    for f in features:
+        row = []
+        valid = True
+        for feat_name in available_features:
+            val = getattr(f, feat_name, None)
+            if val is None:
+                valid = False
+                break
+            row.append(float(val))
+
+        if valid:
+            feature_data.append(row)
+            cell_ids.append(f.id)
+            gmm_states.append(f.gmm_state)
+            hmm_states.append(f.hmm_state if f.hmm_state is not None else f.gmm_state)
+
+    if len(feature_data) < 5:
+        return {"error": f"Need at least 5 cells with complete features. Got {len(feature_data)} with features: {available_features}"}
+
+    X = np.array(feature_data)
+
+    # Standardize features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Adjust perplexity if needed (must be less than n_samples)
+    actual_perplexity = min(perplexity, len(X_scaled) - 1)
+    actual_perplexity = max(5, actual_perplexity)  # Minimum perplexity of 5
+
+    # Run t-SNE (use max_iter for newer sklearn versions)
+    tsne = TSNE(
+        n_components=2,
+        perplexity=actual_perplexity,
+        max_iter=n_iter,
+        random_state=42,
+        init='pca',
+        learning_rate='auto'
+    )
+
+    embedding = tsne.fit_transform(X_scaled)
+
+    # Calculate cluster centroids
+    unique_states = list(set(hmm_states))
+    centroids = {}
+    for state in unique_states:
+        indices = [i for i, s in enumerate(hmm_states) if s == state]
+        if indices:
+            centroid_x = np.mean([embedding[i, 0] for i in indices])
+            centroid_y = np.mean([embedding[i, 1] for i in indices])
+            centroids[state] = {'x': float(centroid_x), 'y': float(centroid_y)}
+
+    return {
+        "embedding": [
+            {
+                "id": cell_ids[i],
+                "x": float(embedding[i, 0]),
+                "y": float(embedding[i, 1]),
+                "gmm_state": gmm_states[i],
+                "hmm_state": hmm_states[i]
+            }
+            for i in range(len(cell_ids))
+        ],
+        "centroids": centroids,
+        "n_cells": len(cell_ids),
+        "perplexity": actual_perplexity,
+        "features_used": available_features
+    }
+
+
+def compute_pca_embedding(selected_features=None, n_components=2):
+    """
+    Compute PCA embedding for visualization (faster alternative to t-SNE)
+
+    Args:
+        selected_features: Features to use for PCA
+        n_components: Number of PCA components (default 2)
+
+    Returns:
+        dict with PCA coordinates and cluster labels
+    """
+    if selected_features is None:
+        selected_features = DEFAULT_FEATURES
+
+    # Get clustered cells with features
+    features = CellFeature.query.filter(
+        CellFeature.gmm_state.isnot(None)
+    ).all()
+
+    if len(features) < 3:
+        return {"error": "Need at least 3 clustered cells for PCA"}
+
+    # Extract feature matrix
+    feature_data = []
+    cell_ids = []
+    gmm_states = []
+    hmm_states = []
+
+    for f in features:
+        row = []
+        valid = True
+        for feat_name in selected_features:
+            val = getattr(f, feat_name, None)
+            if val is None:
+                valid = False
+                break
+            row.append(float(val))
+
+        if valid:
+            feature_data.append(row)
+            cell_ids.append(f.id)
+            gmm_states.append(f.gmm_state)
+            hmm_states.append(f.hmm_state if f.hmm_state is not None else f.gmm_state)
+
+    if len(feature_data) < 3:
+        return {"error": "Need at least 3 cells with complete features"}
+
+    X = np.array(feature_data)
+
+    # Standardize features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Run PCA
+    pca = PCA(n_components=n_components)
+    embedding = pca.fit_transform(X_scaled)
+
+    # Calculate variance explained
+    variance_explained = pca.explained_variance_ratio_ * 100
+
+    # Calculate cluster centroids
+    unique_states = list(set(hmm_states))
+    centroids = {}
+    for state in unique_states:
+        indices = [i for i, s in enumerate(hmm_states) if s == state]
+        if indices:
+            centroid_x = np.mean([embedding[i, 0] for i in indices])
+            centroid_y = np.mean([embedding[i, 1] for i in indices])
+            centroids[state] = {'x': float(centroid_x), 'y': float(centroid_y)}
+
+    return {
+        "embedding": [
+            {
+                "id": cell_ids[i],
+                "x": float(embedding[i, 0]),
+                "y": float(embedding[i, 1]),
+                "gmm_state": gmm_states[i],
+                "hmm_state": hmm_states[i]
+            }
+            for i in range(len(cell_ids))
+        ],
+        "centroids": centroids,
+        "variance_explained": [float(v) for v in variance_explained],
+        "n_cells": len(cell_ids),
+        "features_used": selected_features
     }

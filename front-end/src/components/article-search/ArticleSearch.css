@@ -435,6 +435,11 @@
     color: #065f46;
 }
 
+.type-preprint {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
 /* Article Abstract */
 .article-abstract {
     margin: 8px 0;

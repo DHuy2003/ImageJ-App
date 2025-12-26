@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { Search, Calendar, ExternalLink, BookOpen, X, Loader2, Quote } from 'lucide-react';
 import type { Article, ArticleSearchResult } from '../../types/article';
-import { searchAllSources, sortArticles, filterArticlesByType } from '../../utils/articleSearchApi';
+import { searchAllSources, sortArticles } from '../../utils/articleSearchApi';
 import './ArticleSearch.css';
 
 interface ArticleSearchProps {
@@ -9,14 +9,12 @@ interface ArticleSearchProps {
     onClose: () => void;
 }
 
-type FilterType = 'All' | 'Research' | 'Reviews';
 type SortType = 'citations' | 'year' | 'relevance';
 
 const ArticleSearch = ({ isOpen, onClose }: ArticleSearchProps) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResult, setSearchResult] = useState<ArticleSearchResult | null>(null);
     const [loading, setLoading] = useState(false);
-    const [activeFilter, setActiveFilter] = useState<FilterType>('All');
     const [sortBy, setSortBy] = useState<SortType>('citations');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const hasSearched = useRef(false);
@@ -50,29 +48,17 @@ const ArticleSearch = ({ isOpen, onClose }: ArticleSearchProps) => {
         }
     };
 
-    // Filter locally - không gọi API
-    const handleFilterChange = (filter: FilterType) => {
-        setActiveFilter(filter);
-    };
-
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             handleSearch();
         }
     };
 
-    // Filter và sort locally từ kết quả đã có
+    // Sort locally từ kết quả đã có
     const displayedArticles = useMemo(() => {
         if (!searchResult) return [];
-
-        // Filter trước
-        let articles = filterArticlesByType(searchResult.articles, activeFilter);
-
-        // Sau đó sort
-        articles = sortArticles(articles, sortBy, sortOrder);
-
-        return articles;
-    }, [searchResult, activeFilter, sortBy, sortOrder]);
+        return sortArticles(searchResult.articles, sortBy, sortOrder);
+    }, [searchResult, sortBy, sortOrder]);
 
     const getTypeColor = (type: Article['type']) => {
         switch (type) {
@@ -82,6 +68,8 @@ const ArticleSearch = ({ isOpen, onClose }: ArticleSearchProps) => {
                 return 'type-review';
             case 'Conference Paper':
                 return 'type-conference';
+            case 'Preprint':
+                return 'type-preprint';
             default:
                 return 'type-technical';
         }
@@ -143,20 +131,9 @@ const ArticleSearch = ({ isOpen, onClose }: ArticleSearchProps) => {
                     </div>
                 )}
 
-                {/* Filters & Sort */}
+                {/* Sort Options */}
                 {searchResult && (
                     <div className="filters-container">
-                        <div className="filter-tabs">
-                            {(['All', 'Research', 'Reviews'] as FilterType[]).map(filter => (
-                                <button
-                                    key={filter}
-                                    className={`filter-tab ${activeFilter === filter ? 'active' : ''}`}
-                                    onClick={() => handleFilterChange(filter)}
-                                >
-                                    {filter}
-                                </button>
-                            ))}
-                        </div>
                         <div className="sort-options">
                             <span className="sort-label">Sort:</span>
                             {(['citations', 'year', 'relevance'] as SortType[]).map(sort => (
