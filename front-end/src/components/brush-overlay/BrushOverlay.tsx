@@ -11,6 +11,7 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null); 
+  const syncCanvasToImageRef = useRef<(() => void) | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(8);
   const [eraserSize, setEraserSize] = useState(16);
@@ -108,11 +109,13 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
       const imgRect = img.getBoundingClientRect();
       const parentRect = container.getBoundingClientRect();
 
-      if (!hasInitializedSize.current) {
-        canvas.width = imgRect.width;
-        canvas.height = imgRect.height;
-        hasInitializedSize.current = true;
+      const nextW = Math.max(1, Math.round(imgRect.width));
+      const nextH = Math.max(1, Math.round(imgRect.height));
+      if (canvas.width !== nextW || canvas.height !== nextH) {
+        canvas.width = nextW;
+        canvas.height = nextH;
       }
+      hasInitializedSize.current = true;
 
       canvas.style.width = `${imgRect.width}px`;
       canvas.style.height = `${imgRect.height}px`;
@@ -123,14 +126,25 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
         maskCanvasRef.current = document.createElement('canvas');
       }
       const maskCanvas = maskCanvasRef.current;
-      maskCanvas.width = canvas.width;
-      maskCanvas.height = canvas.height;
+      if (maskCanvas.width !== canvas.width || maskCanvas.height !== canvas.height) {
+        maskCanvas.width = canvas.width;
+        maskCanvas.height = canvas.height;
+      }
     };
+
+    syncCanvasToImageRef.current = updateCanvas;
 
     updateCanvas();
 
     img.addEventListener('load', updateCanvas);
     window.addEventListener('resize', updateCanvas);
+
+    const ro = new ResizeObserver(() => updateCanvas());
+    try {
+      ro.observe(img);
+      ro.observe(container);
+    } catch {
+    }
 
     return () => {
       img.removeEventListener('load', updateCanvas);
@@ -239,6 +253,9 @@ const BrushOverlay = ({ tool, disabled, imgRef, onCommit }: BrushOverlayWithComm
   const handleMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
     if (disabled || (tool !== 'brush' && tool !== 'eraser')) return;
     e.preventDefault();
+
+    syncCanvasToImageRef.current?.();
+
     const pos = getLocalPos(e);
     const clip = getVisibleClipRectInCanvasPx();
     if (clip && !isPointInClip(pos, clip)) {
