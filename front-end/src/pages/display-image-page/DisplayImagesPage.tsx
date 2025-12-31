@@ -18,6 +18,7 @@ import VirtualSequenceImportDialog from "../../components/virtual-sequence/Virtu
 import {  VIRTUAL_SEQUENCE_IMPORT_EVENT } from "../../utils/nav-bar/fileUtils";
 import { getSessionId } from '../../utils/common/getSessionId';
 import { useResetCurrentSessionOnClose } from '../../utils/common/sessionLifecycle';
+import Swal from "sweetalert2";
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
 
@@ -55,6 +56,16 @@ const DisplayImagesPage = () => {
     }
   }, []);
 
+  const clearVirtualSequence = () => {
+    sequenceFrames.forEach((f) => {
+      try {
+        URL.revokeObjectURL(f.url);
+      } catch {}
+    });
+    setSequenceFrames([]);
+    setShowVirtualPlayer(false);
+  };
+
   useEffect(() => {
     const fetchImages = async () => {
       try {
@@ -91,6 +102,7 @@ const DisplayImagesPage = () => {
 
   useEffect(() => {
     const handleOpenVirtual = () => {
+      clearVirtualSequence();
       setShowVirtualImport(true);
     };
 
@@ -230,24 +242,24 @@ const DisplayImagesPage = () => {
         return;
       }
 
+      clearVirtualSequence();
       setSequenceFrames(frames);
       setShowVirtualImport(false);
       setShowVirtualPlayer(true);
     } catch (err) {
       console.error("Error loading virtual sequence preview:", err);
-      alert("Failed to load virtual sequence preview. Please try again.");
+      await Swal.fire({
+        title: "Unable to load Virtual Sequence",
+         text: "Failed to generate the Virtual Sequence preview. Please try again.",
+        icon: "error",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#3085d6",
+      });
     }
   };
 
   const handleCloseVirtualPlayer = () => {
-    sequenceFrames.forEach((f) => {
-      try {
-        URL.revokeObjectURL(f.url);
-      } catch {
-      }
-    });
-    setSequenceFrames([]);
-    setShowVirtualPlayer(false);
+    clearVirtualSequence();
   };
 
   if (loading) {
@@ -274,7 +286,10 @@ const DisplayImagesPage = () => {
         />
         <VirtualSequenceImportDialog
           isOpen={showVirtualImport}
-          onCancel={() => setShowVirtualImport(false)}
+          onCancel={() => {
+            clearVirtualSequence();
+            setShowVirtualImport(false);
+          }}
           onConfirm={handleVirtualImportConfirm}
         />
         <VirtualSequencePlayer
@@ -317,7 +332,10 @@ const DisplayImagesPage = () => {
         />
         <VirtualSequenceImportDialog
           isOpen={showVirtualImport}
-          onCancel={() => setShowVirtualImport(false)}
+          onCancel={() => {
+            clearVirtualSequence();
+            setShowVirtualImport(false);
+          }}
           onConfirm={handleVirtualImportConfirm}
         />
         <VirtualSequencePlayer
@@ -359,7 +377,10 @@ const DisplayImagesPage = () => {
       />
       <VirtualSequenceImportDialog
         isOpen={showVirtualImport}
-        onCancel={() => setShowVirtualImport(false)}
+        onCancel={() => {
+          clearVirtualSequence();
+          setShowVirtualImport(false);
+        }}
         onConfirm={handleVirtualImportConfirm}
       />
       <VirtualSequencePlayer
