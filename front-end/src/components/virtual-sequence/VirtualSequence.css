@@ -20,10 +20,10 @@ html {
 }
 
 .vs-dialog {
-    width: 82vw;
+    width: 70vw;
     max-width: 1200px;
-    height: 80vh;
-    max-height: 800px;
+    height: 90vh;
+    max-height: 1000px;
     background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
     border-radius: 16px;
     box-shadow: 0 20px 60px rgba(15, 23, 42, 0.4);
@@ -34,10 +34,10 @@ html {
 }
 
 .vs-dialog-compact {
-    max-width: 520px;
-    width: 520px;
+    width: min(780px, 80vw);
+    max-width: 980px;
     height: auto;
-    max-height: 480px;
+    max-height: 900px;
 }
 
 .vs-header {
@@ -50,13 +50,14 @@ html {
 }
 
 .vs-header h2 {
-    font-size: 18px;
+    font-size: clamp(20px, 2.0vw, 25px);
+    line-height: 1.15;
     margin: 0;
 }
 
 .vs-subtitle {
-    font-size: 12px;
-    opacity: 0.9;
+    font-size: clamp(12px, 1.25vw, 15px);
+    line-height: 1.35;
 }
 
 .vs-close-btn {
@@ -64,10 +65,10 @@ html {
     border: 1px solid rgba(15, 23, 42, 0.12);
     color: #111827;
     border-radius: 999px;
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -109,6 +110,7 @@ html {
 }
 
 .vs-body-form {
+    padding: 18px 22px;
     align-items: stretch;
     justify-content: flex-start;
     flex-direction: column;
@@ -153,12 +155,19 @@ html {
     transition: all 0.15s ease;
 }
 
+.vs-play-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 100px;
+    font-size: clamp(13px, 1.15vw, 15px);
+}
+
 .vs-icon-btn {
     background: white;
     border: 1px solid #d1d5db;
     color: #374151;
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
 }
 
 .vs-icon-btn:hover:not(:disabled) {
@@ -197,7 +206,7 @@ html {
 .vs-timeline-labels {
     display: flex;
     justify-content: space-between;
-    font-size: 11px;
+    font-size: clamp(12px, 1.15vw, 14px);
     color: #6b7280;
 }
 
@@ -205,11 +214,12 @@ html {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 12px;
+    font-size: clamp(12px, 1.15vw, 14px);
     color: #4b5563;
 }
 
 .vs-speed label span {
+    font-size: clamp(12px, 1vw, 14px);
     font-weight: 600;
     color: #1d4ed8;
 }
@@ -226,17 +236,20 @@ html {
 }
 
 .vs-form-row label {
-    font-size: 13px;
+    font-size: clamp(14px, 1.15vw, 18px);
     font-weight: 500;
     color: #374151;
 }
+
 
 .vs-form-row input[type="number"],
 .vs-form-row input[type="text"] {
     border-radius: 8px;
     border: 1px solid #d1d5db;
     padding: 6px 8px;
-    font-size: 13px;
+    font-size: clamp(13px, 1.25vw, 16px);
+    padding: 10px 12px;
+    border-radius: 10px;
     outline: none;
 }
 
@@ -263,8 +276,8 @@ html {
     border: none;
     background: #2563eb;
     color: white;
-    padding: 6px 12px;
-    font-size: 13px;
+    font-size: clamp(13px, 1.15vw, 16px);
+    padding: 10px 14px;
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
@@ -283,12 +296,13 @@ html {
 .vs-form-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px 12px;
+    gap: 14px 18px;
     margin-top: 4px;
 }
 
 .vs-help-text {
-    font-size: 11px;
+    font-size: clamp(12px, 1vw, 14px);
+    line-height: 1.4;
     color: #6b7280;
 }
 
@@ -326,8 +340,8 @@ html {
 .vs-secondary-btn {
     border-radius: 999px;
     border: none;
-    padding: 6px 14px;
-    font-size: 13px;
+    padding: 12px 20px;
+    font-size: clamp(14px, 1.5vw, 16px);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -357,4 +371,37 @@ html {
 .vs-primary-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+.vs-form-row {
+    min-width: 0;
+}
+
+.vs-checkbox-label span {
+    font-size: clamp(14px, 1.15vw, 17px);
+}  
+    
+.vs-validation-span {
+    grid-column: 2 / 4;
+    margin-top: 6px;
+    background: rgba(211, 47, 47, 0.08);
+    border: 1px solid rgba(211, 47, 47, 0.25);
+    color: #d32f2f;
+    font-size: clamp(14px, 1.15vw, 17px);
+    padding: 10px 12px;
+    border-radius: 12px;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.vs-validation-inline {
+    margin-top: 4px;
+    color: #e51e1e;
+    font-size: clamp(12px, 1vw, 14px);
+    font-weight: 500;
+    padding: 6px 8px;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
