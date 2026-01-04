@@ -47,7 +47,7 @@ def get_available_features():
     ]
 
 
-def run_gmm_clustering(selected_features=None, max_components=10, min_components=2):
+def run_gmm_clustering(selected_features=None, max_components=10, min_components=2, require_tracking=False):
     """
     Run GMM clustering on cell features using combined AIC and BIC criteria
 
@@ -55,6 +55,7 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
         selected_features: List of feature names to use
         max_components: Maximum number of GMM components to try
         min_components: Minimum number of GMM components
+        require_tracking: If True, only use tracked cells. If False, use all cells.
 
     Returns:
         dict with clustering results
@@ -62,8 +63,19 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
     if selected_features is None:
         selected_features = DEFAULT_FEATURES
 
-    # Get all features with track_id (only tracked cells)
-    cells = CellFeature.query.filter(CellFeature.track_id.isnot(None)).all()
+    # Get cells - prefer tracked cells if available, otherwise use all cells
+    tracked_cells = CellFeature.query.filter(CellFeature.track_id.isnot(None)).all()
+
+    if tracked_cells:
+        # Use tracked cells if available
+        cells = tracked_cells
+        tracking_mode = "tracked"
+    elif not require_tracking:
+        # Fall back to all cells if no tracking and not required
+        cells = CellFeature.query.all()
+        tracking_mode = "untracked"
+    else:
+        return {"error": "No tracked cells found. Run cell tracking first or set require_tracking=False."}
 
     if len(cells) < min_components:
         return {"error": f"Not enough cells for clustering. Need at least {min_components}, got {len(cells)}"}
@@ -190,7 +202,8 @@ def run_gmm_clustering(selected_features=None, max_components=10, min_components
         "scores": scores,
         "total_cells": len(cell_ids),
         "cluster_stats": cluster_stats,
-        "features_used": selected_features
+        "features_used": selected_features,
+        "tracking_mode": tracking_mode
     }
 
 
@@ -317,13 +330,22 @@ def run_full_clustering(selected_features=None, max_components=10, min_component
     if "error" in gmm_result:
         return gmm_result
 
+    # Check if we have tracking data for HMM
+    tracking_mode = gmm_result.get("tracking_mode", "unknown")
+    can_run_hmm = tracking_mode == "tracked"
+
     result = {
         "gmm": gmm_result,
         "hmm": None,
-        "pipeline": "complete" if use_hmm else "gmm_only"
+        "pipeline": "complete" if (use_hmm and can_run_hmm) else "gmm_only"
     }
 
     if not use_hmm:
+        return result
+
+    # Skip HMM if no tracking data available
+    if not can_run_hmm:
+        result["hmm"] = {"skipped": True, "reason": "HMM requires tracked cells. Run cell tracking first to enable HMM smoothing."}
         return result
 
     # Run HMM with same number of states as GMM clusters
