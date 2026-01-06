@@ -1,0 +1,34 @@
+
+version: '3.8'
+
+services:
+  backend:
+    build: ./back-end
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./back-end:/app
+      - ./back-end/instance:/app/instance # Ensure database persists
+      - ./back-end/uploads:/app/uploads
+      - ./back-end/converted:/app/converted
+      - ./back-end/edited:/app/edited
+      - ./back-end/masks:/app/masks
+    environment:
+      - DATABASE_URL=sqlite:////app/instance/imageJ.db
+    env_file:
+      - ./back-end/.env
+    restart: always
+
+  frontend:
+    build: ./front-end
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./front-end:/app
+      - /app/node_modules # Avoid overwriting node_modules inside the container
+    env_file:
+      - ./front-end/.env.development
+    depends_on:
+      - backend
+    restart: always
+
