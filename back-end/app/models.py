@@ -1,7 +1,7 @@
 from app import db
 
 class Image(db.Model):
-    __tablename__ = 'imageJ'
+    __tablename__ = 'image'
 
     session_id = db.Column(db.String(64), index=True, nullable=True)
     id = db.Column(db.Integer, primary_key=True)
