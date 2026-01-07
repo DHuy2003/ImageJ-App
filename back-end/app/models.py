@@ -25,7 +25,7 @@ class CellFeature(db.Model):
     __tablename__ = 'cell_features'
 
     id = db.Column(db.Integer, primary_key=True)
-    image_id = db.Column(db.Integer, db.ForeignKey('imageJ.id'), nullable=False)
+    image_id = db.Column(db.Integer, db.ForeignKey('image.id'), nullable=False)
     cell_id = db.Column(db.Integer, nullable=False)  # Cell ID within the frame
     frame_num = db.Column(db.Integer, nullable=False)
 
