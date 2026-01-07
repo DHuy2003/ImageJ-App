@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_from_directory, Response, current_app, url_for
+from flask import Blueprint, request, jsonify, send_from_directory, send_file, Response, current_app, url_for
 import os
 import threading
 from flask_cors import cross_origin
@@ -77,6 +77,30 @@ def get_converted_image_session(session_id, filename):
 def get_mask_image_session(session_id, filename):
     try:
         directory = os.path.join(MASK_FOLDER, session_id)
+        filepath = os.path.join(directory, filename)
+
+        # Check if file exists
+        if not os.path.exists(filepath):
+            return jsonify({"error": "File not found"}), 404
+
+        # If file is TIF/TIFF, convert to PNG for browser display
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in ['.tif', '.tiff']:
+            from PIL import Image
+            from io import BytesIO
+
+            img = Image.open(filepath)
+            # Convert to RGB if needed
+            if img.mode not in ['RGB', 'RGBA']:
+                img = img.convert('RGB')
+
+            # Save to memory buffer as PNG
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            buffer.seek(0)
+
+            return send_file(buffer, mimetype='image/png')
+
         return send_from_directory(directory, filename)
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
