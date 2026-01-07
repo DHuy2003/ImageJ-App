@@ -13,8 +13,8 @@ with app.app_context():
     inspector = inspect(db.engine)
     tables_created = []
 
-    if not inspector.has_table("imageJ"):
-        tables_created.append("imageJ")
+    if not inspector.has_table("image"):
+        tables_created.append("image")
     if not inspector.has_table("cell_features"):
         tables_created.append("cell_features")
 
