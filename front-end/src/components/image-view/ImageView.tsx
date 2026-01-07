@@ -6,12 +6,10 @@ import type { ImageInfo, ImageViewProps } from '../../types/image';
 import { type RoiTool } from '../../types/roi';
 import { formatFileSize } from '../../utils/common/formatFileSize';
 import { IMAGES_APPENDED_EVENT } from '../../utils/nav-bar/fileUtils';
-import { TOOL_EVENT_NAME } from '../../utils/nav-bar/toolUtils';
 import {
   analyzeColorChannelHistogram,
   analyzeImageHistogram,
   applyThresholdMask,
-  type ColorChannel,
   flipHorizontal,
   flipVertical,
   getAutoThreshold,
@@ -24,7 +22,8 @@ import {
   processColorBalance,
   processImageResize,
   rotateLeft90,
-  rotateRight90
+  rotateRight90,
+  type ColorChannel
 } from '../../utils/nav-bar/imageUtils';
 import {
   generateCircularMasksStack,
@@ -49,12 +48,14 @@ import {
   processWatershed,
   type CircularMasksStack
 } from '../../utils/nav-bar/processUtils';
+import { TOOL_EVENT_NAME } from '../../utils/nav-bar/toolUtils';
 import BrushOverlay from '../brush-overlay/BrushOverlay';
 import CropOverlay from '../crop-overlay/CropOverlay';
 import RoiOverlay from '../roi-overlay/RoiOverlay';
 import './ImageView.css';
 import BrightnessContrastDialog from './dialogs/bright-contrast/BrightContrast';
 import ColorBalanceDialog from './dialogs/color-balance/ColorBalanceDialog';
+import NewStackViewer from './dialogs/depth-size/DepthSize';
 import FiltersDialog, { type FilterParams, type FilterType } from './dialogs/filters/FiltersDialog';
 import ImageSizeDialog from './dialogs/image-size/ImageSizeDialog';
 import NotificationBar, { type NotificationType } from './dialogs/notifications/NotificationBar';
@@ -71,7 +72,6 @@ import usePanMode from './hooks/usePanMode';
 import useRoiSelection from './hooks/useRoiSelection';
 import useToolbarToolSelection from './hooks/useToolbarToolSelection';
 import useUndoStack from './hooks/useUndoStack';
-import NewStackViewer from './dialogs/depth-size/DepthSize';
 
 
 const API_BASE_URL = "http://127.0.0.1:5000/api/images";
@@ -147,8 +147,10 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const [cropRectData, setCropRectData] = useState<RelativeCropRect | null>(null);
   const [activeTool, setActiveTool] = useState<RoiTool>('pointer');
   const selectedRoi = useRoiSelection();
-  const [zoomLevel, setZoomLevel] = useState<number>(DEFAULT_ZOOM_LEVEL);
-  const [scaleToFit, setScaleToFit] = useState<boolean>(true);
+  type ZoomState = { zoom: number; fit: boolean };
+  const [zoomStateByIndex, setZoomStateByIndex] = useState<Record<number, ZoomState>>({});
+  const currentZoom = zoomStateByIndex[currentIndex]?.zoom ?? DEFAULT_ZOOM_LEVEL;
+  const currentFit = zoomStateByIndex[currentIndex]?.fit ?? true;
   const [frameFeatures, setFrameFeatures] = useState<CellFeature[]>([]);
   const [cellContours, setCellContours] = useState<CellContour[]>([]);
   const [showClustering, setShowClustering] = useState<boolean>(false);
@@ -205,7 +207,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const circularMasksTimerRef = useRef<number | null>(null);
 
 
-    useEffect(() => {
+  useEffect(() => {
     return () => {
       if (circularMasksTimerRef.current !== null) {
         window.clearInterval(circularMasksTimerRef.current);
@@ -253,50 +255,52 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   } = usePanMode({
     wrapperRef,
     imgRef,
-    scaleToFit,
-    zoomLevel,
+    scaleToFit: currentFit,
+    zoomLevel: currentZoom,
     panMode,
   });
 
 
   useEffect(() => {
+    const clampZoom = (z: number) => Math.min(Math.max(z, 0.1), 32.0);
+
     const handleZoomInEvent = () => {
-      setScaleToFit(false);
-      setZoomLevel(prev => {
-        const nextZoom = prev * ZOOM_FACTOR;
-        return Math.min(nextZoom, 32.0);
+      setZoomStateByIndex(prev => {
+        const cur = prev[currentIndex] ?? { zoom: DEFAULT_ZOOM_LEVEL, fit: true };
+        const nextZoom = clampZoom(cur.zoom * ZOOM_FACTOR);
+        return { ...prev, [currentIndex]: { zoom: nextZoom, fit: false } };
       });
     };
-
 
     const handleZoomOutEvent = () => {
-      setScaleToFit(false);
-      setZoomLevel(prev => {
-        const nextZoom = prev / ZOOM_FACTOR;
-        return Math.max(nextZoom, 0.1);
+      setZoomStateByIndex(prev => {
+        const cur = prev[currentIndex] ?? { zoom: DEFAULT_ZOOM_LEVEL, fit: true };
+        const nextZoom = clampZoom(cur.zoom / ZOOM_FACTOR);
+        return { ...prev, [currentIndex]: { zoom: nextZoom, fit: false } };
       });
     };
 
-
+    // Toggle Fit-to-screen for ONLY current frame
     const handleScaleToFitEvent = () => {
-      setScaleToFit(prev => {
-        if (!prev) {
-          setZoomLevel(DEFAULT_ZOOM_LEVEL);
-        }
-        return !prev;
-      });
+      setZoomStateByIndex(prev => ({
+        ...prev,
+        [currentIndex]: {
+          zoom: DEFAULT_ZOOM_LEVEL,
+          fit: true,
+        },
+      }));
     };
+
     window.addEventListener('imageZoomIn', handleZoomInEvent);
     window.addEventListener('imageZoomOut', handleZoomOutEvent);
     window.addEventListener('imageScaleToFit', handleScaleToFitEvent);
-
 
     return () => {
       window.removeEventListener('imageZoomIn', handleZoomInEvent);
       window.removeEventListener('imageZoomOut', handleZoomOutEvent);
       window.removeEventListener('imageScaleToFit', handleScaleToFitEvent);
     };
-  }, []);
+  }, [currentIndex]);
 
 
   const { cropImage } = useEditEvents({
@@ -372,6 +376,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     setVisibleImages(imageArray);
     setCurrentIndex(0);
     setCurrentImageURL(null);
+    setZoomStateByIndex({});
   }, [imageArray]);
 
   useEffect(() => {
@@ -538,7 +543,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
       setCurrentImageURL(newUrl);
       onDone?.(newUrl, blob);
     });
-};
+  };
 
   const noiseDialogs = useNoiseEvents(
     getImageData,
@@ -1136,7 +1141,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     }
   };
 
-    // Show Circular Masks → mở pop-up stack giống ImageJ
+  // Show Circular Masks → mở pop-up stack giống ImageJ
   const handleShowCircularMasks = () => {
     const stack = generateCircularMasksStack();
 
@@ -1575,7 +1580,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
     };
   }, [currentImageURL, getImageData]);
 
-    const stopCircularMasksPlayback = () => {
+  const stopCircularMasksPlayback = () => {
     if (circularMasksTimerRef.current !== null) {
       window.clearInterval(circularMasksTimerRef.current);
       circularMasksTimerRef.current = null;
@@ -1802,23 +1807,18 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
           <div className="header-left">
             <p className="frame-info">Frame {currentIndex + 1} of {visibleImages.length}</p>
             <div className="zoom-controls">
-              <button
-                className="zoom-btn"
-                onClick={handleZoomOut}
-                title="Zoom Out"
-              >
+              <button className="zoom-btn" onClick={handleZoomOut} title="Zoom Out">
                 <span className="zoom-icon">−</span>
               </button>
-              <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-              <button
-                className="zoom-btn"
-                onClick={handleZoomIn}
-                title="Zoom In"
-              >
+
+              <span className="zoom-level">{Math.round(currentZoom * 100)}%</span>
+
+              <button className="zoom-btn" onClick={handleZoomIn} title="Zoom In">
                 <span className="zoom-icon">+</span>
               </button>
+
               <button
-                className={`zoom-btn fit-btn ${scaleToFit ? 'active' : ''}`}
+                className={`zoom-btn fit-btn ${currentFit ? 'active' : ''}`}
                 onClick={handleScaleToFit}
                 title="Fit to Window"
               >
@@ -1878,11 +1878,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                 alt={currentFile?.filename}
                 className={showMask ? 'small-image' : ''}
                 style={{
-                  // scale dùng để zoom (in/out) ảnh bên trong khung,
-                  // KHÔNG đụng vào kích thước layout ban đầu của ảnh
-                  transform: scaleToFit ? 'none' : `translate(${pan.x}px, ${pan.y}px) scale(${zoomLevel})`,
-                  maxWidth: '100%',
-                  maxHeight: '100%',
+                  transform: currentFit ? 'none' : `scale(${currentZoom})`,
                   transformOrigin: 'center center',
                 }}
               />
@@ -2058,7 +2054,7 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
         onCancel={handleSubtractCancel}
       />
 
-            {showCircularMasksPlayer && circularMasksStack && (
+      {showCircularMasksPlayer && circularMasksStack && (
         <div className="cm-overlay">
           <div className="cm-window">
             {/* Title-bar giống ImageJ */}
