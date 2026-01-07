@@ -448,12 +448,22 @@ def get_all_images():
                     )
 
             if img_db.mask_filename:
+                # Debug: check mask file path
+                expected_mask_path = os.path.join(_session_scoped_dir(MASK_FOLDER, img_db.session_id), img_db.mask_filename)
+                db_mask_path = img_db.mask_filepath
+                print(f"[DEBUG get_all_images] mask_filename: {img_db.mask_filename}")
+                print(f"[DEBUG get_all_images] DB mask_filepath: {db_mask_path}")
+                print(f"[DEBUG get_all_images] Expected mask path: {expected_mask_path}")
+                print(f"[DEBUG get_all_images] DB path exists: {os.path.exists(db_mask_path) if db_mask_path else False}")
+                print(f"[DEBUG get_all_images] Expected path exists: {os.path.exists(expected_mask_path)}")
+
                 mask_url = url_for(
                     'image_bp.get_mask_image_session',
                     session_id=img_db.session_id,
                     filename=img_db.mask_filename,
                     _external=True
                 )
+                print(f"[DEBUG get_all_images] Generated mask_url: {mask_url}")
 
             path_for_info = None
             final_url = None

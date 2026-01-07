@@ -12,13 +12,12 @@ MASK_FOLDER = config.MASK_FOLDER
 CONVERTED_FOLDER = config.CONVERTED_FOLDER
 
 
-def run_cellpose_segmentation(image_id, model_type='cyto3', diameter=None, flow_threshold=0.4, cellprob_threshold=0.0):
+def run_cellpose_segmentation(image_id, diameter=None, flow_threshold=0.4, cellprob_threshold=0.0):
     """
-    Run Cellpose segmentation on a single image
+    Run Cellpose segmentation on a single image (Cellpose v4.0.1+ API)
 
     Args:
         image_id: Database ID of the image
-        model_type: Cellpose model type ('cyto', 'cyto2', 'cyto3', 'nuclei')
         diameter: Expected cell diameter (None for auto-detection)
         flow_threshold: Flow error threshold
         cellprob_threshold: Cell probability threshold
@@ -31,6 +30,8 @@ def run_cellpose_segmentation(image_id, model_type='cyto3', diameter=None, flow_
     img_record = ImageModel.query.get(image_id)
     if not img_record:
         raise ValueError(f"Image with id {image_id} not found")
+
+    session_id = img_record.session_id
 
     # Get the image path (use edited if available, else converted)
     if img_record.edited_filepath and os.path.exists(img_record.edited_filepath):
@@ -51,28 +52,48 @@ def run_cellpose_segmentation(image_id, model_type='cyto3', diameter=None, flow_
     img = Image.open(image_path)
     img_array = np.array(img)
 
+    # Save mask with original image extension (TIF, PNG, etc.)
+    # Route will convert TIF to PNG on-the-fly for browser display
+    original_ext = os.path.splitext(img_record.filename)[1].lower() if img_record.filename else '.png'
+    if original_ext not in ['.png', '.jpg', '.jpeg', '.tif', '.tiff']:
+        original_ext = '.png'
+    mask_ext = original_ext
+
     # Convert to grayscale if needed
     if len(img_array.shape) == 3:
         img_array = np.mean(img_array, axis=2)
 
-    # Run Cellpose
-    model = models.CellposeModel(model_type=model_type, gpu=False)
+    # Run Cellpose (v4.0.1+ API - no model_type, no channels)
+    model = models.CellposeModel(gpu=False)
     masks, flows, styles = model.eval(
         img_array,
         diameter=diameter,
         flow_threshold=flow_threshold,
-        cellprob_threshold=cellprob_threshold,
-        channels=[0, 0]
+        cellprob_threshold=cellprob_threshold
     )
 
-    # Save mask
+    # Save mask to session folder with original format
     stem = os.path.splitext(img_record.filename)[0] if img_record.filename else f"image_{image_id}"
-    mask_filename = f"{stem}_mask.png"
-    mask_path = os.path.join(MASK_FOLDER, mask_filename)
+    mask_filename = f"{stem}_mask{mask_ext}"
 
-    # Convert mask to colored visualization
+    # Create session mask folder if not exists
+    session_mask_folder = os.path.join(MASK_FOLDER, session_id) if session_id else MASK_FOLDER
+    os.makedirs(session_mask_folder, exist_ok=True)
+    mask_path = os.path.join(session_mask_folder, mask_filename)
+
+    print(f"[DEBUG] Saving mask to: {mask_path}")
+    print(f"[DEBUG] Session ID: {session_id}")
+    print(f"[DEBUG] Mask filename: {mask_filename}")
+
+    # Convert mask to colored visualization and save
     colored_mask = create_colored_mask(masks)
     Image.fromarray(colored_mask).save(mask_path)
+
+    # Verify file was saved
+    if os.path.exists(mask_path):
+        print(f"[DEBUG] Mask saved successfully: {mask_path}")
+    else:
+        print(f"[ERROR] Failed to save mask: {mask_path}")
 
     # Update database
     img_record.mask_filename = mask_filename
@@ -82,25 +103,29 @@ def run_cellpose_segmentation(image_id, model_type='cyto3', diameter=None, flow_
     # Count cells
     num_cells = len(np.unique(masks)) - 1  # Exclude background (0)
 
-    mask_url = url_for('image_bp.get_mask_image', filename=mask_filename, _external=True)
+    # Use correct route with session_id
+    if session_id:
+        mask_url = url_for('image_bp.get_mask_image_session', session_id=session_id, filename=mask_filename, _external=True)
+    else:
+        mask_url = url_for('image_bp.get_mask_image', filename=mask_filename, _external=True)
+
+    print(f"[DEBUG] Mask URL: {mask_url}")
 
     return {
         "image_id": image_id,
         "mask_filename": mask_filename,
         "mask_url": mask_url,
         "num_cells": num_cells,
-        "model_type": model_type,
         "diameter": diameter
     }
 
 
-def run_batch_segmentation(image_ids=None, model_type='cyto3', diameter=None):
+def run_batch_segmentation(image_ids=None, diameter=None):
     """
-    Run Cellpose segmentation on multiple images
+    Run Cellpose segmentation on multiple images (Cellpose v4.0.1+ API)
 
     Args:
         image_ids: List of image IDs (None = all images without masks)
-        model_type: Cellpose model type
         diameter: Expected cell diameter
 
     Returns:
@@ -119,7 +144,7 @@ def run_batch_segmentation(image_ids=None, model_type='cyto3', diameter=None):
 
     for img_id in image_ids:
         try:
-            result = run_cellpose_segmentation(img_id, model_type=model_type, diameter=diameter)
+            result = run_cellpose_segmentation(img_id, diameter=diameter)
             results.append(result)
         except Exception as e:
             errors.append({"image_id": img_id, "error": str(e)})
