@@ -8,7 +8,7 @@ services:
       - "5000:5000"
     volumes:
       - ./back-end:/app
-      - ./back-end/instance:/app/instance # Ensure database persists
+      - ./back-end/instance:/app/instance 
       - ./back-end/uploads:/app/uploads
       - ./back-end/converted:/app/converted
       - ./back-end/edited:/app/edited
@@ -25,7 +25,7 @@ services:
       - "5173:5173"
     volumes:
       - ./front-end:/app
-      - /app/node_modules # Avoid overwriting node_modules inside the container
+      - /app/node_modules 
     env_file:
       - ./front-end/.env.development
     depends_on:

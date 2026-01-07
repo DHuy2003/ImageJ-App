@@ -1878,7 +1878,11 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
                 alt={currentFile?.filename}
                 className={showMask ? 'small-image' : ''}
                 style={{
-                  transform: currentFit ? 'none' : `scale(${currentZoom})`,
+                  // scale dùng để zoom (in/out) ảnh bên trong khung,
+                  // KHÔNG đụng vào kích thước layout ban đầu của ảnh
+                  transform: currentFit ? 'none' : `translate(${pan.x}px, ${pan.y}px) scale(${currentZoom})`,
+                  maxWidth: '100%',
+                  maxHeight: '100%',
                   transformOrigin: 'center center',
                 }}
               />
