@@ -492,30 +492,30 @@ const ThresholdDialog = ({
               />
               Dark background
             </label>
-            <label className="threshold-checkbox-label">
+            {/* <label className="threshold-checkbox-label">
               <input
                 type="checkbox"
                 checked={stackHistogram}
                 onChange={(e) => setStackHistogram(e.target.checked)}
               />
               Stack histogram
-            </label>
-            <label className="threshold-checkbox-label">
+            </label> */}
+            {/* <label className="threshold-checkbox-label">
               <input
                 type="checkbox"
                 checked={noReset}
                 onChange={(e) => setNoReset(e.target.checked)}
               />
               Don't reset range
-            </label>
-            <label className="threshold-checkbox-label">
+            </label> */}
+            {/* <label className="threshold-checkbox-label">
               <input
                 type="checkbox"
                 checked={rawValues}
                 onChange={(e) => setRawValues(e.target.checked)}
               />
               Raw values
-            </label>
+            </label> */}
           </div>
 
           {/* Buttons */}
@@ -523,7 +523,7 @@ const ThresholdDialog = ({
             <button className="threshold-btn" onClick={handleAuto}>Auto</button>
             <button className="threshold-btn" onClick={handleApply}>Apply</button>
             <button className="threshold-btn" onClick={handleReset}>Reset</button>
-            <button className="threshold-btn" onClick={handleSet}>Set</button>
+            {/* <button className="threshold-btn" onClick={handleSet}>Set</button> */}
           </div>
         </div>
       </div>
