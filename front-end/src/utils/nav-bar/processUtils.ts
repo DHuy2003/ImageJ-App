@@ -1561,24 +1561,91 @@ export const processRemoveOutliers = (
   return out;
 };
 
-export const processRemoveNaNs = (imageData: ImageData): ImageData => {
-    const output = createOutputImage(imageData);
+export const processRemoveNaNs = (imageData: ImageData, radius: number): ImageData => {
+    const w = imageData.width;
+    const h = imageData.height;
     const src = imageData.data;
-    const dst = output.data;
-
-    for (let i = 0; i < src.length; i += 4) {
-        for (let c = 0; c < 4; c++) {
-            const v = src[i + c];
-            if (!Number.isFinite(v) || Number.isNaN(v)) {
-                dst[i + c] = c === 3 ? 255 : 0;
-            } else {
-                dst[i + c] = c === 3 ? v : clamp(v);
-            }
-        }
+    const out = createOutputImage(imageData);
+    const dst = out.data;
+  
+    const rad = Math.max(0, Math.round(radius));
+    if (rad === 0) {
+      dst.set(src);
+      return out;
     }
-
-    return output;
-};
+  
+    const r2 = rad * rad;
+  
+    const isInvalid = (idx: number) => {
+      const a = src[idx + 3];
+      return a === 0;
+    };
+  
+    const histR = new Uint16Array(256);
+    const histG = new Uint16Array(256);
+    const histB = new Uint16Array(256);
+  
+    const getMedian = (hist: Uint16Array, total: number) => {
+      let acc = 0;
+      const mid = Math.floor(total / 2);
+      for (let v = 0; v < 256; v++) {
+        acc += hist[v];
+        if (acc > mid) return v;
+      }
+      return 0;
+    };
+  
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+  
+        if (!isInvalid(i)) {
+          dst[i] = src[i];
+          dst[i + 1] = src[i + 1];
+          dst[i + 2] = src[i + 2];
+          dst[i + 3] = src[i + 3];
+          continue;
+        }
+  
+        histR.fill(0); histG.fill(0); histB.fill(0);
+        let count = 0;
+  
+        for (let dy = -rad; dy <= rad; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -rad; dx <= rad; dx++) {
+            if (dx * dx + dy * dy > r2) continue;
+            const xx = x + dx;
+            if (xx < 0 || xx >= w) continue;
+  
+            const j = (yy * w + xx) * 4;
+            if (isInvalid(j)) continue;
+  
+            histR[src[j]]++;
+            histG[src[j + 1]]++;
+            histB[src[j + 2]]++;
+            count++;
+          }
+        }
+  
+        if (count === 0) {
+          dst[i] = src[i];
+          dst[i + 1] = src[i + 1];
+          dst[i + 2] = src[i + 2];
+          dst[i + 3] = src[i + 3];
+          continue;
+        }
+  
+        dst[i]     = getMedian(histR, count);
+        dst[i + 1] = getMedian(histG, count);
+        dst[i + 2] = getMedian(histB, count);
+        dst[i + 3] = 255;
+      }
+    }
+  
+    return out;
+  };
+  
 
 // =============================
 //  Subtract Background (ImageJ-like)
