@@ -33,11 +33,12 @@ const useUndoStack = ({
     });
   }, [visibleImages.length]);
 
-  const pushUndo = () => {
-    if (!currentImageURL || !currentFile) return;
+  const pushUndo = (urlOverride?: string | null) => {
+    const urlToSave = urlOverride ?? currentImageURL;
+    if (!urlToSave || !currentFile) return;
 
     const snapshot: UndoEntry = {
-      url: currentImageURL,
+      url: urlToSave,
       width: currentFile.width,
       height: currentFile.height,
       size: currentFile.size,

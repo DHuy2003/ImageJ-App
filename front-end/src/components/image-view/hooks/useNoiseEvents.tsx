@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ImageInfo } from '../../../types/image';
 import {
   processAddNoise,
   processAddSpecifiedNoise,
@@ -21,8 +22,14 @@ type GetImageDataResult = {
 } | null;
 
 type GetImageDataFn = () => GetImageDataResult;
-type UpdateFromCanvasFn = (canvas: HTMLCanvasElement, saveToHistory?: boolean) => void;
+type UpdateFromCanvasFn = (
+  canvas: HTMLCanvasElement,
+  saveToHistory?: boolean,
+  onDone?: (newUrl: string, blob: Blob) => void
+) => void;
+
 type GetBitDepthFn = () => number | undefined;
+type PushUndoFn = (urlOverride?: string | null) => void;
 
 const NOISE_ACTIONS = new Set([
   'add-noise',
@@ -36,172 +43,300 @@ const NOISE_ACTIONS = new Set([
 const cloneImageData = (src: ImageData): ImageData =>
   new ImageData(new Uint8ClampedArray(src.data), src.width, src.height);
 
+const imageDataToCanvas = (img: ImageData) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.putImageData(img, 0, 0);
+  return { canvas, ctx };
+};
+
 const useNoiseEvents = (
   getImageData: GetImageDataFn,
   updateImageFromCanvas: UpdateFromCanvasFn,
-  getCurrentBitDepth?: GetBitDepthFn
+  getCurrentBitDepth?: GetBitDepthFn,
+  pushUndo?: PushUndoFn,
+  currentImageURL?: string | null,
+  setVisibleImages?: React.Dispatch<React.SetStateAction<ImageInfo[]>>,
+  currentIndex?: number
 ) => {
+  const commitToGallery = (newUrl: string, blob: Blob, canvas: HTMLCanvasElement) => {
+    if (!setVisibleImages || currentIndex === undefined) return;
+
+    setVisibleImages(prev =>
+      prev.map((img, i) => {
+        if (i !== currentIndex) return img;
+
+        const patch: Partial<ImageInfo> = {
+          size: blob.size,
+          width: canvas.width,
+          height: canvas.height,
+          last_edited_on: new Date().toISOString(),
+          edited_url: newUrl,
+        };
+
+        if (img.cropped_url) return { ...img, ...patch, cropped_url: newUrl };
+        return { ...img, ...patch, url: newUrl };
+      })
+    );
+  };
+
+  // 1) Gaussian (specified)
   const [gaussianOpen, setGaussianOpen] = useState(false);
   const [gaussianStdDev, setGaussianStdDev] = useState(25);
   const [gaussianPreview, setGaussianPreview] = useState(false);
   const [gaussianBase, setGaussianBase] = useState<ImageData | null>(null);
+  const gaussianBaseUrlRef = useRef<string | null>(null);
+  const gaussianLastPreviewImageRef = useRef<ImageData | null>(null);
+  const gaussianLastPreviewUrlRef = useRef<string | null>(null);
+  const gaussianPreviewTokenRef = useRef<number>(0);
+  const gaussianStdDevRef = useRef<number>(25);
 
-  const gaussianLastPreviewRef = useRef<{ stdDev: number; image: ImageData } | null>(null);
+  const runGaussianProcess = (base: ImageData, stdDev: number) => {
+    const fresh = cloneImageData(base);
+    return processAddSpecifiedNoise(fresh, { stdDev });
+  };
 
-  const applyGaussianFromBase = (saveToHistory: boolean, stdDevValue?: number) => {
+  const gaussianPreviewRender = (stdDevValue?: number) => {
     if (!gaussianBase) return;
-    const std = stdDevValue ?? gaussianStdDev;
+
+    const std = stdDevValue ?? gaussianStdDevRef.current;
     if (!isFinite(std) || std <= 0) return;
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = gaussianBase.width;
-    tempCanvas.height = gaussianBase.height;
-    const ctx = tempCanvas.getContext('2d');
-    if (!ctx) return;
+    const processed = runGaussianProcess(gaussianBase, std);
+    if (!processed) return;
 
-    let processed: ImageData | null = null;
-    if (saveToHistory && gaussianPreview) {
-      const cached = gaussianLastPreviewRef.current;
-      if (cached && cached.stdDev === std) {
-        processed = cloneImageData(cached.image);
-      }
-    }
+    gaussianLastPreviewImageRef.current = cloneImageData(processed);
 
-    if (!processed) {
-      const fresh = cloneImageData(gaussianBase);
-      processed = processAddSpecifiedNoise(fresh, { stdDev: std });
-      if (!processed) return;
-    }
+    const temp = imageDataToCanvas(processed);
+    if (!temp) return;
 
-    if (!saveToHistory) {
-      gaussianLastPreviewRef.current = { stdDev: std, image: cloneImageData(processed) };
-    }
+    const token = ++gaussianPreviewTokenRef.current;
 
-    ctx.putImageData(processed, 0, 0);
-    updateImageFromCanvas(tempCanvas, saveToHistory);
+    updateImageFromCanvas(temp.canvas, false, (newUrl) => {
+      if (token !== gaussianPreviewTokenRef.current) return;
+      gaussianLastPreviewUrlRef.current = newUrl;
+    });
   };
 
   const restoreGaussianBase = () => {
     if (!gaussianBase) return;
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = gaussianBase.width;
-    tempCanvas.height = gaussianBase.height;
-    const ctx = tempCanvas.getContext('2d');
-    if (!ctx) return;
-    ctx.putImageData(gaussianBase, 0, 0);
-    updateImageFromCanvas(tempCanvas, false);
+    const temp = imageDataToCanvas(gaussianBase);
+    if (!temp) return;
+    updateImageFromCanvas(temp.canvas, false, () => {
+      gaussianLastPreviewUrlRef.current = null;
+    });
   };
 
   const onGaussianStdDevChange = (v: number) => {
+    gaussianStdDevRef.current = v;
     setGaussianStdDev(v);
-    if (gaussianPreview) applyGaussianFromBase(false, v);
+    if (gaussianPreview) gaussianPreviewRender(v);
   };
+
   const onGaussianTogglePreview = (enabled: boolean) => {
     setGaussianPreview(enabled);
     if (enabled) {
-      applyGaussianFromBase(false);
+      gaussianPreviewRender();
     } else {
-      gaussianLastPreviewRef.current = null;
+      gaussianLastPreviewImageRef.current = null;
+      gaussianLastPreviewUrlRef.current = null;
+      gaussianPreviewTokenRef.current = 0;
       restoreGaussianBase();
     }
   };
+
   const onGaussianApply = () => {
-    applyGaussianFromBase(true);
+    if (!gaussianBase) return;
+
+    let imageToCommit: ImageData | null = null;
+
+    if (gaussianPreview) {
+      if (currentImageURL && gaussianLastPreviewUrlRef.current === currentImageURL) {
+        if (gaussianLastPreviewImageRef.current) {
+          imageToCommit = cloneImageData(gaussianLastPreviewImageRef.current);
+        }
+      }
+
+      if (!imageToCommit) {
+        const live = getImageData();
+        if (live?.imageData) imageToCommit = cloneImageData(live.imageData);
+      }
+    }
+
+    if (!imageToCommit) {
+      const std = gaussianStdDevRef.current;
+      const processed = runGaussianProcess(gaussianBase, std);
+      if (!processed) return;
+      imageToCommit = processed;
+    }
+
+    const temp = imageDataToCanvas(imageToCommit);
+    if (!temp) return;
+
+    pushUndo?.(gaussianBaseUrlRef.current);
+    updateImageFromCanvas(temp.canvas, false, (newUrl, blob) => {
+      commitToGallery(newUrl, blob, temp.canvas);
+    });
+
     setGaussianOpen(false);
     setGaussianPreview(false);
     setGaussianBase(null);
-    gaussianLastPreviewRef.current = null;
+
+    gaussianLastPreviewImageRef.current = null;
+    gaussianLastPreviewUrlRef.current = null;
+    gaussianPreviewTokenRef.current = 0;
+    gaussianBaseUrlRef.current = null;
   };
+
   const onGaussianCancel = () => {
     if (gaussianPreview) restoreGaussianBase();
     setGaussianOpen(false);
     setGaussianPreview(false);
     setGaussianBase(null);
-    gaussianLastPreviewRef.current = null;
+    gaussianLastPreviewImageRef.current = null;
+    gaussianLastPreviewUrlRef.current = null;
+    gaussianPreviewTokenRef.current = 0;
+    gaussianBaseUrlRef.current = null;
   };
 
+  // 2) Salt & Pepper 
   const [spOpen, setSpOpen] = useState(false);
   const [spDensity, setSpDensity] = useState(5); // %
   const [spPreview, setSpPreview] = useState(false);
   const [spBase, setSpBase] = useState<ImageData | null>(null);
 
-  const spLastPreviewRef = useRef<{ densityPercent: number; image: ImageData } | null>(null);
+  const spBaseUrlRef = useRef<string | null>(null);
 
-  const applySaltPepperFromBase = (save: boolean, densityPercent?: number) => {
+  const spLastPreviewImageRef = useRef<ImageData | null>(null);
+  const spLastPreviewUrlRef = useRef<string | null>(null);
+  const spPreviewTokenRef = useRef<number>(0);
+
+  const spDensityRef = useRef<number>(5);
+
+  const runSaltPepperProcess = (base: ImageData, densityPercent: number) => {
+    const density = densityPercent / 100;
+    const fresh = cloneImageData(base);
+    return processSaltAndPepperNoise(fresh, density);
+  };
+
+  const saltPepperPreviewRender = (densityPercent?: number) => {
     if (!spBase) return;
-    const densityPct = densityPercent ?? spDensity;
+
+    const densityPct = densityPercent ?? spDensityRef.current;
     const density = densityPct / 100;
     if (!isFinite(density) || density <= 0 || density > 1) return;
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = spBase.width;
-    tempCanvas.height = spBase.height;
-    const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
+    const processed = runSaltPepperProcess(spBase, densityPct);
+    if (!processed) return;
 
-    let processed: ImageData | null = null;
-    if (save && spPreview) {
-      const cached = spLastPreviewRef.current;
-      if (cached && cached.densityPercent === densityPct) {
-        processed = cloneImageData(cached.image);
-      }
-    }
+    spLastPreviewImageRef.current = cloneImageData(processed);
 
-    if (!processed) {
-      const fresh = cloneImageData(spBase);
-      processed = processSaltAndPepperNoise(fresh, density);
-      if (!processed) return;
-    }
+    const temp = imageDataToCanvas(processed);
+    if (!temp) return;
 
-    if (!save) {
-      spLastPreviewRef.current = { densityPercent: densityPct, image: cloneImageData(processed) };
-    }
+    const token = ++spPreviewTokenRef.current;
 
-    ctx.putImageData(processed, 0, 0);
-    updateImageFromCanvas(tempCanvas, save);
+    updateImageFromCanvas(temp.canvas, false, (newUrl) => {
+      if (token !== spPreviewTokenRef.current) return;
+      spLastPreviewUrlRef.current = newUrl;
+    });
   };
+
   const restoreSaltPepperBase = () => {
     if (!spBase) return;
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = spBase.width;
-    tempCanvas.height = spBase.height;
-    const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
-    ctx.putImageData(spBase, 0, 0);
-    updateImageFromCanvas(tempCanvas, false);
+    const temp = imageDataToCanvas(spBase);
+    if (!temp) return;
+    updateImageFromCanvas(temp.canvas, false, () => {
+      spLastPreviewUrlRef.current = null;
+    });
   };
+
   const onSpDensityChange = (v: number) => {
+    spDensityRef.current = v;
     setSpDensity(v);
-    if (spPreview) applySaltPepperFromBase(false, v);
+    if (spPreview) saltPepperPreviewRender(v);
   };
+
   const onSpTogglePreview = (enabled: boolean) => {
     setSpPreview(enabled);
     if (enabled) {
-      applySaltPepperFromBase(false);
+      saltPepperPreviewRender();
     } else {
-      spLastPreviewRef.current = null;
+      spLastPreviewImageRef.current = null;
+      spLastPreviewUrlRef.current = null;
+      spPreviewTokenRef.current = 0;
       restoreSaltPepperBase();
     }
   };
+
   const onSpApply = () => {
-    applySaltPepperFromBase(true);
+    if (!spBase) return;
+
+    let imageToCommit: ImageData | null = null;
+
+    if (spPreview) {
+      if (currentImageURL && spLastPreviewUrlRef.current === currentImageURL) {
+        if (spLastPreviewImageRef.current) imageToCommit = cloneImageData(spLastPreviewImageRef.current);
+      }
+
+      if (!imageToCommit) {
+        const live = getImageData();
+        if (live?.imageData) imageToCommit = cloneImageData(live.imageData);
+      }
+    }
+
+    if (!imageToCommit) {
+      const densityPct = spDensityRef.current;
+      const density = densityPct / 100;
+      if (!isFinite(density) || density <= 0 || density > 1) return;
+
+      const processed = runSaltPepperProcess(spBase, densityPct);
+      if (!processed) return;
+      imageToCommit = processed;
+    }
+
+    const temp = imageDataToCanvas(imageToCommit);
+    if (!temp) return;
+
+    pushUndo?.(spBaseUrlRef.current);
+    updateImageFromCanvas(temp.canvas, false, (newUrl, blob) => {
+      commitToGallery(newUrl, blob, temp.canvas);
+    });
+
     setSpOpen(false);
     setSpPreview(false);
     setSpBase(null);
-    spLastPreviewRef.current = null;
+
+    spLastPreviewImageRef.current = null;
+    spLastPreviewUrlRef.current = null;
+    spPreviewTokenRef.current = 0;
+    spBaseUrlRef.current = null;
   };
+
   const onSpCancel = () => {
     if (spPreview) restoreSaltPepperBase();
     setSpOpen(false);
     setSpPreview(false);
     setSpBase(null);
-    spLastPreviewRef.current = null;
+
+    spLastPreviewImageRef.current = null;
+    spLastPreviewUrlRef.current = null;
+    spPreviewTokenRef.current = 0;
+    spBaseUrlRef.current = null;
   };
 
+  // 3) Remove Outliers
   const [roOpen, setRoOpen] = useState(false);
   const [roRadius, setRoRadius] = useState(2);
   const [roThreshold, setRoThreshold] = useState(50);
   const [roMode, setRoMode] = useState<OutlierMode>('bright');
   const [roPreview, setRoPreview] = useState(false);
   const [roBase, setRoBase] = useState<ImageData | null>(null);
+
+  const roBaseUrlRef = useRef<string | null>(null);
 
   const roTimerRef = useRef<number | null>(null);
   const roPendingRef = useRef<{ r: number; t: number; m: OutlierMode } | null>(null);
@@ -221,36 +356,25 @@ const useNoiseEvents = (
     const { r, t, m } = roPendingRef.current;
     roPendingRef.current = null;
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = roBase.width;
-    tempCanvas.height = roBase.height;
-    const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
-
     const fresh = cloneImageData(roBase);
     const processed = processRemoveOutliers(fresh, r, t, m);
     if (!processed) return;
 
-    ctx.putImageData(processed, 0, 0);
-    updateImageFromCanvas(tempCanvas, false);
+    const temp = imageDataToCanvas(processed);
+    if (!temp) return;
+    updateImageFromCanvas(temp.canvas, false);
   };
 
   const scheduleRemoveOutliersPreview = (r: number, t: number, m: OutlierMode) => {
     roPendingRef.current = { r, t, m };
-    if (roTimerRef.current !== null) {
-      window.clearTimeout(roTimerRef.current);
-    }
+    if (roTimerRef.current !== null) window.clearTimeout(roTimerRef.current);
     roTimerRef.current = window.setTimeout(() => {
       roTimerRef.current = null;
       scheduleIdle(flushRemoveOutliersPreview);
     }, DEBOUNCE_MS);
   };
 
-  const applyRemoveOutliersFromBase = (
-    save: boolean,
-    r?: number,
-    t?: number,
-    m?: OutlierMode
-  ) => {
+  const applyRemoveOutliersFromBase = (save: boolean, r?: number, t?: number, m?: OutlierMode) => {
     if (!roBase) return;
     const radius = r ?? roRadius;
     const threshold = t ?? roThreshold;
@@ -264,17 +388,21 @@ const useNoiseEvents = (
       return;
     }
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = roBase.width;
-    tempCanvas.height = roBase.height;
-    const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
-
     const fresh = cloneImageData(roBase);
     const processed = processRemoveOutliers(fresh, radius, threshold, mode);
     if (!processed) return;
 
-    ctx.putImageData(processed, 0, 0);
-    updateImageFromCanvas(tempCanvas, save);
+    const temp = imageDataToCanvas(processed);
+    if (!temp) return;
+
+    if (save) {
+      pushUndo?.(roBaseUrlRef.current);
+      updateImageFromCanvas(temp.canvas, false, (newUrl, blob) => {
+        commitToGallery(newUrl, blob, temp.canvas);
+      });
+    } else {
+      updateImageFromCanvas(temp.canvas, false);
+    }
   };
 
   const restoreRemoveOutliersBase = () => {
@@ -285,12 +413,9 @@ const useNoiseEvents = (
     }
     roPendingRef.current = null;
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = roBase.width;
-    tempCanvas.height = roBase.height;
-    const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
-    ctx.putImageData(roBase, 0, 0);
-    updateImageFromCanvas(tempCanvas, false);
+    const temp = imageDataToCanvas(roBase);
+    if (!temp) return;
+    updateImageFromCanvas(temp.canvas, false);
   };
 
   const onRoRadiusChange = (v: number) => {
@@ -307,64 +432,65 @@ const useNoiseEvents = (
   };
   const onRoTogglePreview = (enabled: boolean) => {
     setRoPreview(enabled);
-
-    if (enabled) {
-      const radius = roRadius;
-      const threshold = roThreshold;
-      const mode = roMode;
-
-      if (!isFinite(radius) || radius <= 0) return;
-      if (!isFinite(threshold) || threshold < 0) return;
-
-      scheduleRemoveOutliersPreview(radius, threshold, mode);
-    } else {
-      restoreRemoveOutliersBase();
-    }
+    if (enabled) scheduleRemoveOutliersPreview(roRadius, roThreshold, roMode);
+    else restoreRemoveOutliersBase();
   };
+
   const onRoApply = () => {
-    if (roTimerRef.current !== null) {
-      window.clearTimeout(roTimerRef.current);
-      roTimerRef.current = null;
-    }
+    if (roTimerRef.current !== null) window.clearTimeout(roTimerRef.current);
+    roTimerRef.current = null;
     roPendingRef.current = null;
 
     applyRemoveOutliersFromBase(true);
-    setRoOpen(false); setRoPreview(false); setRoBase(null);
-  };
-  const onRoCancel = () => {
-    if (roPreview) restoreRemoveOutliersBase();
-    setRoOpen(false); setRoPreview(false); setRoBase(null);
+    setRoOpen(false);
+    setRoPreview(false);
+    setRoBase(null);
+    roBaseUrlRef.current = null;
   };
 
+  const onRoCancel = () => {
+    if (roPreview) restoreRemoveOutliersBase();
+    setRoOpen(false);
+    setRoPreview(false);
+    setRoBase(null);
+    roBaseUrlRef.current = null;
+  };
+
+  // 4) Remove NaNs
   const [rnOpen, setRnOpen] = useState(false);
   const [rnRadius, setRnRadius] = useState(2);
   const [rnPreview, setRnPreview] = useState(false);
   const [rnBase, setRnBase] = useState<ImageData | null>(null);
 
+  const rnBaseUrlRef = useRef<string | null>(null);
+
   const applyRemoveNaNsFromBase = (save: boolean) => {
     if (!rnBase) return;
-
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = rnBase.width;
-    tempCanvas.height = rnBase.height;
-    const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
 
     const fresh = cloneImageData(rnBase);
     const processed = processRemoveNaNs(fresh);
     if (!processed) return;
 
-    ctx.putImageData(processed, 0, 0);
-    updateImageFromCanvas(tempCanvas, save);
+    const temp = imageDataToCanvas(processed);
+    if (!temp) return;
+
+    if (save) {
+      pushUndo?.(rnBaseUrlRef.current);
+      updateImageFromCanvas(temp.canvas, false, (newUrl, blob) => {
+        commitToGallery(newUrl, blob, temp.canvas);
+      });
+    } else {
+      updateImageFromCanvas(temp.canvas, false);
+    }
   };
+
   const restoreRemoveNaNsBase = () => {
     if (!rnBase) return;
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = rnBase.width;
-    tempCanvas.height = rnBase.height;
-    const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
-    ctx.putImageData(rnBase, 0, 0);
-    updateImageFromCanvas(tempCanvas, false);
+    const temp = imageDataToCanvas(rnBase);
+    if (!temp) return;
+    updateImageFromCanvas(temp.canvas, false);
   };
+
   const onRnRadiusChange = (v: number) => {
     setRnRadius(v);
     if (rnPreview) applyRemoveNaNsFromBase(false);
@@ -376,11 +502,17 @@ const useNoiseEvents = (
   };
   const onRnApply = () => {
     applyRemoveNaNsFromBase(true);
-    setRnOpen(false); setRnPreview(false); setRnBase(null);
+    setRnOpen(false);
+    setRnPreview(false);
+    setRnBase(null);
+    rnBaseUrlRef.current = null;
   };
   const onRnCancel = () => {
     if (rnPreview) restoreRemoveNaNsBase();
-    setRnOpen(false); setRnPreview(false); setRnBase(null);
+    setRnOpen(false);
+    setRnPreview(false);
+    setRnBase(null);
+    rnBaseUrlRef.current = null;
   };
 
   useEffect(() => {
@@ -390,40 +522,41 @@ const useNoiseEvents = (
 
       let baseForNext: ImageData | null = null;
 
+      // close any currently open noise dialogs and restore base if previewing
       if (gaussianOpen && gaussianBase) {
         baseForNext = gaussianBase;
-        if (gaussianPreview) {
-          restoreGaussianBase();
-        }
+        if (gaussianPreview) restoreGaussianBase();
         setGaussianOpen(false);
         setGaussianPreview(false);
         setGaussianBase(null);
-        gaussianLastPreviewRef.current = null;
+        gaussianLastPreviewImageRef.current = null;
+        gaussianLastPreviewUrlRef.current = null;
+        gaussianPreviewTokenRef.current = 0;
+        gaussianBaseUrlRef.current = null;
       } else if (spOpen && spBase) {
         baseForNext = spBase;
-        if (spPreview) {
-          restoreSaltPepperBase();
-        }
+        if (spPreview) restoreSaltPepperBase();
         setSpOpen(false);
         setSpPreview(false);
         setSpBase(null);
-        spLastPreviewRef.current = null;
+        spLastPreviewImageRef.current = null;
+        spLastPreviewUrlRef.current = null;
+        spPreviewTokenRef.current = 0;
+        spBaseUrlRef.current = null;
       } else if (roOpen && roBase) {
         baseForNext = roBase;
-        if (roPreview) {
-          restoreRemoveOutliersBase();
-        }
+        if (roPreview) restoreRemoveOutliersBase();
         setRoOpen(false);
         setRoPreview(false);
         setRoBase(null);
+        roBaseUrlRef.current = null;
       } else if (rnOpen && rnBase) {
         baseForNext = rnBase;
-        if (rnPreview) {
-          restoreRemoveNaNsBase();
-        }
+        if (rnPreview) restoreRemoveNaNsBase();
         setRnOpen(false);
         setRnPreview(false);
         setRnBase(null);
+        rnBaseUrlRef.current = null;
       }
 
       const getBaseImage = (): ImageData | null => {
@@ -435,28 +568,45 @@ const useNoiseEvents = (
       if (action === 'add-specified-noise') {
         const base = getBaseImage();
         if (!base) return;
+
+        gaussianBaseUrlRef.current = currentImageURL ?? null;
+        gaussianStdDevRef.current = 25;
+
         setGaussianBase(base);
         setGaussianStdDev(25);
         setGaussianPreview(false);
         setGaussianOpen(true);
-        gaussianLastPreviewRef.current = null;
+
+        gaussianLastPreviewImageRef.current = null;
+        gaussianLastPreviewUrlRef.current = null;
+        gaussianPreviewTokenRef.current = 0;
         return;
       }
 
       if (action === 'salt-and-pepper') {
         const base = getBaseImage();
         if (!base) return;
+
+        spBaseUrlRef.current = currentImageURL ?? null;
+        spDensityRef.current = 5;
+
         setSpBase(base);
         setSpDensity(5);
         setSpPreview(false);
         setSpOpen(true);
-        spLastPreviewRef.current = null;
+
+        spLastPreviewImageRef.current = null;
+        spLastPreviewUrlRef.current = null;
+        spPreviewTokenRef.current = 0;
         return;
       }
 
       if (action === 'remove-outliers') {
         const base = getBaseImage();
         if (!base) return;
+
+        roBaseUrlRef.current = currentImageURL ?? null;
+
         setRoBase(base);
         setRoRadius(2);
         setRoThreshold(50);
@@ -475,6 +625,9 @@ const useNoiseEvents = (
 
         const base = getBaseImage();
         if (!base) return;
+
+        rnBaseUrlRef.current = currentImageURL ?? null;
+
         setRnBase(base);
         setRnRadius(2);
         setRnPreview(false);
@@ -482,24 +635,23 @@ const useNoiseEvents = (
         return;
       }
 
+      // immediate actions (no dialog)
       if (action === 'add-noise') {
         const bitDepth = getCurrentBitDepth?.() ?? 8;
         const stdDev = 25 * (bitDepth / 8);
         const base = getBaseImage();
         if (!base) return;
 
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = base.width;
-        tempCanvas.height = base.height;
-        const ctx = tempCanvas.getContext('2d');
-        if (!ctx) return;
-
         const fresh = cloneImageData(base);
         const processed = processAddNoise(fresh, stdDev);
         if (!processed) return;
 
-        ctx.putImageData(processed, 0, 0);
-        updateImageFromCanvas(tempCanvas);
+        const temp = imageDataToCanvas(processed);
+        if (!temp) return;
+
+        updateImageFromCanvas(temp.canvas, true, (newUrl, blob) => {
+          commitToGallery(newUrl, blob, temp.canvas);
+        });
         return;
       }
 
@@ -507,18 +659,16 @@ const useNoiseEvents = (
         const base = getBaseImage();
         if (!base) return;
 
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = base.width;
-        tempCanvas.height = base.height;
-        const ctx = tempCanvas.getContext('2d');
-        if (!ctx) return;
-
         const fresh = cloneImageData(base);
         const processed = processDespeckle(fresh);
         if (!processed) return;
 
-        ctx.putImageData(processed, 0, 0);
-        updateImageFromCanvas(tempCanvas);
+        const temp = imageDataToCanvas(processed);
+        if (!temp) return;
+
+        updateImageFromCanvas(temp.canvas, true, (newUrl, blob) => {
+          commitToGallery(newUrl, blob, temp.canvas);
+        });
         return;
       }
     };
@@ -529,6 +679,10 @@ const useNoiseEvents = (
     getImageData,
     updateImageFromCanvas,
     getCurrentBitDepth,
+    pushUndo,
+    currentImageURL,
+    setVisibleImages,
+    currentIndex,
     gaussianOpen,
     gaussianBase,
     gaussianPreview,

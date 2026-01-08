@@ -548,8 +548,12 @@ const ImageView = ({ imageArray }: ImageViewProps) => {
   const noiseDialogs = useNoiseEvents(
     getImageData,
     updateImageFromCanvas,
-    () => currentFile?.bitDepth || 8
-  );
+    () => currentFile?.bitDepth || 8,
+    pushUndo,
+    currentImageURL,
+    setVisibleImages,
+    currentIndex
+  );  
 
   // Bit depth conversion events - returns functions to work with raw data
   const { applyDisplayRangeToRawData, getCurrentBitDepthRange } = useBitDepthEvents({
