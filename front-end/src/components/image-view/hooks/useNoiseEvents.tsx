@@ -79,7 +79,12 @@ const useNoiseEvents = (
           ...(isTransientUrl(newUrl) ? {} : { edited_url: newUrl }),
         };
 
-        return { ...img, ...patch, url: newUrl };
+        return { 
+          ...img, 
+          ...patch, 
+          url: newUrl,
+          cropped_url: newUrl as any,
+        };
 
       })
     );
