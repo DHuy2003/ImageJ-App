@@ -1566,6 +1566,23 @@ const AnalysisResults = ({ isOpen, onClose }: AnalysisResultsProps) => {
 
         </div>
 
+        {/* Hidden container for export - always render charts so refs are available */}
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', visibility: 'hidden' }}>
+            {features.length > 0 && (
+                <>
+                    <AreaHistogram ref={areaHistogramRef} data={features} />
+                    <IntensityHistogram ref={intensityHistogramRef} data={features} />
+                    <ClusterDistributionChart ref={clusterDistributionRef} data={features} />
+                </>
+            )}
+            {tsneData && (
+                <ClusterScatterPlot ref={clusterPCARef} tsneData={tsneData} />
+            )}
+            {zScoreData.length > 0 && (
+                <ZScoreHeatmapCanvas ref={zscoreHeatmapRef} data={zScoreData} features={selectedZScoreFeatures} />
+            )}
+        </div>
+
         {/* Export Dialog */}
         {showExportDialog && (
             <div className="export-dialog-overlay">
@@ -2619,6 +2636,124 @@ const BicAicChart = forwardRef<HTMLCanvasElement, { clusteringInfo: ClusteringIn
     }, [clusteringInfo]);
 
     return <canvas ref={canvasRef} width={700} height={350} />;
+});
+
+// Z-Score Heatmap Canvas for export
+const ZScoreHeatmapCanvas = forwardRef<HTMLCanvasElement, { data: ZScoreData[], features: string[] }>(({ data, features }, ref) => {
+    const internalRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = (ref as React.RefObject<HTMLCanvasElement>) || internalRef;
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || data.length === 0 || features.length === 0) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Layout
+        const padding = { top: 60, right: 80, bottom: 30, left: 80 };
+        const cellWidth = 60;
+        const cellHeight = 35;
+        const width = padding.left + features.length * cellWidth + padding.right;
+        const height = padding.top + data.length * cellHeight + padding.bottom;
+
+        canvas.width = Math.max(700, width);
+        canvas.height = Math.max(300, height);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Title
+        ctx.font = 'bold 14px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.fillText('Z-Score Heatmap by Cluster', canvas.width / 2, 20);
+
+        // Color function for z-score
+        const getColor = (z: number) => {
+            if (z > 1.5) return '#e74c3c';      // High - red
+            if (z > 0.5) return '#f39c12';      // Mid-high - orange
+            if (z >= -0.5) return '#f1f1f1';    // Normal - light gray
+            if (z >= -1.5) return '#3498db';   // Mid-low - blue
+            return '#2c3e50';                   // Low - dark blue
+        };
+
+        // Draw column headers (features)
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        features.forEach((featureKey, i) => {
+            const feature = ALL_ZSCORE_FEATURES.find(f => f.key === featureKey);
+            const label = feature?.label || featureKey;
+            const x = padding.left + i * cellWidth + cellWidth / 2;
+            ctx.save();
+            ctx.translate(x, padding.top - 8);
+            ctx.rotate(-Math.PI / 6);
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+        });
+
+        // Draw rows
+        data.forEach((row, rowIndex) => {
+            const y = padding.top + rowIndex * cellHeight;
+
+            // Row label (Cluster)
+            ctx.font = 'bold 11px Arial';
+            ctx.fillStyle = '#333';
+            ctx.textAlign = 'right';
+            ctx.fillText(`Cluster ${row.cluster}`, padding.left - 10, y + cellHeight / 2 + 4);
+
+            // Draw cells
+            features.forEach((featureKey, colIndex) => {
+                const x = padding.left + colIndex * cellWidth;
+                const zValue = row.features[featureKey] ?? 0;
+
+                // Cell background
+                ctx.fillStyle = getColor(zValue);
+                ctx.fillRect(x, y, cellWidth - 2, cellHeight - 2);
+
+                // Cell border
+                ctx.strokeStyle = '#ddd';
+                ctx.strokeRect(x, y, cellWidth - 2, cellHeight - 2);
+
+                // Cell value
+                ctx.fillStyle = Math.abs(zValue) > 1 ? '#fff' : '#333';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(zValue.toFixed(2), x + cellWidth / 2 - 1, y + cellHeight / 2 + 3);
+            });
+        });
+
+        // Legend
+        const legendX = canvas.width - 70;
+        const legendY = padding.top;
+        const legendItems = [
+            { color: '#e74c3c', label: '> +1.5' },
+            { color: '#f39c12', label: '+0.5 to +1.5' },
+            { color: '#f1f1f1', label: '-0.5 to +0.5' },
+            { color: '#3498db', label: '-1.5 to -0.5' },
+            { color: '#2c3e50', label: '< -1.5' },
+        ];
+
+        ctx.font = 'bold 10px Arial';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'left';
+        ctx.fillText('Z-Score', legendX, legendY);
+
+        legendItems.forEach((item, i) => {
+            const ly = legendY + 15 + i * 18;
+            ctx.fillStyle = item.color;
+            ctx.fillRect(legendX, ly, 12, 12);
+            ctx.strokeStyle = '#999';
+            ctx.strokeRect(legendX, ly, 12, 12);
+            ctx.fillStyle = '#333';
+            ctx.font = '9px Arial';
+            ctx.fillText(item.label, legendX + 16, ly + 10);
+        });
+
+    }, [data, features]);
+
+    return <canvas ref={canvasRef} width={700} height={300} />;
 });
 
 export default AnalysisResults;
