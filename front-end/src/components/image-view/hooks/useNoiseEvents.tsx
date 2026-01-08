@@ -475,7 +475,7 @@ const useNoiseEvents = (
     if (!rnBase) return;
 
     const fresh = cloneImageData(rnBase);
-    const processed = processRemoveNaNs(fresh);
+    const processed = processRemoveNaNs(fresh, rnRadius);
     if (!processed) return;
 
     const temp = imageDataToCanvas(processed);
