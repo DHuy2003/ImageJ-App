@@ -185,7 +185,6 @@ const NavBar = () => {
                         { label: "Smooth", onClick: () => dispatchProcessEvent('smooth') },
                         { label: "Sharpen", onClick: () => dispatchProcessEvent('sharpen') },
                         { label: "Find Edges", onClick: () => dispatchProcessEvent('find-edges') },
-                        { label: "Enhance Contrast..." },
                         { label: "Subtract Background...", onClick: handleOpenSubtractBackground },
                         {
                             label: "Filters", subItems: [
