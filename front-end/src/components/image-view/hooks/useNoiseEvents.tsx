@@ -69,16 +69,18 @@ const useNoiseEvents = (
       prev.map((img, i) => {
         if (i !== currentIndex) return img;
 
+        const isTransientUrl = (u: string) => u.startsWith('blob:') || u.startsWith('data:');
+
         const patch: Partial<ImageInfo> = {
           size: blob.size,
           width: canvas.width,
           height: canvas.height,
           last_edited_on: new Date().toISOString(),
-          edited_url: newUrl,
+          ...(isTransientUrl(newUrl) ? {} : { edited_url: newUrl }),
         };
 
-        if (img.cropped_url) return { ...img, ...patch, cropped_url: newUrl };
         return { ...img, ...patch, url: newUrl };
+
       })
     );
   };
